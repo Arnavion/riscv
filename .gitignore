@@ -1,0 +1,11 @@
+/Cargo.lock
+/target
+
+/tc/bsv/*.bo
+/tc/bsv/*.v
+
+/tc/vis/netlist.json
+/tc/vis/node_modules
+/tc/vis/package-lock.json
+/tc/vis/*.v
+/tc/vis/vis.html
