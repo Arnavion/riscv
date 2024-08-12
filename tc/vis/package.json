@@ -1,0 +1,14 @@
+{
+    "name": "vis",
+    "version": "1.0.0",
+    "description": "",
+    "license": "AGPL-3.0",
+    "author": "Arnav Singh <me@arnavion.dev>",
+    "type": "module",
+    "main": "index.js",
+    "dependencies": {
+        "digitaljs": "^0.13",
+        "netlistsvg": "github:TerosTechnology/netlistsvg#hierarchy_fix_recursive",
+        "yosys2digitaljs": "^0.8"
+    }
+}
