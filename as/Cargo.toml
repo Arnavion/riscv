@@ -1,0 +1,13 @@
+[package]
+name = "as"
+version = "0.1.0"
+authors = ["Arnav Singh <me@arnavion.dev>"]
+edition = "2021"
+
+
+[dependencies]
+riscv = { path = ".." }
+
+
+[lints]
+workspace = true
