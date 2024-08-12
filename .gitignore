@@ -1,0 +1,7 @@
+/Cargo.lock
+/target
+/tc/sv/vis/netlist.json
+/tc/sv/vis/node_modules
+/tc/sv/vis/package-lock.json
+/tc/sv/vis/*.v
+/tc/sv/vis/vis.html
