@@ -1,0 +1,23 @@
+[package]
+name = "riscv"
+version = "0.1.0"
+authors = ["Arnav Singh <me@arnavion.dev>"]
+edition = "2021"
+
+
+[dependencies]
+
+
+[lints.rust]
+rust_2018_idioms = "deny"
+warnings = "deny"
+
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+similar_names = "allow"
+too_many_lines = "allow"
