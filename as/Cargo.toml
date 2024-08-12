@@ -1,0 +1,15 @@
+[package]
+name = "as"
+version = "0.1.0"
+license = "AGPL-3.0-only"
+authors = ["Arnav Singh <me@arnavion.dev>"]
+edition = "2021"
+publish = false
+
+
+[dependencies]
+riscv = { path = ".." }
+
+
+[lints]
+workspace = true

@@ -1,0 +1,35 @@
+[package]
+name = "riscv"
+version = "0.1.0"
+license = "AGPL-3.0-only"
+authors = ["Arnav Singh <me@arnavion.dev>"]
+edition = "2021"
+publish = false
+
+
+[dependencies]
+
+
+[workspace]
+members = [
+	"as",
+]
+
+
+[workspace.lints.rust]
+rust_2018_idioms = "deny"
+warnings = "deny"
+
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+similar_names = "allow"
+too_many_lines = "allow"
+
+
+[lints]
+workspace = true
