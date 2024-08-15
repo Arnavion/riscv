@@ -1,7 +1,7 @@
 use crate::{
 	FenceSet,
 	Instruction,
-	instruction::{Imm, bit_slice, can_truncate_high, can_truncate_low, tokens},
+	instruction::{Imm, bit_slice, can_truncate_high, can_truncate_low, parse_base_and_offset, tokens},
 	ParseError,
 	Register,
 	SmallIterator,
@@ -17,6 +17,41 @@ pub(crate) fn parse(line: &str) -> Result<SmallIterator<Instruction>, ParseError
 	let token = core::str::from_utf8(token).map_err(|_| ParseError::InvalidUtf8 { token })?;
 
 	Ok(match token {
+		"addi4spn" | "c.addi4spn" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest: Register = dest.try_into()?;
+
+			let src = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let src @ Register::X2 = src.try_into()? else {
+				return Err(ParseError::SpInstructionRegIsNotX2 { pos: "src", line });
+			};
+
+			let imm = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let Imm(imm) = imm.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Addi { dest, src, imm })
+		},
+
+		"addi16sp" | "c.addi16sp" => {
+			let reg = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let reg @ Register::X2 = reg.try_into()? else {
+				return Err(ParseError::SpInstructionRegIsNotX2 { pos: "reg", line });
+			};
+
+			let imm = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let Imm(imm) = imm.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Addi { dest: reg, src: reg, imm })
+		},
+
 		"beqz" => {
 			let src = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
 			let src = src.try_into()?;
@@ -428,6 +463,24 @@ pub(crate) fn parse(line: &str) -> Result<SmallIterator<Instruction>, ParseError
 			)
 		},
 
+		"lwsp" | "c.lwsp" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest = dest.try_into()?;
+
+			let Some((base, offset)) = parse_base_and_offset(&mut tokens) else {
+				return Err(ParseError::MalformedInstruction { line });
+			};
+			let base @ Register::X2 = base else {
+				return Err(ParseError::SpInstructionRegIsNotX2 { pos: "base", line });
+			};
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Lw { dest, base, offset })
+		},
+
 		"mv" => {
 			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
 			let dest = dest.try_into()?;
@@ -621,6 +674,24 @@ pub(crate) fn parse(line: &str) -> Result<SmallIterator<Instruction>, ParseError
 			}
 
 			SmallIterator::One(Instruction::Sltu { dest, src1: Register::X0, src2: src })
+		},
+
+		"swsp" | "c.swsp" => {
+			let src = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let src = src.try_into()?;
+
+			let Some((base, offset)) = parse_base_and_offset(&mut tokens) else {
+				return Err(ParseError::MalformedInstruction { line });
+			};
+			let base @ Register::X2 = base else {
+				return Err(ParseError::SpInstructionRegIsNotX2 { pos: "base", line });
+			};
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Sw { base, offset, src })
 		},
 
 		"tail" => {

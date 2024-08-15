@@ -1,4 +1,4 @@
-use crate::ParseError;
+use crate::{EncodeError, ParseError};
 
 macro_rules! registers {
 	(
@@ -6,13 +6,13 @@ macro_rules! registers {
 			$($variant:ident = $asm:literal $(, $asm_alt:literal)* => $encoded:literal ,)*
 		}
 	) => {
-		#[derive(Clone, Copy, Debug)]
+		#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 		$vis enum $ty {
 			$($variant ,)*
 		}
 
 		impl $ty {
-			const fn encode(self) -> u32 {
+			$vis const fn encode_5b(self) -> u32 {
 				match self {
 					$(Self::$variant => $encoded ,)*
 				}
@@ -115,15 +115,43 @@ registers! {
 }
 
 impl Register {
-	pub(crate) const fn encode_rd(self) -> u32 {
-		self.encode() << 7
+	pub(crate) const fn encode_rd_5b(self) -> u32 {
+		self.encode_5b() << 7
 	}
 
-	pub(crate) const fn encode_rs1(self) -> u32 {
-		self.encode() << 15
+	pub(crate) const fn encode_rs1_5b(self) -> u32 {
+		self.encode_5b() << 15
 	}
 
-	pub(crate) const fn encode_rs2(self) -> u32 {
-		self.encode() << 20
+	pub(crate) const fn encode_rs2_5b(self) -> u32 {
+		self.encode_5b() << 20
+	}
+
+	pub(crate) const fn is_compressible(self) -> bool {
+		matches!(
+			self,
+			Self::X8 |
+			Self::X9 |
+			Self::X10 |
+			Self::X11 |
+			Self::X12 |
+			Self::X13 |
+			Self::X14 |
+			Self::X15,
+		)
+	}
+
+	pub(crate) fn encode_3b(self) -> Result<u32, EncodeError> {
+		Ok(match self {
+			Self::X8 => 0b000,
+			Self::X9 => 0b001,
+			Self::X10 => 0b010,
+			Self::X11 => 0b011,
+			Self::X12 => 0b100,
+			Self::X13 => 0b101,
+			Self::X14 => 0b110,
+			Self::X15 => 0b111,
+			_ => return Err(EncodeError::IncompressibleRegister),
+		})
 	}
 }

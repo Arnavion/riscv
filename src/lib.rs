@@ -8,6 +8,9 @@ mod pseudo_instruction;
 mod register;
 pub use register::Register;
 
+mod supported_extensions;
+pub use supported_extensions::SupportedExtensions;
+
 pub fn parse_program(program: &str) -> impl Iterator<Item = Result<Instruction, ParseError<'_>>> + '_ {
 	program
 		.lines()
@@ -59,6 +62,7 @@ pub enum ParseError<'a> {
 	MalformedImmediate { token: &'a [u8] },
 	MalformedInstruction { line: &'a str },
 	MalformedRegister { token: &'a str },
+	SpInstructionRegIsNotX2 { pos: &'static str, line: &'a str },
 	TrailingGarbage { line: &'a str },
 	TruncatedInstruction { line: &'a str },
 	UnknownInstruction { line: &'a str },
@@ -74,6 +78,7 @@ impl core::fmt::Display for ParseError<'_> {
 			Self::MalformedImmediate { token } => write!(f, "malformed immediate {token:?}"),
 			Self::MalformedInstruction { line } => write!(f, "malformed instruction {line:?}"),
 			Self::MalformedRegister { token } => write!(f, "malformed register {token:?}"),
+			Self::SpInstructionRegIsNotX2 { pos, line } => write!(f, "{pos} register must be x2 {line:?}"),
 			Self::TrailingGarbage { line } => write!(f, "trailing garbage {line:?}"),
 			Self::TruncatedInstruction { line } => write!(f, "truncated instruction {line:?}"),
 			Self::UnknownInstruction { line } => write!(f, "unknown instruction {line:?}"),
@@ -84,6 +89,7 @@ impl core::fmt::Display for ParseError<'_> {
 #[derive(Debug)]
 pub enum EncodeError {
 	ImmediateOverflow,
+	IncompressibleRegister,
 }
 
 impl core::error::Error for EncodeError {}
@@ -92,6 +98,7 @@ impl core::fmt::Display for EncodeError {
 	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
 		match self {
 			Self::ImmediateOverflow => f.write_str("imm overflow"),
+			Self::IncompressibleRegister => f.write_str("incompressible register"),
 		}
 	}
 }
@@ -101,268 +108,427 @@ mod tests {
 	extern crate std;
 	use std::prelude::v1::*;
 
-	#[allow(clippy::unreadable_literal)]
 	#[test]
-	fn full() {
-		static TESTS: &[(&str, &[u32])] = &[
+	fn full_uncompressed() {
+		static TESTS: &[(&str, &[(u16, Option<u16>)])] = &[
 			// Registers and aliases
-			("add x0, x1, x2", &[0x00208033]),
-			("add x3, x4, x5", &[0x005201b3]),
-			("add x6, x7, x8", &[0x00838333]),
-			("add x9, x10, x11", &[0x00b504b3]),
-			("add x12, x13, x14", &[0x00e68633]),
-			("add x15, x16, x17", &[0x011807b3]),
-			("add x18, x19, x20", &[0x01498933]),
-			("add x21, x22, x23", &[0x017b0ab3]),
-			("add x24, x25, x26", &[0x01ac8c33]),
-			("add x27, x28, x29", &[0x01de0db3]),
-			("add x30, x31, x8", &[0x008f8f33]),
+			("add x0, x1, x2", &[(0x8033, Some(0x0020))]),
+			("add x3, x4, x5", &[(0x01b3, Some(0x0052))]),
+			("add x6, x7, x8", &[(0x8333, Some(0x0083))]),
+			("add x9, x10, x11", &[(0x04b3, Some(0x00b5))]),
+			("add x12, x13, x14", &[(0x8633, Some(0x00e6))]),
+			("add x15, x16, x17", &[(0x07b3, Some(0x0118))]),
+			("add x18, x19, x20", &[(0x8933, Some(0x0149))]),
+			("add x21, x22, x23", &[(0x0ab3, Some(0x017b))]),
+			("add x24, x25, x26", &[(0x8c33, Some(0x01ac))]),
+			("add x27, x28, x29", &[(0x0db3, Some(0x01de))]),
+			("add x30, x31, x8", &[(0x8f33, Some(0x008f))]),
 
-			("add zero, ra, sp", &[0x00208033]),
-			("add gp, tp, t0", &[0x005201b3]),
-			("add t1, t2, s0", &[0x00838333]),
-			("add s1, a0, a1", &[0x00b504b3]),
-			("add a2, a3, a4", &[0x00e68633]),
-			("add a5, a6, a7", &[0x011807b3]),
-			("add s2, s3, s4", &[0x01498933]),
-			("add s5, s6, s7", &[0x017b0ab3]),
-			("add s8, s9, s10", &[0x01ac8c33]),
-			("add s11, t3, t4", &[0x01de0db3]),
-			("add t5, t6, fp", &[0x008f8f33]),
+			("add zero, ra, sp", &[(0x8033, Some(0x0020))]),
+			("add gp, tp, t0", &[(0x01b3, Some(0x0052))]),
+			("add t1, t2, s0", &[(0x8333, Some(0x0083))]),
+			("add s1, a0, a1", &[(0x04b3, Some(0x00b5))]),
+			("add a2, a3, a4", &[(0x8633, Some(0x00e6))]),
+			("add a5, a6, a7", &[(0x07b3, Some(0x0118))]),
+			("add s2, s3, s4", &[(0x8933, Some(0x0149))]),
+			("add s5, s6, s7", &[(0x0ab3, Some(0x017b))]),
+			("add s8, s9, s10", &[(0x8c33, Some(0x01ac))]),
+			("add s11, t3, t4", &[(0x0db3, Some(0x01de))]),
+			("add t5, t6, fp", &[(0x8f33, Some(0x008f))]),
 
 
 			// Instructions
 
-			("add a0, a1, a2", &[0x00c58533]),
+			("add a0, a1, a2", &[(0x8533, Some(0x00c5))]),
 
-			("addi a0, a1, -11", &[0xff558513]),
-			("addi a0, a1, 11", &[0x00b58513]),
+			("addi a0, a1, -11", &[(0x8513, Some(0xff55))]),
+			("addi a0, a1, 11", &[(0x8513, Some(0x00b5))]),
 
-			("and a0, a1, a2", &[0x00c5f533]),
+			("and a0, a1, a2", &[(0xf533, Some(0x00c5))]),
 
-			("andi a0, a1, -11", &[0xff55f513]),
-			("andi a0, a1, 11", &[0x00b5f513]),
+			("andi a0, a1, -11", &[(0xf513, Some(0xff55))]),
+			("andi a0, a1, 11", &[(0xf513, Some(0x00b5))]),
 
-			("auipc a0, -11", &[0xffff5517]),
-			("auipc a0, 11", &[0x0000b517]),
+			("auipc a0, -11", &[(0x5517, Some(0xffff))]),
+			("auipc a0, 11", &[(0xb517, Some(0x0000))]),
 
-			("beq a0, a1, -4", &[0xfeb50ee3]),
-			("beq a0, a1, 44", &[0x02b50663]),
+			("beq a0, a1, -4", &[(0x0ee3, Some(0xfeb5))]),
+			("beq a0, a1, 44", &[(0x0663, Some(0x02b5))]),
 
-			("beqz a0, -4", &[0xfe050ee3]),
-			("beqz a0, 28", &[0x00050e63]),
+			("beqz a0, -4", &[(0x0ee3, Some(0xfe05))]),
+			("beqz a0, 28", &[(0x0e63, Some(0x0005))]),
 
-			("bge a0, a1, -12", &[0xfeb55ae3]),
-			("bge a0, a1, 36", &[0x02b55263]),
+			("bge a0, a1, -12", &[(0x5ae3, Some(0xfeb5))]),
+			("bge a0, a1, 36", &[(0x5263, Some(0x02b5))]),
 
-			("bgeu a0, a1, -20", &[0xfeb576e3]),
-			("bgeu a0, a1, 28", &[0x00b57e63]),
+			("bgeu a0, a1, -20", &[(0x76e3, Some(0xfeb5))]),
+			("bgeu a0, a1, 28", &[(0x7e63, Some(0x00b5))]),
 
-			("bgez a0, -12", &[0xfe055ae3]),
-			("bgez a0, 20", &[0x00055a63]),
+			("bgez a0, -12", &[(0x5ae3, Some(0xfe05))]),
+			("bgez a0, 20", &[(0x5a63, Some(0x0005))]),
 
-			("bgt a0, a1, -4", &[0xfea5cee3]),
-			("bgt a0, a1, 28", &[0x00a5ce63]),
+			("bgt a0, a1, -4", &[(0xcee3, Some(0xfea5))]),
+			("bgt a0, a1, 28", &[(0xce63, Some(0x00a5))]),
 
-			("bgtu a0, a1, -12", &[0xfea5eae3]),
-			("bgtu a0, a1, 20", &[0x00a5ea63]),
+			("bgtu a0, a1, -12", &[(0xeae3, Some(0xfea5))]),
+			("bgtu a0, a1, 20", &[(0xea63, Some(0x00a5))]),
 
-			("bgtz a0, -4", &[0xfea04ee3]),
-			("bgtz a0, 12", &[0x00a04663]),
+			("bgtz a0, -4", &[(0x4ee3, Some(0xfea0))]),
+			("bgtz a0, 12", &[(0x4663, Some(0x00a0))]),
 
-			("ble a0, a1, -20", &[0xfea5d6e3]),
-			("ble a0, a1, 12", &[0x00a5d663]),
+			("ble a0, a1, -20", &[(0xd6e3, Some(0xfea5))]),
+			("ble a0, a1, 12", &[(0xd663, Some(0x00a5))]),
 
-			("bleu a0, a1, -28", &[0xfea5f2e3]),
-			("bleu a0, a1, 4", &[0x00a5f263]),
+			("bleu a0, a1, -28", &[(0xf2e3, Some(0xfea5))]),
+			("bleu a0, a1, 4", &[(0xf263, Some(0x00a5))]),
 
-			("blez a0, -12", &[0xfea05ae3]),
-			("blez a0, 4", &[0x00a05263]),
+			("blez a0, -12", &[(0x5ae3, Some(0xfea0))]),
+			("blez a0, 4", &[(0x5263, Some(0x00a0))]),
 
-			("blt a0, a1, -28", &[0xfeb542e3]),
-			("blt a0, a1, 20", &[0x00b54a63]),
+			("blt a0, a1, -28", &[(0x42e3, Some(0xfeb5))]),
+			("blt a0, a1, 20", &[(0x4a63, Some(0x00b5))]),
 
-			("bltu a0, a1, -36", &[0xfcb56ee3]),
-			("bltu a0, a1, 12", &[0x00b56663]),
+			("bltu a0, a1, -36", &[(0x6ee3, Some(0xfcb5))]),
+			("bltu a0, a1, 12", &[(0x6663, Some(0x00b5))]),
 
-			("bltz a0, -20", &[0xfe0546e3]),
-			("bltz a0, 12", &[0x00054663]),
+			("bltz a0, -20", &[(0x46e3, Some(0xfe05))]),
+			("bltz a0, 12", &[(0x4663, Some(0x0005))]),
 
-			("bne a0, a1, -44", &[0xfcb51ae3]),
-			("bne a0, a1, 4", &[0x00b51263]),
+			("bne a0, a1, -44", &[(0x1ae3, Some(0xfcb5))]),
+			("bne a0, a1, 4", &[(0x1263, Some(0x00b5))]),
 
-			("bnez a0, -28", &[0xfe0512e3]),
-			("bnez a0, 4", &[0x00051263]),
+			("bnez a0, -28", &[(0x12e3, Some(0xfe05))]),
+			("bnez a0, 4", &[(0x1263, Some(0x0005))]),
 
-			("call -4", &[0x00000097, 0xffc080e7]),
-			("call 24", &[0x00000097, 0x018080e7]),
-			("call a0, -20", &[0x00000517, 0xfec50567]),
-			("call a0, 8", &[0x00000517, 0x00850567]),
+			("call -4", &[(0x0097, Some(0x0000)), (0x80e7, Some(0xffc0))]),
+			("call 24", &[(0x0097, Some(0x0000)), (0x80e7, Some(0x0180))]),
+			("call a0, -20", &[(0x0517, Some(0x0000)), (0x0567, Some(0xfec5))]),
+			("call a0, 8", &[(0x0517, Some(0x0000)), (0x0567, Some(0x0085))]),
 
-			("ebreak", &[0x00100073]),
+			("ebreak", &[(0x0073, Some(0x0010))]),
 
-			("ecall", &[0x00000073]),
+			("ecall", &[(0x0073, Some(0x0000))]),
 
-			("fence", &[0x0330000f]),
-			("fence 0, 0", &[0x0000000f]),
-			("fence iorw, iorw", &[0x0ff0000f]),
+			("fence", &[(0x000f, Some(0x0330))]),
+			("fence 0, 0", &[(0x000f, Some(0x0000))]),
+			("fence iorw, iorw", &[(0x000f, Some(0x0ff0))]),
 
-			("fence.tso", &[0x8330000f]),
+			("fence.tso", &[(0x000f, Some(0x8330))]),
 
-			("j -4", &[0xffdff06f]),
-			("j 4", &[0x0040006f]),
+			("j -4", &[(0xf06f, Some(0xffdf))]),
+			("j 4", &[(0x006f, Some(0x0040))]),
 
-			("jal -4", &[0xffdff0ef]),
-			("jal 12", &[0x00c000ef]),
-			("jal a0, -12", &[0xff5ff56f]),
-			("jal a0, 4", &[0x0040056f]),
+			("jal -4", &[(0xf0ef, Some(0xffdf))]),
+			("jal 12", &[(0x00ef, Some(0x00c0))]),
+			("jal a0, -12", &[(0xf56f, Some(0xff5f))]),
+			("jal a0, 4", &[(0x056f, Some(0x0040))]),
 
-			("jalr (a0)", &[0x000500e7]),
-			("jalr -11(a0)", &[0xff5500e7]),
-			("jalr 11(a0)", &[0x00b500e7]),
-			("jalr a0, a1", &[0x00058567]),
-			("jalr a0, (a1)", &[0x00058567]),
-			("jalr a0, -11(a1)", &[0xff558567]),
-			("jalr a0, 11(a1)", &[0x00b58567]),
-			("jalr a0", &[0x000500e7]),
+			("jalr (a0)", &[(0x00e7, Some(0x0005))]),
+			("jalr -11(a0)", &[(0x00e7, Some(0xff55))]),
+			("jalr 11(a0)", &[(0x00e7, Some(0x00b5))]),
+			("jalr a0, a1", &[(0x8567, Some(0x0005))]),
+			("jalr a0, (a1)", &[(0x8567, Some(0x0005))]),
+			("jalr a0, -11(a1)", &[(0x8567, Some(0xff55))]),
+			("jalr a0, 11(a1)", &[(0x8567, Some(0x00b5))]),
+			("jalr a0", &[(0x00e7, Some(0x0005))]),
 
-			("jump -4, a0", &[0x00000517, 0xffc50067]),
-			("jump 8, a0", &[0x00000517, 0x00850067]),
+			("jump -4, a0", &[(0x0517, Some(0x0000)), (0x0067, Some(0xffc5))]),
+			("jump 8, a0", &[(0x0517, Some(0x0000)), (0x0067, Some(0x0085))]),
 
 			// Positive immediate with [11:0] significant bits -> addi
-			("li a0, 0x7ff", &[0x7ff00513]),
+			("li a0, 0x7ff", &[(0x0513, Some(0x7ff0))]),
 			// Negative immediate with [11:0] significant bits -> addi
-			("li a0, -1", &[0xfff00513]),
+			("li a0, -1", &[(0x0513, Some(0xfff0))]),
 			// Positive immediate with [31:12] significant bits -> lui
-			("li a0, 0x7ffff000", &[0x7ffff537]),
+			("li a0, 0x7ffff000", &[(0xf537, Some(0x7fff))]),
 			// Negative immediate with [31:12] significant bits -> lui
-			("li a0, -4096", &[0xfffff537]),
+			("li a0, -4096", &[(0xf537, Some(0xffff))]),
 			// Positive immediate with [31:0] significant bits -> lui; addi
-			("li a0, 0x7fffffff", &[0x80000537, 0xfff50513]),
+			("li a0, 0x7fffffff", &[(0x0537, Some(0x8000)), (0x0513, Some(0xfff5))]),
 			// Negative immediate with [31:0] significant bits -> lui; addi
-			("li a0, -2147479553", &[0x80001537, 0xfff50513]),
+			("li a0, -2147479553", &[(0x1537, Some(0x8000)), (0x0513, Some(0xfff5))]),
 
-			("lla a0, -4", &[0x00000517, 0xffc50513]),
-			("lla a0, 8", &[0x00000517, 0x00850513]),
+			("lla a0, -4", &[(0x0517, Some(0x0000)), (0x0513, Some(0xffc5))]),
+			("lla a0, 8", &[(0x0517, Some(0x0000)), (0x0513, Some(0x0085))]),
 
-			("lui a0, -11", &[0xffff5537]),
-			("lui a0, 11", &[0x0000b537]),
+			("lui a0, -11", &[(0x5537, Some(0xffff))]),
+			("lui a0, 11", &[(0xb537, Some(0x0000))]),
 
-			("lb a0, -4", &[0x00000517, 0xffc50503]),
-			("lb a0, 104", &[0x00000517, 0x06850503]),
-			("lb a0, -11(a1)", &[0xff558503]),
-			("lb a0, 11(a1)", &[0x00b58503]),
+			("lb a0, -4", &[(0x0517, Some(0x0000)), (0x0503, Some(0xffc5))]),
+			("lb a0, 104", &[(0x0517, Some(0x0000)), (0x0503, Some(0x0685))]),
+			("lb a0, -11(a1)", &[(0x8503, Some(0xff55))]),
+			("lb a0, 11(a1)", &[(0x8503, Some(0x00b5))]),
 
-			("lbu a0, -20", &[0x00000517, 0xfec54503]),
-			("lbu a0, 88", &[0x00000517, 0x05854503]),
-			("lbu a0, -11(a1)", &[0xff55c503]),
-			("lbu a0, 11(a1)", &[0x00b5c503]),
+			("lbu a0, -20", &[(0x0517, Some(0x0000)), (0x4503, Some(0xfec5))]),
+			("lbu a0, 88", &[(0x0517, Some(0x0000)), (0x4503, Some(0x0585))]),
+			("lbu a0, -11(a1)", &[(0xc503, Some(0xff55))]),
+			("lbu a0, 11(a1)", &[(0xc503, Some(0x00b5))]),
 
-			("lh a0, -52", &[0x00000517, 0xfcc51503]),
-			("lh a0, 56", &[0x00000517, 0x03851503]),
-			("lh a0, -11(a1)", &[0xff559503]),
-			("lh a0, 11(a1)", &[0x00b59503]),
+			("lh a0, -52", &[(0x0517, Some(0x0000)), (0x1503, Some(0xfcc5))]),
+			("lh a0, 56", &[(0x0517, Some(0x0000)), (0x1503, Some(0x0385))]),
+			("lh a0, -11(a1)", &[(0x9503, Some(0xff55))]),
+			("lh a0, 11(a1)", &[(0x9503, Some(0x00b5))]),
 
-			("lhu a0, -68", &[0x00000517, 0xfbc55503]),
-			("lhu a0, 40", &[0x00000517, 0x02855503]),
-			("lhu a0, -11(a1)", &[0xff55d503]),
-			("lhu a0, 11(a1)", &[0x00b5d503]),
+			("lhu a0, -68", &[(0x0517, Some(0x0000)), (0x5503, Some(0xfbc5))]),
+			("lhu a0, 40", &[(0x0517, Some(0x0000)), (0x5503, Some(0x0285))]),
+			("lhu a0, -11(a1)", &[(0xd503, Some(0xff55))]),
+			("lhu a0, 11(a1)", &[(0xd503, Some(0x00b5))]),
 
-			("lw a0, -84", &[0x00000517, 0xfac52503]),
-			("lw a0, 24", &[0x00000517, 0x01852503]),
-			("lw a0, -11(a1)", &[0xff55a503]),
-			("lw a0, 11(a1)", &[0x00b5a503]),
+			("lw a0, -84", &[(0x0517, Some(0x0000)), (0x2503, Some(0xfac5))]),
+			("lw a0, 24", &[(0x0517, Some(0x0000)), (0x2503, Some(0x0185))]),
+			("lw a0, -11(a1)", &[(0xa503, Some(0xff55))]),
+			("lw a0, 11(a1)", &[(0xa503, Some(0x00b5))]),
 
-			("mv a0, a1", &[0x00058513]),
+			("mv a0, a1", &[(0x8513, Some(0x0005))]),
 
-			("neg a0, a1", &[0x40b00533]),
+			("neg a0, a1", &[(0x0533, Some(0x40b0))]),
 
-			("nop", &[0x00000013]),
+			("nop", &[(0x0013, Some(0x0000))]),
 
-			("not a0, a1", &[0xfff5c513]),
+			("not a0, a1", &[(0xc513, Some(0xfff5))]),
 
-			("ntl.all", &[0x00500033]),
-			("ntl.pall", &[0x00300033]),
-			("ntl.p1", &[0x00200033]),
-			("ntl.s1", &[0x00400033]),
+			("ntl.all", &[(0x0033, Some(0x0050))]),
+			("ntl.pall", &[(0x0033, Some(0x0030))]),
+			("ntl.p1", &[(0x0033, Some(0x0020))]),
+			("ntl.s1", &[(0x0033, Some(0x0040))]),
 
-			("or a0, a1, a2", &[0x00c5e533]),
+			("or a0, a1, a2", &[(0xe533, Some(0x00c5))]),
 
-			("ori a0, a1, -11", &[0xff55e513]),
-			("ori a0, a1, 11", &[0x00b5e513]),
+			("ori a0, a1, -11", &[(0xe513, Some(0xff55))]),
+			("ori a0, a1, 11", &[(0xe513, Some(0x00b5))]),
 
-			("pause", &[0x0100000f]),
+			("pause", &[(0x000f, Some(0x0100))]),
 
-			("ret", &[0x00008067]),
+			("ret", &[(0x8067, Some(0x0000))]),
 
-			("sb a0, -11(a1)", &[0xfea58aa3]),
-			("sb a0, 11(a1)", &[0x00a585a3]),
+			("sb a0, -11(a1)", &[(0x8aa3, Some(0xfea5))]),
+			("sb a0, 11(a1)", &[(0x85a3, Some(0x00a5))]),
 
-			("seqz a0, a1", &[0x0015b513]),
+			("seqz a0, a1", &[(0xb513, Some(0x0015))]),
 
-			("sext.b a0, a1", &[0x01859513, 0x41855513]),
+			("sext.b a0, a1", &[(0x9513, Some(0x0185)), (0x5513, Some(0x4185))]),
 
-			("sext.h a0, a1", &[0x01059513, 0x41055513]),
+			("sext.h a0, a1", &[(0x9513, Some(0x0105)), (0x5513, Some(0x4105))]),
 
-			("sgtz a0, a1", &[0x00b02533]),
+			("sgtz a0, a1", &[(0x2533, Some(0x00b0))]),
 
-			("sh a0, -11(a1)", &[0xfea59aa3]),
-			("sh a0, 11(a1)", &[0x00a595a3]),
+			("sh a0, -11(a1)", &[(0x9aa3, Some(0xfea5))]),
+			("sh a0, 11(a1)", &[(0x95a3, Some(0x00a5))]),
 
-			("sll a0, a1, a2", &[0x00c59533]),
+			("sll a0, a1, a2", &[(0x9533, Some(0x00c5))]),
 
-			("slli a0, a1, 11", &[0x00b59513]),
-			("slli a0, a1, 31", &[0x01f59513]),
+			("slli a0, a1, 11", &[(0x9513, Some(0x00b5))]),
+			("slli a0, a1, 31", &[(0x9513, Some(0x01f5))]),
 
-			("slt a0, a1, a2", &[0x00c5a533]),
+			("slt a0, a1, a2", &[(0xa533, Some(0x00c5))]),
 
-			("slti a0, a1, -11", &[0xff55a513]),
-			("slti a0, a1, 11", &[0x00b5a513]),
+			("slti a0, a1, -11", &[(0xa513, Some(0xff55))]),
+			("slti a0, a1, 11", &[(0xa513, Some(0x00b5))]),
 
-			("sltiu a0, a1, -11", &[0xff55b513]),
-			("sltiu a0, a1, 11", &[0x00b5b513]),
+			("sltiu a0, a1, -11", &[(0xb513, Some(0xff55))]),
+			("sltiu a0, a1, 11", &[(0xb513, Some(0x00b5))]),
 
-			("sltu a0, a1, a2", &[0x00c5b533]),
+			("sltu a0, a1, a2", &[(0xb533, Some(0x00c5))]),
 
-			("sltz a0, a1", &[0x0005a533]),
+			("sltz a0, a1", &[(0xa533, Some(0x0005))]),
 
-			("snez a0, a1", &[0x00b03533]),
+			("snez a0, a1", &[(0x3533, Some(0x00b0))]),
 
-			("sra a0, a1, a2", &[0x40c5d533]),
+			("sra a0, a1, a2", &[(0xd533, Some(0x40c5))]),
 
-			("srai a0, a1, 11", &[0x40b5d513]),
-			("srai a0, a1, 31", &[0x41f5d513]),
+			("srai a0, a1, 11", &[(0xd513, Some(0x40b5))]),
+			("srai a0, a1, 31", &[(0xd513, Some(0x41f5))]),
 
-			("srl a0, a1, a2", &[0x00c5d533]),
+			("srl a0, a1, a2", &[(0xd533, Some(0x00c5))]),
 
-			("srli a0, a1, 11", &[0x00b5d513]),
-			("srli a0, a1, 31", &[0x01f5d513]),
+			("srli a0, a1, 11", &[(0xd513, Some(0x00b5))]),
+			("srli a0, a1, 31", &[(0xd513, Some(0x01f5))]),
 
-			("sub a0, a1, a2", &[0x40c58533]),
+			("sub a0, a1, a2", &[(0x8533, Some(0x40c5))]),
 
-			("sw a0, -11(a1)", &[0xfea5aaa3]),
-			("sw a0, 11(a1)", &[0x00a5a5a3]),
+			("sw a0, -11(a1)", &[(0xaaa3, Some(0xfea5))]),
+			("sw a0, 11(a1)", &[(0xa5a3, Some(0x00a5))]),
 
-			("tail -4", &[0x00000317, 0xffc30067]),
-			("tail 8", &[0x00000317, 0x00830067]),
+			("tail -4", &[(0x0317, Some(0x0000)), (0x0067, Some(0xffc3))]),
+			("tail 8", &[(0x0317, Some(0x0000)), (0x0067, Some(0x0083))]),
 
-			("xor a0, a1, a2", &[0x00c5c533]),
+			("xor a0, a1, a2", &[(0xc533, Some(0x00c5))]),
 
-			("xori a0, a1, -11", &[0xff55c513]),
-			("xori a0, a1, 11", &[0x00b5c513]),
+			("xori a0, a1, -11", &[(0xc513, Some(0xff55))]),
+			("xori a0, a1, 11", &[(0xc513, Some(0x00b5))]),
 
-			("zext.b a0, a1", &[0x0ff5f513]),
+			("zext.b a0, a1", &[(0xf513, Some(0x0ff5))]),
 
-			("zext.h a0, a1", &[0x01059513, 0x01055513]),
+			("zext.h a0, a1", &[(0x9513, Some(0x0105)), (0x5513, Some(0x0105))]),
 		];
 		for &(input, expected) in TESTS {
+			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV32I;
+
 			std::eprintln!("{input}");
 
 			let actual =
 				super::parse_program(input)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
-					let encoded = crate::Instruction::encode(i).map_err(|err| err.to_string())?;
+					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
+					Ok(encoded)
+				})
+				.collect::<Result<Vec<_>, _>>()
+				.unwrap();
+			assert_eq!(expected[..], actual[..]);
+		}
+	}
+
+	#[test]
+	fn full_compressed() {
+		static TESTS: &[(&str, &[(u16, Option<u16>)])] = &[
+			// All registers and aliases
+			("add x8, x8, x9", &[(0x9426, None)]),
+			("add x10, x10, x11", &[(0x952e, None)]),
+			("add x12, x12, x13", &[(0x9636, None)]),
+			("add x14, x14, x15", &[(0x973e, None)]),
+
+			("add s0, fp, s1", &[(0x9426, None)]),
+			("add a0, a0, a1", &[(0x952e, None)]),
+			("add a2, a2, a3", &[(0x9636, None)]),
+			("add a4, a4, a5", &[(0x973e, None)]),
+
+
+			// Instructions
+
+			("add x3, x3, x4", &[(0x9192, None)]),
+			("add x3, x3, x0", &[(0x818e, None)]), // Collides with c.jalr and c.ebreak, but gets encoded as `mv x3, x3` instead
+			("add x0, x0, x4", &[(0x9012, None)]), // HINT, but gets encoded as `ntl.s1` instead
+
+			("addi x3, x3, -11", &[(0x11d5, None)]),
+			("addi x3, x3, 11", &[(0x01ad, None)]),
+			("addi x0, x0, -11", &[(0x0013, Some(0xff50))]), // Collides with c.nop
+			("addi x0, x0, 11", &[(0x0013, Some(0x00b0))]), // Collides with c.nop
+			("addi x3, x3, 0", &[(0x818e, None)]), // HINT, but gets encoded as `mv x3, x3` instead
+
+			("addi4spn x8, x2, 44", &[(0x1060, None)]),
+			("addi4spn x3, x2, 44", &[(0x0193, Some(0x02c1))]), // Incompressible register
+			("addi4spn x8, x2, 0", &[(0x840a, None)]), // Reserved, but gets encoded as `mv x8, x2` instead
+			("addi x8, x2, 44", &[(0x1060, None)]),
+			("addi x3, x2, 44", &[(0x0193, Some(0x02c1))]), // Incompressible register
+			("addi x8, x2, 0", &[(0x840a, None)]), // Reserved, but gets encoded as `mv x8, x2` instead
+
+			("addi16sp x2, 176", &[(0x614d, None)]),
+			("addi16sp x2, 0", &[(0x810a, None)]), // Reserved, but gets encoded as `mv x2, x2` instead
+			("addi x2, x2, -176", &[(0x7171, None)]),
+			("addi x2, x2, 176", &[(0x614d, None)]),
+			("addi x2, x2, 0", &[(0x810a, None)]), // Reserved, but gets encoded as `mv x2, x2` instead
+
+			("and x8, x8, x9", &[(0x8c65, None)]),
+			("and x3, x3, x9", &[(0xf1b3, Some(0x0091))]), // Incompressible register
+			("and x8, x8, x4", &[(0x7433, Some(0x0044))]), // Incompressible register
+
+			("andi x8, x8, 11", &[(0x882d, None)]),
+			("andi x8, x8, -11", &[(0x9855, None)]),
+			("andi x3, x3, -11", &[(0xf193, Some(0xff51))]), // Incompressible register
+			("andi x3, x3, 11", &[(0xf193, Some(0x00b1))]), // Incompressible register
+
+			("beqz x8, -22", &[(0xd46d, None)]),
+			("beqz x8, 22", &[(0xc819, None)]),
+			("beqz x3, -22", &[(0x85e3, Some(0xfe01))]), // Incompressible register
+			("beqz x3, 22", &[(0x8b63, Some(0x0001))]), // Incompressible register
+
+			("bnez x8, -22", &[(0xf46d, None)]),
+			("bnez x8, 22", &[(0xe819, None)]),
+			("bnez x3, -22", &[(0x95e3, Some(0xfe01))]), // Incompressible register
+			("bnez x3, 22", &[(0x9b63, Some(0x0001))]), // Incompressible register
+
+			("ebreak", &[(0x9002, None)]),
+
+			("j -22", &[(0xb7ed, None)]),
+			("j 22", &[(0xa819, None)]),
+
+			("jal -22", &[(0x37ed, None)]),
+			("jal 22", &[(0x2819, None)]),
+
+			("jalr x3", &[(0x9182, None)]),
+
+			("jr x3", &[(0x8182, None)]),
+
+			("li x3, -11", &[(0x51d5, None)]),
+			("li x3, 11", &[(0x41ad, None)]),
+			("li x0, -11", &[(0x0013, Some(0xff50))]), // HINT
+			("li x0, 11", &[(0x0013, Some(0x00b0))]), // HINT
+
+			("lui x3, -11", &[(0x71d5, None)]),
+			("lui x3, 11", &[(0x61ad, None)]),
+			("lui x3, 0", &[(0x4181, None)]), // Reserved, but gets encoded as `li x3, 0`
+			("lui x0, -11", &[(0x5037, Some(0xffff))]), // HINT
+			("lui x0, 11", &[(0xb037, Some(0x0000))]), // HINT
+			("lui x2, -11", &[(0x5137, Some(0xffff))]), // Collides with c.addi16sp
+			("lui x2, 11", &[(0xb137, Some(0x0000))]), // Collides with c.addi16sp
+
+			("lw x8, 44(x9)", &[(0x54c0, None)]),
+			("lw x3, 44(x9)", &[(0xa183, Some(0x02c4))]), // Incompressible register
+			("lw x8, 44(x4)", &[(0x2403, Some(0x02c2))]), // Incompressible register
+
+			("lwsp x3, 44(x2)", &[(0x51b2, None)]),
+			("lwsp x0, 44(x2)", &[(0x2003, Some(0x02c1))]), // Reserved
+			("lw x3, 44(x2)", &[(0x51b2, None)]),
+			("lw x0, 44(x2)", &[(0x2003, Some(0x02c1))]), // Reserved
+
+			("mv x3, x4", &[(0x8192, None)]),
+			("mv x3, x0", &[(0x4181, None)]), // Collides with c.jr, but gets encoded as `li x3, 0` instead
+			("mv x0, x0", &[(0x0001, None)]), // HINT, but gets encoded as `nop` instead
+
+			("nop", &[(0x0001, None)]),
+
+			("ntl.all", &[(0x9016, None)]),
+			("ntl.pall", &[(0x900e, None)]),
+			("ntl.p1", &[(0x900a, None)]),
+			("ntl.s1", &[(0x9012, None)]),
+
+			("or x8, x8, x9", &[(0x8c45, None)]),
+			("or x3, x3, x9", &[(0xe1b3, Some(0x0091))]), // Incompressible register
+			("or x8, x8, x4", &[(0x6433, Some(0x0044))]), // Incompressible register
+
+			("slli x3, x3, 11", &[(0x01ae, None)]),
+			("slli x3, x3, 31", &[(0x01fe, None)]),
+			("slli x3, x3, 0", &[(0x9193, Some(0x0001))]), // HINT
+			("slli x0, x0, 31", &[(0x1013, Some(0x01f0))]), // HINT
+
+			("srai x8, x8, 11", &[(0x842d, None)]),
+			("srai x8, x8, 31", &[(0x847d, None)]),
+			("srai x3, x3, 11", &[(0xd193, Some(0x40b1))]), // Incompressible register
+			("srai x8, x8, 0", &[(0x5413, Some(0x4004))]), // HINT
+
+			("srli x8, x8, 11", &[(0x802d, None)]),
+			("srli x8, x8, 31", &[(0x807d, None)]),
+			("srli x3, x3, 11", &[(0xd193, Some(0x00b1))]), // Incompressible register
+			("srli x8, x8, 0", &[(0x5413, Some(0x0004))]), // HINT
+
+			("sub x8, x8, x9", &[(0x8c05, None)]),
+			("sub x3, x3, x9", &[(0x81b3, Some(0x4091))]), // Incompressible register
+			("sub x8, x8, x4", &[(0x0433, Some(0x4044))]), // Incompressible register
+
+			("sw x8, 44(x9)", &[(0xd4c0, None)]),
+			("sw x3, 44(x9)", &[(0xa623, Some(0x0234))]), // Incompressible register
+			("sw x8, 44(x4)", &[(0x2623, Some(0x0282))]), // Incompressible register
+
+			("swsp x3, 44(x2)", &[(0xd60e, None)]),
+			("swsp x0, 44(x2)", &[(0xd602, None)]),
+			("sw x3, 44(x2)", &[(0xd60e, None)]),
+			("sw x0, 44(x2)", &[(0xd602, None)]),
+
+			("xor x8, x8, x9", &[(0x8c25, None)]),
+			("xor x3, x3, x9", &[(0xc1b3, Some(0x0091))]), // Incompressible register
+			("xor x8, x8, x4", &[(0x4433, Some(0x0044))]), // Incompressible register
+		];
+		for &(input, expected) in TESTS {
+			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV32C;
+
+			std::eprintln!("{input}");
+
+			let actual =
+				super::parse_program(input)
+				.map(|i| -> Result<_, String> {
+					let i = i.map_err(|err| err.to_string())?;
+					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
 					Ok(encoded)
 				})
 				.collect::<Result<Vec<_>, _>>()
@@ -374,17 +540,17 @@ mod tests {
 	// Source: https://sourceware.org/git/?p=binutils-gdb.git
 	//
 	// /gas/testsuite/gas/riscv/
-	#[allow(clippy::unreadable_literal)]
+
 	#[test]
-	fn gas() {
-		static TESTS: &[(&str, &[u32])] = &[
+	fn gas_uncompressed() {
+		static TESTS: &[(&str, &[(u16, u16)])] = &[
 			// auipc-x0.s
 			("
 				auipc x0, 0
 				lw x0, 0(x0)
 			", &[
-				0x00000017,
-				0x00002003,
+				(0x0017, 0x0000),
+				(0x2003, 0x0000),
 			]),
 
 			// bge.s
@@ -394,10 +560,10 @@ mod tests {
 				bgeu a1, a2, -8
 				bleu a1, a2, -12
 			", &[
-				0x00c5d063,
-				0xfeb65ee3,
-				0xfec5fce3,
-				0xfeb67ae3,
+				(0xd063, 0x00c5),
+				(0x5ee3, 0xfeb6),
+				(0xfce3, 0xfec5),
+				(0x7ae3, 0xfeb6),
 			]),
 
 			// dis-addr-overflow.s
@@ -431,31 +597,31 @@ mod tests {
 				jalr t4, 0x104(zero)
 				jalr t5, -0x7fc(zero)
 			", &[
-				0xfffff2b7,
-				0xffc2a903,
-				0xffffe337,
-				0xff332c23,
-				0xffffd3b7,
-				0x000380e7,
-				0xffffce37,
-				0xff4e00e7,
-				0xffffbeb7,
-				0x000e8a67,
-				0xffffaf37,
-				0xff0f0a93,
-				0x4001a283,
-				0xc001a303,
-				0x10002383,
-				0x80002e03,
-				0x10400ee7,
-				0x80400f67,
+				(0xf2b7, 0xffff),
+				(0xa903, 0xffc2),
+				(0xe337, 0xffff),
+				(0x2c23, 0xff33),
+				(0xd3b7, 0xffff),
+				(0x80e7, 0x0003),
+				(0xce37, 0xffff),
+				(0x00e7, 0xff4e),
+				(0xbeb7, 0xffff),
+				(0x8a67, 0x000e),
+				(0xaf37, 0xffff),
+				(0x0a93, 0xff0f),
+				(0xa283, 0x4001),
+				(0xa303, 0xc001),
+				(0x2383, 0x1000),
+				(0x2e03, 0x8000),
+				(0x0ee7, 0x1040),
+				(0x0f67, 0x8040),
 			]),
 
 			// dis-addr-topaddr.s
 			("
 				lb t0, -1(zero)
 			", &[
-				0xfff00283,
+				(0x0283, 0xfff0),
 			]),
 
 			// dis-addr-topaddr-gp.s
@@ -465,15 +631,15 @@ mod tests {
 				lw t0, +5(gp)
 				lw t1, -3(gp)
 			", &[
-				0x0051a283,
-				0xffd1a303,
+				(0xa283, 0x0051),
+				(0xa303, 0xffd1),
 			]),
 
 			// fence-tso.s
 			("
 				fence.tso
 			", &[
-				0x8330000f,
+				(0x000f, 0x8330),
 			]),
 
 			// fixup-local.s
@@ -496,36 +662,36 @@ mod tests {
 				sw a0, 16(a0)
 				ret
 			", &[
-				0x00000517,
-				0x01850513,
-				0x00000517,
-				0x01051503,
-				0x00000517,
-				0x00a51423,
-				0x00000517,
-				0x00050513,
-				0x00000517,
-				0x00051503,
-				0x00000517,
-				0x00a51023,
-				0x00000517,
-				0x00050513,
-				0x00000517,
-				0x00051503,
-				0x00000517,
-				0x00a51023,
-				0x00000517,
-				0x01052503,
-				0x00000517,
-				0x00a52823,
-				0x00008067,
+				(0x0517, 0x0000),
+				(0x0513, 0x0185),
+				(0x0517, 0x0000),
+				(0x1503, 0x0105),
+				(0x0517, 0x0000),
+				(0x1423, 0x00a5),
+				(0x0517, 0x0000),
+				(0x0513, 0x0005),
+				(0x0517, 0x0000),
+				(0x1503, 0x0005),
+				(0x0517, 0x0000),
+				(0x1023, 0x00a5),
+				(0x0517, 0x0000),
+				(0x0513, 0x0005),
+				(0x0517, 0x0000),
+				(0x1503, 0x0005),
+				(0x0517, 0x0000),
+				(0x1023, 0x00a5),
+				(0x0517, 0x0000),
+				(0x2503, 0x0105),
+				(0x0517, 0x0000),
+				(0x2823, 0x00a5),
+				(0x8067, 0x0000),
 			]),
 
 			// t_insns.s
 			("
 				nop
 			", &[
-				0x00000013,
+				(0x0013, 0x0000),
 			]),
 
 			// tlsdesc.s
@@ -542,15 +708,15 @@ mod tests {
 
 				ret
 			", &[
-				0x00000517,
-				0x00052283,
-				0x00050513,
-				0x000282e7,
-				0x00000517,
-				0x00052283,
-				0x00050513,
-				0x000282e7,
-				0x00008067,
+				(0x0517, 0x0000),
+				(0x2283, 0x0005),
+				(0x0513, 0x0005),
+				(0x82e7, 0x0002),
+				(0x0517, 0x0000),
+				(0x2283, 0x0005),
+				(0x0513, 0x0005),
+				(0x82e7, 0x0002),
+				(0x8067, 0x0000),
 			]),
 
 			// zihintntl.s
@@ -564,14 +730,14 @@ mod tests {
 				ntl.all
 				sb s11, 6(t0)
 			", &[
-				0x00200033,
-				0x01b28023,
-				0x00300033,
-				0x01b28123,
-				0x00400033,
-				0x01b28223,
-				0x00500033,
-				0x01b28323,
+				(0x0033, 0x0020),
+				(0x8023, 0x01b2),
+				(0x0033, 0x0030),
+				(0x8123, 0x01b2),
+				(0x0033, 0x0040),
+				(0x8223, 0x01b2),
+				(0x0033, 0x0050),
+				(0x8323, 0x01b2),
 			]),
 
 			// zihintntl-base.s
@@ -585,24 +751,315 @@ mod tests {
 				add x0, x0, x5
 				sb s11, 6(t0)
 			", &[
-				0x00200033,
-				0x01b28023,
-				0x00300033,
-				0x01b28123,
-				0x00400033,
-				0x01b28223,
-				0x00500033,
-				0x01b28323,
+				(0x0033, 0x0020),
+				(0x8023, 0x01b2),
+				(0x0033, 0x0030),
+				(0x8123, 0x01b2),
+				(0x0033, 0x0040),
+				(0x8223, 0x01b2),
+				(0x0033, 0x0050),
+				(0x8323, 0x01b2),
 			]),
 		];
 		for &(input, expected) in TESTS {
+			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV32I;
+
+			std::eprintln!("{input}");
+
+			let expected = expected.iter().map(|&(lo, hi)| (lo, Some(hi))).collect::<Vec<_>>();
+			let actual =
+				super::parse_program(input)
+				.map(|i| -> Result<_, String> {
+					let i = i.map_err(|err| err.to_string())?;
+					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
+					Ok(encoded)
+				})
+				.collect::<Result<Vec<_>, _>>()
+				.unwrap();
+			assert_eq!(expected[..], actual[..]);
+		}
+	}
+
+	#[test]
+	fn gas_compressed() {
+		static TESTS: &[(&str, &[(u16, Option<u16>)])] = &[
+			// c-add-addi.s
+			("
+				addi a2, zero, 1
+				add a0, zero, a1
+			", &[
+				(0x4605, None),
+				(0x852e, None),
+			]),
+
+			// c-branch.s
+			("
+				beq x8, x0, 0
+				beqz x9, -2
+				bne x8, x0, -4
+				bnez x9, -6
+				j -8
+				jal -10
+				jalr x6
+				jr x7
+				ret
+			", &[
+				(0xc001, None),
+				(0xdcfd, None),
+				(0xfc75, None),
+				(0xfced, None),
+				(0xbfe5, None),
+				(0x3fdd, None),
+				(0x9302, None),
+				(0x8382, None),
+				(0x8082, None),
+			]),
+
+			// c-lw.s
+			("
+				lw a0, (a0)  # 'Ck'
+				lw a0, 0(a0) # 'Ck'
+				sw a0, (a0)  # 'Ck'
+				sw a0, 0(a0) # 'Ck'
+				lw a0, (sp)  # 'Cm'
+				lw a0, 0(sp) # 'Cm'
+				sw a0, (sp)  # 'CM'
+				sw a0, 0(sp) # 'CM'
+			", &[
+				(0x4108, None),
+				(0x4108, None),
+				(0xc108, None),
+				(0xc108, None),
+				(0x4502, None),
+				(0x4502, None),
+				(0xc02a, None),
+				(0xc02a, None),
+			]),
+
+			// c-zero-imm.s
+			("
+				# These are valid instructions.
+				li a0,0
+				li a1,0
+				andi a2,a2,0
+				andi a3,a3,0
+				addi x0,x0,0
+				# compress to c.mv.
+				addi a4,a4,0
+				# Don't let these compress to hints.
+				slli a0, a0, 0
+				srli a1, a1, 0
+				srai a2, a2, 0
+			", &[
+				(0x4501, None),
+				(0x4581, None),
+				(0x8a01, None),
+				(0x8a81, None),
+				(0x0001, None),
+				(0x873a, None),
+				(0x1513, Some(0x0005)),
+				(0xd593, Some(0x0005)),
+				(0x5613, Some(0x4006)),
+			]),
+
+			// c-zero-reg.s
+			("
+				# Don't let these compress to hints.
+				li x0, 5
+				lui x0, 6
+				slli x0, x0, 7
+				mv x0, x1
+				add x0, x0, x1
+			", &[
+				(0x0013, Some(0x0050)),
+				(0x6037, Some(0x0000)),
+				(0x1013, Some(0x0070)),
+				// gas wants this to be incompressible, ie `(0x8013, Some(0x0000))`,
+				// because the original is `c.mv` which expands to `add x0, x0, x1`,
+				// and `add x0, x0, !x0` is a HINT.
+				//
+				// We don't differentiate between `mv` and `c.mv` so we treat the input as `addi x0, x0, x1`,
+				// which is compressible.
+				(0x0001, None),
+				(0x0033, Some(0x0010)),
+			]),
+
+			// dis-addr-overflow.s
+			("
+				addi t6, t6, -20
+
+				# Use addresses relative to gp
+				lw t0, 0x400(gp)
+				lw t1, -0x400(gp)
+				# Use addresses relative to zero
+				lw t2, 0x100(zero)
+				lw t3, -0x800(zero)
+				jalr t4, 0x104(zero)
+				jalr t5, -0x7fc(zero)
+			", &[
+				(0x1fb1, None),
+				(0xa283, Some(0x4001)),
+				(0xa303, Some(0xc001)),
+				(0x2383, Some(0x1000)),
+				(0x2e03, Some(0x8000)),
+				(0x0ee7, Some(0x1040)),
+				(0x0f67, Some(0x8040)),
+			]),
+
+			// li32.s
+			("
+				li  a0, 0x8001
+				li  a0, 0x1f01
+				li  a0, 0x12345001
+				li  a0, 0xf2345001
+			", &[
+				(0x6521, None),
+				(0x0505, None),
+				(0x6509, None),
+				(0x0513, Some(0xf015)),
+				(0x5537, Some(0x1234)),
+				(0x0505, None),
+				(0x5537, Some(0xf234)),
+				(0x0505, None),
+			]),
+
+			// zca.s
+			("
+				li x1, 31
+				li x2, 0
+				lui x1, 1
+				lui x3, 31
+				lw x8, (x9)
+				lw x9, 32(x10)
+				lw a0, (sp)
+				c.lwsp x1, (x2)
+				sw x8, (x9)
+				sw x9, 32(x10)
+				sw a0, (sp)
+				c.swsp x1, (x2)
+				addi x0, x0, 0
+				nop
+				add x1, x1, x2
+				addi a1, a1, 31
+				addi x2, x2, 0
+				addi4spn x8, x2, 4
+				addi16sp x2, 32
+				sub x8, x8, x9
+				and x8, x8, x9
+				andi x8, x8, 31
+				or x8, x8, x9
+				xor x8, x8, x9
+				mv x0, x1
+				slli x0, x0, 1
+				beqz x8, -80
+				bnez x8, -82
+				j -84
+				jr ra
+				jalr ra
+			", &[
+				(0x40fd, None),
+				(0x4101, None),
+				(0x6085, None),
+				(0x61fd, None),
+				(0x4080, None),
+				(0x5104, None),
+				(0x4502, None),
+				(0x4082, None),
+				(0xc080, None),
+				(0xd104, None),
+				(0xc02a, None),
+				(0xc006, None),
+				(0x0001, None),
+				(0x0001, None),
+				(0x908a, None),
+				(0x05fd, None),
+				// gas wants this to be `(0x0101, None)` because the original is `c.addi` and `c.addi _, 0` is a HINT.
+				//
+				// We don't differentiate between `addi` and `c.addi` so we compress it as `c.mv` instead.
+				(0x810a, None),
+				(0x0040, None),
+				(0x6105, None),
+				(0x8c05, None),
+				(0x8c65, None),
+				(0x887d, None),
+				(0x8c45, None),
+				(0x8c25, None),
+				// gas wants this to be `(0x8006, None)` because the original is `c.mv` which expands to `add x0, x0, x1`,
+				// and `add x0, x0, !x0` is a HINT.
+				//
+				// We don't differentiate between `mv` and `c.mv` so we treat the input as `addi x0, x0, x1`
+				(0x0001, None),
+				// gas wants this to be `(0x0006, None)` because the original is `c.slli` and `slli x0, _` is a HINT.
+				//
+				// We don't differentiate between `slli` and `c.slli` so we don't compress it.
+				(0x1013, Some(0x0010)),
+				(0xd845, None),
+				(0xf45d, None),
+				(0xb775, None),
+				(0x8082, None),
+				(0x9082, None),
+			]),
+
+			// zihintntl.s
+			//
+			// gas compresses `c.ntl.*` and `c.add x0, *` but does not compress `add x0, x0, *`.
+			// We treat `ntl.*` as a pseudo-instruction and don't differentiate between `add` and `c.add`,
+			// so we don't compress them.
+			("
+				ntl.p1
+				sb s11, 8(t0)
+				ntl.pall
+				sb s11, 10(t0)
+				ntl.s1
+				sb s11, 12(t0)
+				ntl.all
+				sb s11, 14(t0)
+			", &[
+				(0x900a, None),
+				(0x8423, Some(0x01b2)),
+				(0x900e, None),
+				(0x8523, Some(0x01b2)),
+				(0x9012, None),
+				(0x8623, Some(0x01b2)),
+				(0x9016, None),
+				(0x8723, Some(0x01b2)),
+			]),
+
+			// zihintntl-base.s
+			//
+			// gas compresses `c.ntl.*` and `c.add x0, *` but does not compress `add x0, x0, *`.
+			// We treat `ntl.*` as a pseudo-instruction and don't differentiate between `add` and `c.add`,
+			// so we compress them.
+			("
+				add x0, x0, x2
+				sb s11, 8(t0)
+				add x0, x0, x3
+				sb s11, 10(t0)
+				add x0, x0, x4
+				sb s11, 12(t0)
+				add x0, x0, x5
+				sb s11, 14(t0)
+			", &[
+				(0x900a, None),
+				(0x8423, Some(0x01b2)),
+				(0x900e, None),
+				(0x8523, Some(0x01b2)),
+				(0x9012, None),
+				(0x8623, Some(0x01b2)),
+				(0x9016, None),
+				(0x8723, Some(0x01b2)),
+			]),
+		];
+		for &(input, expected) in TESTS {
+			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV32C;
+
 			std::eprintln!("{input}");
 
 			let actual =
 				super::parse_program(input)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
-					let encoded = crate::Instruction::encode(i).map_err(|err| err.to_string())?;
+					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
 					Ok(encoded)
 				})
 				.collect::<Result<Vec<_>, _>>()
