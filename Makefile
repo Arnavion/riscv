@@ -21,6 +21,8 @@ print:
 .PHONY: test
 test:
 	cargo test --workspace
-	for f in tc/*.S; do cargo run -- "$$f" >/dev/null || exit 1; done
+	for compress in 'false' 'true'; do \
+		for f in tc/*.S; do cargo run -- "--compress=$$compress" "$$f" >/dev/null || exit 1; done; \
+	done
 	cargo clippy --workspace --tests --examples
 	cargo machete
