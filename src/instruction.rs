@@ -1,6 +1,6 @@
 #![allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 
-use crate::{EncodeError, ParseError, Register};
+use crate::{EncodeError, ParseError, Register, SupportedExtensions};
 
 macro_rules! instructions {
 	(
@@ -19,7 +19,7 @@ macro_rules! instructions {
 		}
 
 		impl $ty {
-			$vis fn encode($self) -> Result<u32, EncodeError> {
+			fn encode_full($self) -> Result<(u16, Option<u16>), EncodeError> {
 				let raw_instruction = match $self {
 					$($encode_arms)*
 				};
@@ -817,6 +817,377 @@ instructions! {
 	}
 }
 
+impl Instruction {
+	pub fn encode(self, supported_extensions: SupportedExtensions) -> Result<(u16, Option<u16>), EncodeError> {
+		if !supported_extensions.contains(SupportedExtensions::RVC) {
+			return self.encode_full();
+		}
+
+		let raw_instruction = match self {
+			Self::Add { dest, src1: src, src2: Register::X0 } |
+			Self::Add { dest, src1: Register::X0, src2: src } if
+				dest != Register::X0 &&
+				src != Register::X0
+			=> RawInstruction::Cr {
+				opcode: OpCodeC::Mv,
+				rd_rs1: dest,
+				rs2: src,
+			},
+
+			Self::Add { dest, src1: src, src2: other } |
+			Self::Add { dest, src1: other, src2: src } if
+				dest != Register::X0 &&
+				src != Register::X0 &&
+				other == dest
+			=> RawInstruction::Cr {
+				opcode: OpCodeC::Add,
+				rd_rs1: dest,
+				rs2: src,
+			},
+
+			// C.NTL.*
+			Self::Add { dest: Register::X0, src1: Register::X0, src2: src @ (Register::X2 | Register::X3 | Register::X4 | Register::X5) }
+			=> RawInstruction::Cr {
+				opcode: OpCodeC::Add,
+				rd_rs1: Register::X0,
+				rs2: src,
+			},
+
+			// C.NOP
+			Self::Addi { dest: Register::X0, src: _, imm: 0 }
+			=> RawInstruction::Ci {
+				opcode: OpCodeC::Addi,
+				rd_rs1: Register::X0,
+				imm1: 0,
+				imm2: 0,
+			},
+
+			Self::Addi { dest, src: Register::X0, imm } if
+				dest != Register::X0 &&
+				can_truncate_high::<6>(imm)
+			=> RawInstruction::Ci {
+				opcode: OpCodeC::Li,
+				rd_rs1: dest,
+				imm1: bit_slice::<0, 5>(imm),
+				imm2: bit_slice::<5, 6>(imm),
+			},
+
+			Self::Addi { dest: Register::X2, src: Register::X2, imm } if
+				imm != 0 &&
+				can_truncate_low::<4>(imm) &&
+				can_truncate_high::<10>(imm)
+			=> {
+				let imm1 =
+					bit_slice::<5, 6>(imm) |
+					(bit_slice::<7, 9>(imm) << 1) |
+					(bit_slice::<6, 7>(imm) << 3) |
+					(bit_slice::<4, 5>(imm) << 4);
+				let imm2 = bit_slice::<9, 10>(imm);
+				RawInstruction::Ci {
+					opcode: OpCodeC::Addi16Sp,
+					rd_rs1: Register::X2,
+					imm1,
+					imm2
+				}
+			},
+
+			Self::Addi { dest, src: Register::X2, imm } if
+				dest.is_compressible() &&
+				imm != 0 &&
+				imm & ((1 << 10) - (1 << 2)) == imm
+			=> RawInstruction::Ciw {
+				opcode: OpCodeC::Addi4Spn,
+				rd: dest,
+				imm,
+			},
+
+			Self::Addi { dest, src, imm: 0 } if
+				dest != Register::X0 &&
+				src != Register::X0
+			=> RawInstruction::Cr {
+				opcode: OpCodeC::Mv,
+				rd_rs1: dest,
+				rs2: src,
+			},
+
+			Self::Addi { dest, src, imm } if
+				dest != Register::X0 &&
+				dest == src &&
+				imm != 0 &&
+				can_truncate_high::<6>(imm)
+			=> RawInstruction::Ci {
+				opcode: OpCodeC::Addi,
+				rd_rs1: dest,
+				imm1: bit_slice::<0, 5>(imm),
+				imm2: bit_slice::<5, 6>(imm),
+			},
+
+			Self::And { dest, src1: src, src2: other } |
+			Self::And { dest, src1: other, src2: src } if
+				dest.is_compressible() &&
+				src.is_compressible() &&
+				other == dest
+			=> RawInstruction::Ca {
+				opcode: OpCodeC::And,
+				rd_rs1: dest,
+				rs2: src,
+				funct2: Funct2::And,
+			},
+
+			Self::Andi { dest, src, imm } if
+				dest.is_compressible() &&
+				src == dest &&
+				can_truncate_high::<6>(imm)
+			=> RawInstruction::Cb {
+				opcode: OpCodeC::Andi,
+				rs1: dest,
+				imm1: bit_slice::<0, 5>(imm),
+				imm2: bit_slice::<5, 6>(imm) << 2,
+			},
+
+			Self::Beq { src1: Register::X0, src2: src, offset } |
+			Self::Beq { src1: src, src2: Register::X0, offset } if
+				src.is_compressible() &&
+				can_truncate_low::<1>(offset) &&
+				can_truncate_high::<9>(offset)
+			=> {
+				let imm1 =
+					(bit_slice::<5, 6>(offset)) |
+					(bit_slice::<1, 3>(offset) << 1) |
+					(bit_slice::<6, 8>(offset) << 3);
+				let imm2 =
+					(bit_slice::<3, 5>(offset)) |
+					(bit_slice::<8, 9>(offset) << 2);
+				RawInstruction::Cb {
+					opcode: OpCodeC::Beqz,
+					rs1: src,
+					imm1,
+					imm2,
+				}
+			},
+
+			Self::Bne { src1: Register::X0, src2: src, offset } |
+			Self::Bne { src1: src, src2: Register::X0, offset } if
+				src.is_compressible() &&
+				can_truncate_low::<1>(offset) &&
+				can_truncate_high::<9>(offset)
+			=> {
+				let imm1 =
+					(bit_slice::<5, 6>(offset)) |
+					(bit_slice::<1, 3>(offset) << 1) |
+					(bit_slice::<6, 8>(offset) << 3);
+				let imm2 =
+					(bit_slice::<3, 5>(offset)) |
+					(bit_slice::<8, 9>(offset) << 2);
+				RawInstruction::Cb {
+					opcode: OpCodeC::Bnez,
+					rs1: src,
+					imm1,
+					imm2,
+				}
+			},
+
+			Self::EBreak => RawInstruction::Cr {
+				opcode: OpCodeC::EBreak,
+				rd_rs1: Register::X0,
+				rs2: Register::X0,
+			},
+
+			Self::Jal { dest: Register::X0, offset } if
+				can_truncate_low::<1>(offset) &&
+				can_truncate_high::<12>(offset)
+			=> RawInstruction::Cj {
+				opcode: OpCodeC::J,
+				imm: offset,
+			},
+
+			Self::Jal { dest: Register::X1, offset } if
+				can_truncate_low::<1>(offset) &&
+				can_truncate_high::<12>(offset)
+			=> RawInstruction::Cj {
+				opcode: OpCodeC::Jal,
+				imm: offset,
+			},
+
+			Self::Jalr { dest: Register::X0, base, offset: 0 } if
+				base != Register::X0
+			=> RawInstruction::Cr {
+				opcode: OpCodeC::Jr,
+				rd_rs1: base,
+				rs2: Register::X0,
+			},
+
+			Self::Jalr { dest: Register::X1, base, offset: 0 } if
+				base != Register::X0
+			=> RawInstruction::Cr {
+				opcode: OpCodeC::Jalr,
+				rd_rs1: base,
+				rs2: Register::X0,
+			},
+
+			Self::Lui { dest, imm } if
+				!matches!(dest, Register::X0 | Register::X2) &&
+				imm != 0 &&
+				can_truncate_high::<6>(imm)
+			=> RawInstruction::Ci {
+				opcode: OpCodeC::Lui,
+				rd_rs1: dest,
+				imm1: bit_slice::<0, 5>(imm),
+				imm2: bit_slice::<5, 6>(imm),
+			},
+
+			Self::Lui { dest, imm: 0 } if
+				dest != Register::X0
+			=> RawInstruction::Ci {
+				opcode: OpCodeC::Li,
+				rd_rs1: dest,
+				imm1: 0,
+				imm2: 0,
+			},
+
+			Self::Lw { dest, base: Register::X2, offset } if
+				dest != Register::X0 &&
+				offset & ((1 << 8) - (1 << 2)) == offset
+			=> {
+				let imm1 =
+					bit_slice::<6, 8>(offset) |
+					(bit_slice::<2, 5>(offset) << 2);
+				let imm2 = bit_slice::<5, 6>(offset);
+				RawInstruction::Ci {
+					opcode: OpCodeC::Lwsp,
+					rd_rs1: dest,
+					imm1,
+					imm2,
+				}
+			},
+
+			Self::Lw { dest, base, offset } if
+				dest.is_compressible() &&
+				base.is_compressible() &&
+				offset & ((1 << 7) - (1 << 2)) == offset
+			=> {
+				let imm1 =
+					bit_slice::<6, 7>(offset) |
+					(bit_slice::<2, 3>(offset) << 1);
+				let imm2 = bit_slice::<3, 6>(offset);
+				RawInstruction::Cl {
+					opcode: OpCodeC::Lw,
+					rd: dest,
+					rs1: base,
+					imm1,
+					imm2,
+				}
+			},
+
+			Self::Or { dest, src1: src, src2: other } |
+			Self::Or { dest, src1: other, src2: src } if
+				dest.is_compressible() &&
+				src.is_compressible() &&
+				other == dest
+			=> RawInstruction::Ca {
+				opcode: OpCodeC::Or,
+				rd_rs1: dest,
+				rs2: src,
+				funct2: Funct2::Or,
+			},
+
+			Self::Slli { dest, src, shamt } if
+				dest != Register::X0 &&
+				dest == src &&
+				shamt != 0 &&
+				shamt & ((1 << 5) - 1) == shamt
+			=> RawInstruction::Ci {
+				opcode: OpCodeC::Slli,
+				rd_rs1: dest,
+				imm1: bit_slice::<0, 5>(shamt),
+				imm2: bit_slice::<5, 6>(shamt),
+			},
+
+			Self::Srai { dest, src, shamt } if
+				dest.is_compressible() &&
+				src == dest &&
+				shamt != 0 &&
+				shamt & ((1 << 5) - 1) == shamt
+			=> RawInstruction::Cb {
+				opcode: OpCodeC::Srai,
+				rs1: dest,
+				imm1: bit_slice::<0, 5>(shamt),
+				imm2: bit_slice::<5, 6>(shamt) << 2,
+			},
+
+			Self::Srli { dest, src, shamt } if
+				dest.is_compressible() &&
+				src == dest &&
+				shamt != 0 &&
+				shamt & ((1 << 5) - 1) == shamt
+			=> RawInstruction::Cb {
+				opcode: OpCodeC::Srli,
+				rs1: dest,
+				imm1: bit_slice::<0, 5>(shamt),
+				imm2: bit_slice::<5, 6>(shamt) << 2,
+			},
+
+			Self::Sub { dest, src1, src2 } if
+				dest.is_compressible() &&
+				src2.is_compressible() &&
+				src1 == dest
+			=> RawInstruction::Ca {
+				opcode: OpCodeC::Sub,
+				rd_rs1: dest,
+				rs2: src2,
+				funct2: Funct2::Sub,
+			},
+
+			Self::Sw { base: Register::X2, offset, src } if
+				offset & ((1 << 8) - (1 << 2)) == offset
+			=> {
+				let imm =
+					bit_slice::<6, 8>(offset) |
+					(bit_slice::<2, 6>(offset) << 2);
+				RawInstruction::Css {
+					opcode: OpCodeC::Swsp,
+					rs2: src,
+					imm,
+				}
+			},
+
+			Self::Sw { base, offset, src } if
+				base.is_compressible() &&
+				src.is_compressible() &&
+				offset & ((1 << 7) - (1 << 2)) == offset
+			=> {
+				let imm1 =
+					bit_slice::<6, 7>(offset) |
+					(bit_slice::<2, 3>(offset) << 1);
+				let imm2 = bit_slice::<3, 6>(offset);
+				RawInstruction::Cs {
+					opcode: OpCodeC::Sw,
+					rs1: base,
+					rs2: src,
+					imm1,
+					imm2,
+				}
+			},
+
+			Self::Xor { dest, src1: src, src2: other } |
+			Self::Xor { dest, src1: other, src2: src } if
+				dest.is_compressible() &&
+				src.is_compressible() &&
+				other == dest
+			=> RawInstruction::Ca {
+				opcode: OpCodeC::Xor,
+				rd_rs1: dest,
+				rs2: src,
+				funct2: Funct2::Xor,
+			},
+
+			_ => return self.encode_full(),
+		};
+
+		raw_instruction.encode()
+	}
+}
+
 struct Tokens<'a> {
 	line: &'a [u8],
 }
@@ -939,7 +1310,7 @@ impl<'a> TryFrom<&'a [u8]> for Imm {
 	}
 }
 
-fn parse_base_and_offset<'a>(tokens: &mut impl Iterator<Item = &'a [u8]>) -> Option<(Register, i32)> {
+pub(crate) fn parse_base_and_offset<'a>(tokens: &mut impl Iterator<Item = &'a [u8]>) -> Option<(Register, i32)> {
 	let token1 = tokens.next()?;
 	if let Ok(Imm(offset)) = token1.try_into() {
 		let token2 = tokens.next()?;
@@ -1029,29 +1400,119 @@ enum RawInstruction {
 		predecessor_set: FenceSet,
 		successor_set: FenceSet,
 	},
+
+	Cr {
+		opcode: OpCodeC,
+		rd_rs1: Register,
+		rs2: Register,
+	},
+
+	Ci {
+		opcode: OpCodeC,
+		rd_rs1: Register,
+		imm1: u32,
+		imm2: u32,
+	},
+
+	Cl {
+		opcode: OpCodeC,
+		rd: Register,
+		rs1: Register,
+		imm1: u32,
+		imm2: u32,
+	},
+
+	Cs {
+		opcode: OpCodeC,
+		rs1: Register,
+		rs2: Register,
+		imm1: u32,
+		imm2: u32,
+	},
+
+	Css {
+		opcode: OpCodeC,
+		rs2: Register,
+		imm: u32,
+	},
+
+	Ciw {
+		opcode: OpCodeC,
+		rd: Register,
+		imm: i32,
+	},
+
+	Ca {
+		opcode: OpCodeC,
+		rd_rs1: Register,
+		rs2: Register,
+		funct2: Funct2,
+	},
+
+	Cb {
+		opcode: OpCodeC,
+		rs1: Register,
+		imm1: u32,
+		imm2: u32,
+	},
+
+	Cj {
+		opcode: OpCodeC,
+		imm: i32,
+	},
 }
 
 impl RawInstruction {
-	fn encode(self) -> Result<u32, EncodeError> {
+	fn encode(self) -> Result<(u16, Option<u16>), EncodeError> {
+		#[derive(Clone, Copy, Debug)]
+		enum Encoded {
+			Full(u32),
+			Compressed(u32),
+		}
+
+		impl Encoded {
+			fn into_parts(self) -> (u16, Option<u16>) {
+				match self {
+					Self::Full(encoded) => {
+						const LENGTH_SUFFIX_FIXED_32_BITS: u16 = 0b11;
+
+						let lo = (encoded & 0x0000_FFFF) as u16 | LENGTH_SUFFIX_FIXED_32_BITS;
+						let hi = (encoded >> 16) as u16;
+						(lo, Some(hi))
+					},
+					Self::Compressed(encoded) => {
+						let lo = (encoded & 0x0000_FFFF) as u16;
+						let hi = (encoded >> 16) as u16;
+						assert_eq!(hi, 0);
+						(lo, None)
+					},
+				}
+			}
+		}
+
 		let encoded = match self {
 			Self::R { opcode, rd, funct3, rs1, rs2, funct7 } =>
-				opcode.encode() |
-					rd.encode_rd() |
+				Encoded::Full(
+					opcode.encode() |
+					rd.encode_rd_5b() |
 					(funct3.encode() << 12) |
-					rs1.encode_rs1() |
-					rs2.encode_rs2() |
-					(funct7.encode() << 25),
+					rs1.encode_rs1_5b() |
+					rs2.encode_rs2_5b() |
+					(funct7.encode() << 25)
+				),
 
 			Self::I { opcode, rd, funct3, rs1, imm } => {
 				if !can_truncate_high::<12>(imm) {
 					return Err(EncodeError::ImmediateOverflow);
 				}
 
-				opcode.encode() |
-					rd.encode_rd() |
+				Encoded::Full(
+					opcode.encode() |
+					rd.encode_rd_5b() |
 					(funct3.encode() << 12) |
-					rs1.encode_rs1() |
+					rs1.encode_rs1_5b() |
 					(bit_slice::<0, 12>(imm) << 20)
+				)
 			},
 
 			Self::S { opcode, funct3, rs1, rs2, imm } => {
@@ -1059,12 +1520,14 @@ impl RawInstruction {
 					return Err(EncodeError::ImmediateOverflow);
 				}
 
-				opcode.encode() |
+				Encoded::Full(
+					opcode.encode() |
 					(bit_slice::<0, 5>(imm) << 7) |
 					(funct3.encode() << 12) |
-					rs1.encode_rs1() |
-					rs2.encode_rs2() |
+					rs1.encode_rs1_5b() |
+					rs2.encode_rs2_5b() |
 					(bit_slice::<5, 12>(imm) << 25)
+				)
 			},
 
 			Self::B { opcode, funct3, rs1, rs2, imm } => {
@@ -1072,14 +1535,16 @@ impl RawInstruction {
 					return Err(EncodeError::ImmediateOverflow);
 				}
 
-				opcode.encode() |
+				Encoded::Full(
+					opcode.encode() |
 					(bit_slice::<11, 12>(imm) << 7) |
 					(bit_slice::<1, 5>(imm) << 8) |
 					(funct3.encode() << 12) |
-					rs1.encode_rs1() |
-					rs2.encode_rs2() |
+					rs1.encode_rs1_5b() |
+					rs2.encode_rs2_5b() |
 					(bit_slice::<5, 11>(imm) << 25) |
 					(bit_slice::<12, 13>(imm) << 31)
+				)
 			},
 
 			Self::U { opcode, rd, imm } => {
@@ -1091,9 +1556,11 @@ impl RawInstruction {
 						return Err(EncodeError::ImmediateOverflow);
 					};
 
-				opcode.encode() |
-					rd.encode_rd() |
+				Encoded::Full(
+					opcode.encode() |
+					rd.encode_rd_5b() |
 					imm
+				)
 			},
 
 			Self::J { opcode, rd, imm } => {
@@ -1101,21 +1568,101 @@ impl RawInstruction {
 					return Err(EncodeError::ImmediateOverflow);
 				}
 
-				opcode.encode() |
-					rd.encode_rd() |
+				Encoded::Full(
+					opcode.encode() |
+					rd.encode_rd_5b() |
 					(bit_slice::<12, 20>(imm) << 12) |
 					(bit_slice::<11, 12>(imm) << 20) |
 					(bit_slice::<1, 11>(imm) << 21) |
 					(bit_slice::<20, 21>(imm) << 31)
+				)
 			},
 
 			Self::Fence { fm, predecessor_set, successor_set } =>
-				OpCode::MiscMem.encode() |
+				Encoded::Full(
+					OpCode::MiscMem.encode() |
 					(fm.encode() << 28) |
 					(predecessor_set.encode() << 24) |
-					(successor_set.encode() << 20),
+					(successor_set.encode() << 20)
+				),
+
+			Self::Cr { opcode, rd_rs1, rs2 } => Encoded::Compressed(
+				opcode.encode() |
+				(rs2.encode_5b() << 2) |
+				rd_rs1.encode_rd_5b()
+			),
+
+			Self::Ci { opcode, rd_rs1, imm1, imm2 } => Encoded::Compressed(
+				opcode.encode() |
+				(imm1 << 2) |
+				rd_rs1.encode_rd_5b() |
+				(imm2 << 12)
+			),
+
+			Self::Cl { opcode, rd, rs1, imm1, imm2 } => Encoded::Compressed(
+				opcode.encode() |
+				(rd.encode_3b()? << 2) |
+				(imm1 << 5) |
+				(rs1.encode_3b()? << 7) |
+				(imm2 << 10)
+			),
+
+			Self::Cs { opcode, rs1, rs2, imm1, imm2 } => Encoded::Compressed(
+				opcode.encode() |
+				(rs2.encode_3b()? << 2) |
+				(imm1 << 5) |
+				(rs1.encode_3b()? << 7) |
+				(imm2 << 10)
+			),
+
+			Self::Css { opcode, rs2, imm } => Encoded::Compressed(
+				opcode.encode() |
+				(rs2.encode_5b() << 2) |
+				(imm << 7)
+			),
+
+			Self::Ciw { opcode, rd, imm } => Encoded::Compressed(
+				opcode.encode() |
+				(rd.encode_3b()? << 2) |
+				(bit_slice::<3, 4>(imm) << 5) |
+				(bit_slice::<2, 3>(imm) << 6) |
+				(bit_slice::<6, 10>(imm) << 7) |
+				(bit_slice::<4, 6>(imm) << 11)
+			),
+
+			Self::Ca { opcode, rd_rs1, rs2, funct2 } => Encoded::Compressed(
+				opcode.encode() |
+				(rs2.encode_3b()? << 2) |
+				(funct2.encode() << 5) |
+				(rd_rs1.encode_3b()? << 7)
+			),
+
+			Self::Cb { opcode, rs1, imm1, imm2 } => Encoded::Compressed(
+				opcode.encode() |
+				(imm1 << 2) |
+				(rs1.encode_3b()? << 7) |
+				(imm2 << 10)
+			),
+
+			Self::Cj { opcode, imm } => {
+				if !can_truncate_low::<1>(imm) || !can_truncate_high::<12>(imm) {
+					return Err(EncodeError::ImmediateOverflow);
+				}
+
+				Encoded::Compressed(
+					opcode.encode() |
+					(bit_slice::<1, 4>(imm) << 3) |
+					(bit_slice::<4, 5>(imm) << 11) |
+					(bit_slice::<5, 6>(imm) << 2) |
+					(bit_slice::<6, 7>(imm) << 7) |
+					(bit_slice::<7, 8>(imm) << 6) |
+					(bit_slice::<8, 10>(imm) << 9) |
+					(bit_slice::<10, 11>(imm) << 8) |
+					(bit_slice::<11, 12>(imm) << 12)
+				)
+			},
 		};
-		Ok(encoded)
+		Ok(encoded.into_parts())
 	}
 }
 
@@ -1159,9 +1706,7 @@ enum OpCode {
 
 impl OpCode {
 	const fn encode(self) -> u32 {
-		const LENGTH_SUFFIX_FIXED_32_BITS: u32 = 0b11;
-
-		(self as u32) << 2 | LENGTH_SUFFIX_FIXED_32_BITS
+		(self as u32) << 2
 	}
 }
 
@@ -1330,6 +1875,77 @@ impl<'a> TryFrom<&'a [u8]> for FenceSet {
 			_ => return Err(ParseError::MalformedFenceSet { token }),
 		};
 		Ok(Self { i, o, r, w })
+	}
+}
+
+macro_rules! opcodec {
+	(
+		$vis:vis enum $ty:ident {
+			$($variant:ident = ( $quadrant:ident, $funct6:literal ) ,)*
+		}
+	) => {
+		#[allow(clippy::unreadable_literal)]
+		#[derive(Clone, Copy, Debug)]
+		$vis enum $ty {
+			$($variant ,)*
+		}
+
+		impl $ty {
+			const fn encode(self) -> u32 {
+				#[allow(clippy::unreadable_literal)]
+				let (quadrant, funct6) = match self {
+					$(Self::$variant => (OpCodeCQuadrant::$quadrant, $funct6) ,)*
+				};
+				(quadrant as u32) | (funct6 << 10)
+			}
+		}
+	};
+}
+
+#[derive(Clone, Copy, Debug)]
+enum OpCodeCQuadrant {
+	C0 = 0b00,
+	C1 = 0b01,
+	C2 = 0b10,
+}
+
+opcodec! {
+	enum OpCodeC {
+		Add = (C2, 0b100_100),
+		Addi = (C1, 0b000_000),
+		Addi4Spn = (C0, 0b000_000),
+		Addi16Sp = (C1, 0b011_000),
+		And = (C1, 0b100_011),
+		Andi = (C1, 0b100_010),
+		Beqz = (C1, 0b110_000),
+		Bnez = (C1, 0b111_000),
+		EBreak = (C2, 0b100_100),
+		J = (C1, 0b101_000),
+		Jal = (C1, 0b001_000),
+		Jalr = (C2, 0b100_100),
+		Jr = (C2, 0b100_000),
+		Li = (C1, 0b010_000),
+		Lui = (C1, 0b011_000),
+		Lw = (C0, 0b010_000),
+		Lwsp = (C2, 0b010_000),
+		Mv = (C2, 0b100_000),
+		Or = (C1, 0b100_011),
+		Slli = (C2, 0b000_000),
+		Srai = (C1, 0b100_001),
+		Srli = (C1, 0b100_000),
+		Sw = (C0, 0b110_000),
+		Swsp = (C2, 0b110_000),
+		Sub = (C1, 0b100_011),
+		Xor = (C1, 0b100_011),
+	}
+}
+
+funct! {
+	enum Funct2 {
+		And = 0b11,
+		Or = 0b10,
+		Sub = 0b00,
+		Xor = 0b01,
 	}
 }
 
