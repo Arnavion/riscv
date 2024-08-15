@@ -268,8 +268,8 @@ module rv_alu (
 	input logic[31:0] rs1,
 	input logic[31:0] rs2,
 	input logic[31:0] imm,
-	input bit[31:2] pc,
-	input bit[31:2] pcnext_in,
+	input bit[31:1] pc,
+	input bit[31:1] pcnext_in,
 	input logic[31:0] ram_load_value,
 
 	output bit sigill,
@@ -319,7 +319,7 @@ module rv_alu (
 	shift shift_module (in3, in4[0+:5], shift_sll, shift_srl, shift_sra);
 
 	bit jump;
-	assign pcnext_out = jump ? add_add[1+:31] : {pcnext_in, 1'b0};
+	assign pcnext_out = jump ? add_add[1+:31] : pcnext_in;
 
 	always_comb begin
 		sigill = '0;
@@ -425,7 +425,7 @@ module rv_alu (
 
 			// auipc
 			OpCode_Auipc: begin
-				in1 = {pc, 2'b0};
+				in1 = {pc, 1'b0};
 				in2 = imm;
 				add_cin = '0;
 				rd = add_add;
@@ -521,7 +521,7 @@ module rv_alu (
 			OpCode_Branch: unique casez (funct3)
 				// beq
 				3'b000: begin
-					in1 = {pc, 2'b0};
+					in1 = {pc, 1'b0};
 					in2 = imm;
 					add_cin = '0;
 					in3 = rs1;
@@ -531,7 +531,7 @@ module rv_alu (
 
 				// bne
 				3'b001: begin
-					in1 = {pc, 2'b0};
+					in1 = {pc, 1'b0};
 					in2 = imm;
 					add_cin = '0;
 					in3 = rs1;
@@ -541,7 +541,7 @@ module rv_alu (
 
 				// blt, bltu
 				3'b1?0: begin
-					in1 = {pc, 2'b0};
+					in1 = {pc, 1'b0};
 					in2 = imm;
 					add_cin = '0;
 					in3 = rs1;
@@ -552,7 +552,7 @@ module rv_alu (
 
 				// bge, bgeu
 				3'b1?1: begin
-					in1 = {pc, 2'b0};
+					in1 = {pc, 1'b0};
 					in2 = imm;
 					add_cin = '0;
 					in3 = rs1;
@@ -569,16 +569,16 @@ module rv_alu (
 				in1 = rs1;
 				in2 = imm;
 				add_cin = '0;
-				rd = {pcnext_in, 2'b0};
+				rd = {pcnext_in, 1'b0};
 				jump = '1;
 			end
 
 			// jal
 			OpCode_Jal: begin
-				in1 = {pc, 2'b0};
+				in1 = {pc, 1'b0};
 				in2 = imm;
 				add_cin = '0;
-				rd = {pcnext_in, 2'b0};
+				rd = {pcnext_in, 1'b0};
 				jump = '1;
 			end
 

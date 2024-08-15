@@ -10,4 +10,4 @@ srli a0, a2, 2
 xor a0, a0, a2
 andi a1, a0, 0b11
 sb a1, -8(zero)
-j -36 # loop
+j -30 # loop
