@@ -19,8 +19,18 @@ print:
 
 
 .PHONY: test
-test:
+test: test-decompressor
 	cargo test --workspace
-	for f in tc/*.S; do cargo run -p as -- "$$f" >/dev/null || exit 1; done
+	for compressed in 'false' 'true'; do \
+		for f in tc/*.S; do cargo run -p as -- "--compressed=$$compressed" "$$f" >/dev/null || exit 1; done; \
+	done
 	cargo clippy --workspace --tests --examples
 	cargo machete
+
+
+.PHONY: test-decompressor
+test-decompressor:
+	src="$$PWD" && \
+	d="$$(mktemp -d)" && \
+	trap "rm -rf '$$d'" EXIT && \
+	(cd "$$d" && iverilog -g2012 -DTESTING -o test "$$src/tc/sv/rv_decompressor.sv" && ./test)
