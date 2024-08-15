@@ -3,6 +3,7 @@ import Vector::*;
 import RvAlu::*;
 import RvCommon::*;
 import RvDecoder::*;
+import RvDecompressor::*;
 
 interface RvCpu;
 	method Action feed(Bit#(32) in);
@@ -29,12 +30,13 @@ module mkRvCpu(RvCpu);
 
 	RvAlu alu <- mkRvAlu;
 	RvDecoder decoder <- mkRvDecoder;
+	RvDecompressor decompressor <- mkRvDecompressor;
 
 	method Action feed(Bit#(32) in) if (state matches Running);
-		case (decode(decoder, in)) matches
+		case (decode(decompressor, decoder, in)) matches
 			tagged Invalid: state <= tagged Sigill;
 
-			tagged Valid .inst: begin
+			tagged Valid { .inst, .inst_len }: begin
 				let x_regs_ = readVReg(x_regs);
 
 				Instruction#(Int#(32)) ready_inst = case (inst) matches
@@ -91,7 +93,10 @@ module mkRvCpu(RvCpu);
 					};
 				endcase;
 
-				let next_pc = pc + 4;
+				let next_pc = case (inst_len) matches
+					tagged Two: return pc + 2;
+					tagged Four: return pc + 4;
+				endcase;
 
 				case (alu.execute(pc, next_pc, ready_inst)) matches
 					tagged Efault: state <= tagged Efault;
@@ -125,11 +130,29 @@ module mkRvCpu(RvCpu);
 	endmethod
 endmodule
 
-function Maybe#(Instruction#(Either#(XReg, Int#(32)))) decode(RvDecoder decoder, Bit#(32) in);
-	case (decoder.decode(in)) matches
+typedef enum {
+	Two,
+	Four
+} InstructionLength deriving(Bits);
+
+function Maybe#(Tuple2#(Instruction#(Either#(XReg, Int#(32))), InstructionLength)) decode(RvDecompressor decompressor, RvDecoder decoder, Bit#(32) in);
+	let inst_decompressed = decompressor.decompress(in);
+
+	case (inst_decompressed) matches
 		tagged Invalid: return tagged Invalid;
 
-		tagged Valid .inst_decoded: return tagged Valid inst_decoded;
+		tagged Valid .inst: begin
+			match { .inst_decompressed, .inst_len } = case (inst) matches
+				tagged Compressed .inst: return tuple2(inst, tagged Two);
+				tagged Uncompressed .inst: return tuple2(inst, tagged Four);
+			endcase;
+
+			case (decoder.decode(inst_decompressed)) matches
+				tagged Invalid: return tagged Invalid;
+
+				tagged Valid .inst_decoded: return tagged Valid tuple2(inst_decoded, inst_len);
+			endcase
+		end
 	endcase
 endfunction
 
