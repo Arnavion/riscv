@@ -27,7 +27,7 @@ addi, a0, a0, -1
 mv a4, a2
 mv a2, a3
 mv a3, a4
-bnez a0, -36 # move, tail call
+bnez a0, -18 # move, tail call
 # fallthrough move_inner
 
 
@@ -49,5 +49,5 @@ sb a2, -8(zero)
 sb a5, -8(zero)
 
 addi a0, a0, -1
-beqz a0, -56 # move_inner, tail call
-j -100 # move, tail call
+beqz a0, -44 # move_inner, tail call
+j -66 # move, tail call

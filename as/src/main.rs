@@ -1,7 +1,7 @@
 fn main() -> Result<(), Box<dyn std::error::Error>> {
 	let mut args = std::env::args_os();
 	let argv0 = args.next().unwrap_or_else(|| env!("CARGO_BIN_NAME").into());
-	let path = parse_args(args, &argv0);
+	let (path, supported_extensions) = parse_args(args, &argv0);
 
 	let program = std::fs::read_to_string(path)?;
 
@@ -9,19 +9,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	for instruction in riscv::parse_program(&program) {
 		let instruction = instruction.map_err(|err| err.to_string())?;
-		let encoded =
-			instruction.encode()
+		let (lo, hi) =
+			instruction.encode(supported_extensions)
 			.map_err(|err| format!("instruction could not be encoded {instruction:?}: {err}"))?;
-		println!("0x{encoded:08x}  # {pc:3}: {instruction}");
+		if let Some(hi) = hi {
+			println!("0x{lo:04x} 0x{hi:04x} # {pc:3}: {instruction}");
 
-		pc += 4;
+			pc += 4;
+		}
+		else {
+			println!("0x{lo:04x}        # {pc:3}: {instruction}");
+
+			pc += 2;
+		}
 	}
 
 	Ok(())
 }
 
-fn parse_args(mut args: impl Iterator<Item = std::ffi::OsString>, argv0: &std::ffi::OsStr) -> std::path::PathBuf {
+fn parse_args(mut args: impl Iterator<Item = std::ffi::OsString>, argv0: &std::ffi::OsStr) -> (std::path::PathBuf, riscv::SupportedExtensions) {
 	let mut path = None;
+	let mut supported_extensions = riscv::SupportedExtensions::RV32I;
 
 	for opt in &mut args {
 		match opt.to_str() {
@@ -35,6 +43,10 @@ fn parse_args(mut args: impl Iterator<Item = std::ffi::OsString>, argv0: &std::f
 				break;
 			},
 
+			Some("-c" | "--compressed" | "--compressed=true") => supported_extensions |= riscv::SupportedExtensions::RVC,
+
+			Some("--compressed=false") => supported_extensions &= !riscv::SupportedExtensions::RVC,
+
 			_ if path.is_none() => path = Some(opt),
 
 			_ => write_usage_and_crash(argv0),
@@ -44,7 +56,7 @@ fn parse_args(mut args: impl Iterator<Item = std::ffi::OsString>, argv0: &std::f
 	let None = args.next() else { write_usage_and_crash(argv0); };
 
 	let Some(path) = path else { write_usage_and_crash(argv0); };
-	path.into()
+	(path.into(), supported_extensions)
 }
 
 fn write_usage_and_crash(argv0: &std::ffi::OsStr) -> ! {
@@ -53,5 +65,5 @@ fn write_usage_and_crash(argv0: &std::ffi::OsStr) -> ! {
 }
 
 fn write_usage(mut w: impl std::io::Write, argv0: &std::ffi::OsStr) {
-	_ = writeln!(w, "Usage: {} [ -- ] <program.S>", argv0.to_string_lossy());
+	_ = writeln!(w, "Usage: {} [ -c | --compressed | --compressed=[true|false] ] [ -- ] <program.S>", argv0.to_string_lossy());
 }
