@@ -80,7 +80,33 @@ test-lint:
 .PHONY: test-as
 test: test-as
 test-as:
-	for f in tc/solutions/*.S; do cargo run -p as -- "$$f" >/dev/null || exit 1; done
+	for compressed in 'false' 'true'; do \
+		for f in tc/solutions/*.S; do cargo run -p as -- "--compressed=$$compressed" "$$f" >/dev/null || exit 1; done; \
+	done
+
+
+.PHONY: test-decompressor-sv
+test: test-decompressor-sv
+test-decompressor-sv: tc/sv/rv_decompressor.sv
+	$(test-sv)
+
+
+.PHONY: test-decompressor-bsv
+test: test-decompressor-bsv
+test-decompressor-bsv: tc/bsv/RvDecompressor.bsv
+	$(test-bsv)
+
+
+.PHONY: test-decompressor_priority-sv
+test: test-decompressor_priority-sv
+test-decompressor_priority-sv: tc/sv/rv_decompressor_priority.sv
+	$(test-sv)
+
+
+.PHONY: test-decompressor_priority-bsv
+test: test-decompressor_priority-bsv
+test-decompressor_priority-bsv: tc/bsv/RvDecompressorPriority.bsv
+	$(test-bsv)
 
 
 .PHONY: test-load_store
