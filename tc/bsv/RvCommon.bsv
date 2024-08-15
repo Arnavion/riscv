@@ -2,10 +2,12 @@ typedef Bit#(5) XReg;
 
 typedef enum {
 	OpCode_Load = 5'b00000,
+	OpCode_LoadFp = 5'b00001,
 	OpCode_MiscMem = 5'b00011,
 	OpCode_OpImm = 5'b00100,
 	OpCode_Auipc = 5'b00101,
 	OpCode_Store = 5'b01000,
+	OpCode_StoreFp = 5'b01001,
 	OpCode_Op = 5'b01100,
 	OpCode_Lui = 5'b01101,
 	OpCode_Branch = 5'b11000,
@@ -13,6 +15,12 @@ typedef enum {
 	OpCode_Jal = 5'b11011,
 	OpCode_System = 5'b11100
 } OpCode deriving(Bits);
+
+function OpCode opcode_load(Bit#(1) fp) = unpack({ 4'b0000, fp });
+
+function OpCode opcode_opimm(Bit#(1) w) = unpack({ 3'b001, w, 1'b0 });
+
+function OpCode opcode_store(Bit#(1) fp) = unpack({ 4'b0100, fp });
 
 typedef union tagged {
 	struct { XReg rd; Int#(32) imm; } Auipc;
