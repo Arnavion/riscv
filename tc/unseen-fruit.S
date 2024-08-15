@@ -16,15 +16,15 @@ li a3, 4 # use
 li a4, 92 # empty conveyor belt
 # loop
 lb a0, -1(zero)
-bne a0, a4, 12 # fruit
+bne a0, a4, 10 # fruit
 # idle
 sb a2, -1(zero)
 j -12 # loop
 # fruit
 lb a5, 0(a0)
-bnez a5, 12 # found_duplicate
+bnez a5, 8 # found_duplicate
 sb a0, 0(a0)
-j -20 # idle
+j -16 # idle
 # found_duplicate
 sb a1, -1(zero)
 sb a3 -1(zero)
