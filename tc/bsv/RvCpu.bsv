@@ -5,6 +5,7 @@ import Vector::*;
 import RvAlu::*;
 import RvCommon::*;
 import RvDecoder::*;
+import RvDecompressor::*;
 
 typedef Server#(RvCpuRequest, RvCpuResponse) RvCpu;
 
@@ -27,11 +28,16 @@ typedef union tagged {
 (* synthesize *)
 module mkRvCpu(RvCpu);
 	Reg#(State) decoder_state <- mkReg(tagged Running);
+	Reg#(State) decompressor_state <- mkReg(tagged Running);
 	Reg#(State) execute_state <- mkReg(tagged Running);
-	Reg#(Int#(30)) pc_hi <- mkReg(0);
+	Reg#(Int#(31)) pc_hi <- mkReg(0);
 	Vector#(32, Reg#(Int#(32))) x_regs <- replicateM(mkReg(0));
 
 	Wire#(Bit#(32)) in <- mkWire;
+
+	RvDecompressor decompressor <- mkRvDecompressor;
+
+	Wire#(InstructionLength) inst_len <- mkWire;
 
 	RvDecoder decoder <- mkRvDecoder;
 
@@ -40,7 +46,22 @@ module mkRvCpu(RvCpu);
 	RvAlu alu <- mkRvAlu;
 
 	rule fetch;
-		decoder.request.put(RvDecoderRequest { in: in });
+		decompressor.request.put(RvDecompressorRequest { in: in });
+	endrule
+
+	rule decompress(decompressor_state matches Running);
+		let decompressor_response <- decompressor.response.get;
+		case (decompressor_response.inst) matches
+			tagged Invalid: decompressor_state <= tagged Sigill;
+			tagged Valid (tagged Compressed .inst): begin
+				inst_len <= tagged Two;
+				decoder.request.put(RvDecoderRequest { in: inst });
+			end
+			tagged Valid (tagged Uncompressed .inst): begin
+				inst_len <= tagged Four;
+				decoder.request.put(RvDecoderRequest { in: inst });
+			end
+		endcase
 	endrule
 
 	rule decode(decoder_state matches Running);
@@ -110,10 +131,13 @@ module mkRvCpu(RvCpu);
 			};
 		endcase;
 
-		let next_pc = (zeroExtend(pc_hi) * 4) + 4;
+		let next_pc = case (inst_len) matches
+			tagged Two: return (zeroExtend(pc_hi) * 2) + 2;
+			tagged Four: return (zeroExtend(pc_hi) * 2) + 4;
+		endcase;
 
 		alu.request.put(AluRequest {
-			pc: zeroExtend(pc_hi) * 4,
+			pc: zeroExtend(pc_hi) * 2,
 			next_pc: next_pc,
 			inst: ready_inst
 		});
@@ -134,8 +158,8 @@ module mkRvCpu(RvCpu);
 				if (x_regs_rd != 0)
 					x_regs[x_regs_rd] <= x_regs_rd_value;
 
-				if (next_pc % 4 == 0)
-					pc_hi <= truncate(next_pc / 4);
+				if (next_pc % 2 == 0)
+					pc_hi <= truncate(next_pc / 2);
 				else
 					execute_state <= tagged Efault;
 			end
@@ -151,16 +175,24 @@ module mkRvCpu(RvCpu);
 	interface Get response;
 		method ActionValue#(RvCpuResponse) get;
 			return RvCpuResponse {
-				state: case (decoder_state) matches
-					tagged Running: return execute_state;
-					.decoder_state: return decoder_state;
+				state: case (decompressor_state) matches
+					tagged Running: case (decoder_state) matches
+						tagged Running: return execute_state;
+						.decoder_state: return decoder_state;
+					endcase
+					.decompressor_state: return decompressor_state;
 				endcase,
-				pc: zeroExtend(pc_hi) * 4,
+				pc: zeroExtend(pc_hi) * 2,
 				x_regs: readVReg(x_regs)
 			};
 		endmethod
 	endinterface
 endmodule
+
+typedef enum {
+	Two,
+	Four
+} InstructionLength deriving(Bits);
 
 function Int#(32) load_x_reg(Vector#(32, Reg#(Int#(32))) x_regs, Either#(XReg, Int#(12)) rs);
 	case (rs) matches
