@@ -265,29 +265,34 @@ module rv_alu (
 	input bit[4:0] opcode,
 	input bit[2:0] funct3,
 	input bit[6:0] funct7,
-	input logic[31:0] rs1,
-	input logic[31:0] rs2,
-	input logic[31:0] imm,
-	input bit[31:0] pc,
-	input bit[31:0] pcnext_in,
-	input logic[31:0] ram_load_value,
+	input logic[63:0] rs1,
+	input logic[63:0] rs2,
+	input logic[63:0] imm,
+	input bit[63:0] pc,
+	input bit[63:0] pcnext_in,
+	input logic[63:0] ram_load_value,
 
 	output bit sigill,
-	output bit[31:0] pcnext_out,
-	output logic[31:0] rd,
+	output bit[63:0] pcnext_out,
+	output logic[63:0] rd,
 	output bit ram_load,
 	output bit ram_store,
 	output logic[2:0] ram_funct3,
-	output logic[31:0] ram_address
+	output logic[63:0] ram_address
 );
-	logic[31:0] in1;
-	logic[31:0] in2;
-	logic[31:0] in3;
-	logic[31:0] in4;
+	wire[63:0] rs1uw = {32'b0, rs1[0+:32]};
+
+	wire[63:0] rs1w = {{32{rs1[31]}}, rs1[0+:32]};
+
+	logic[63:0] in1;
+	logic[63:0] in2;
+	logic[63:0] in3;
+	logic[63:0] in4;
 
 	logic adder_cin;
-	wire[31:0] adder_add;
-	adder adder_module (in1, in2, adder_cin, adder_add);
+	wire[63:0] adder_add;
+	wire[63:0] adder_addw;
+	adder adder_module (in1, in2, adder_cin, adder_add, adder_addw);
 
 	logic cmp_signed;
 	wire cmp_out_lt;
@@ -296,15 +301,16 @@ module rv_alu (
 	wire cmp_out_ge;
 	cmp cmp_module (in3, in4, cmp_signed, cmp_out_lt, cmp_out_eq, cmp_out_ne, cmp_out_ge);
 
-	wire[31:0] logical_and;
-	wire[31:0] logical_or;
-	wire[31:0] logical_xor;
+	wire[63:0] logical_and;
+	wire[63:0] logical_or;
+	wire[63:0] logical_xor;
 	logical logical_module (in3, in4, logical_and, logical_or, logical_xor);
 
-	wire[31:0] shift_sll;
-	wire[31:0] shift_srl;
-	wire[31:0] shift_sra;
-	shift shift_module (in3, in4[0+:5], shift_sll, shift_srl, shift_sra);
+	wire[63:0] shift_sll;
+	wire[63:0] shift_sllw;
+	wire[63:0] shift_srl;
+	wire[63:0] shift_sra;
+	shift shift_module (in3, in4[0+:6], shift_sll, shift_sllw, shift_srl, shift_sra);
 
 	always_comb begin
 		sigill = '0;
@@ -347,11 +353,25 @@ module rv_alu (
 				rd = adder_add;
 			end
 
+			// addiw
+			{15'b00110_000_???????}: begin
+				in1 = rs1;
+				in2 = imm;
+				rd = adder_addw;
+			end
+
 			// add
 			{15'b01100_000_0000000}: begin
 				in1 = rs1;
 				in2 = rs2;
 				rd = adder_add;
+			end
+
+			// addw
+			{15'b01110_000_0000000}: begin
+				in1 = rs1;
+				in2 = rs2;
+				rd = adder_addw;
 			end
 
 			// sub
@@ -362,12 +382,20 @@ module rv_alu (
 				rd = adder_add;
 			end
 
+			// subw
+			{15'b01110_000_0100000}: begin
+				in1 = rs1;
+				in2 = ~rs2;
+				adder_cin = '1;
+				rd = adder_addw;
+			end
+
 			// slti
 			{15'b00100_010_???????}: begin
 				in3 = rs1;
 				in4 = imm;
 				cmp_signed = '1;
-				rd = {31'b0, cmp_out_lt};
+				rd = {63'b0, cmp_out_lt};
 			end
 
 			// sltiu
@@ -375,7 +403,7 @@ module rv_alu (
 				in3 = rs1;
 				in4 = imm;
 				cmp_signed = '0;
-				rd = {31'b0, cmp_out_lt};
+				rd = {63'b0, cmp_out_lt};
 			end
 
 			// xori
@@ -402,15 +430,29 @@ module rv_alu (
 			// slli
 			{15'b00100_001_000000?}: begin
 				in3 = rs1;
-				in4 = {27'b0, imm[0+:5]};
+				in4 = {58'b0, imm[0+:6]};
 				rd = shift_sll;
+			end
+
+			// slliw
+			{15'b00110_001_0000000}: begin
+				in3 = rs1;
+				in4 = {59'b0, imm[0+:5]};
+				rd = shift_sllw;
 			end
 
 			// sll
 			{15'b01100_001_0000000}: begin
 				in3 = rs1;
-				in4 = {27'b0, rs2[0+:5]};
+				in4 = {58'b0, rs2[0+:6]};
 				rd = shift_sll;
+			end
+
+			// sllw
+			{15'b01110_001_0000000}: begin
+				in3 = rs1;
+				in4 = {59'b0, rs2[0+:5]};
+				rd = shift_sllw;
 			end
 
 			// slt
@@ -418,7 +460,7 @@ module rv_alu (
 				in3 = rs1;
 				in4 = rs2;
 				cmp_signed = '1;
-				rd = {31'b0, cmp_out_lt};
+				rd = {63'b0, cmp_out_lt};
 			end
 
 			// sltu
@@ -426,7 +468,7 @@ module rv_alu (
 				in3 = rs1;
 				in4 = rs2;
 				cmp_signed = '0;
-				rd = {31'b0, cmp_out_lt};
+				rd = {63'b0, cmp_out_lt};
 			end
 
 			// xor
@@ -439,14 +481,28 @@ module rv_alu (
 			// srli
 			{15'b00100_101_000000?}: begin
 				in3 = rs1;
-				in4 = {27'b0, imm[0+:5]};
+				in4 = {58'b0, imm[0+:6]};
+				rd = shift_srl;
+			end
+
+			// srliw
+			{15'b00110_101_0000000}: begin
+				in3 = rs1uw;
+				in4 = {59'b0, imm[0+:5]};
 				rd = shift_srl;
 			end
 
 			// srl
 			{15'b01100_101_0000000}: begin
 				in3 = rs1;
-				in4 = {27'b0, rs2[0+:5]};
+				in4 = {58'b0, rs2[0+:6]};
+				rd = shift_srl;
+			end
+
+			// srlw
+			{15'b01110_101_0000000}: begin
+				in3 = rs1uw;
+				in4 = {59'b0, rs2[0+:5]};
 				rd = shift_srl;
 			end
 
@@ -467,14 +523,28 @@ module rv_alu (
 			// srai
 			{15'b00100_101_010000?}: begin
 				in3 = rs1;
-				in4 = {27'b0, imm[0+:5]};
+				in4 = {58'b0, imm[0+:6]};
+				rd = shift_sra;
+			end
+
+			// sraiw
+			{15'b00110_101_0100000}: begin
+				in3 = rs1w;
+				in4 = {59'b0, imm[0+:5]};
 				rd = shift_sra;
 			end
 
 			// sra
 			{15'b01100_101_0100000}: begin
 				in3 = rs1;
-				in4 = {27'b0, rs2[0+:5]};
+				in4 = {58'b0, rs2[0+:6]};
+				rd = shift_sra;
+			end
+
+			// sraw
+			{15'b01110_101_0100000}: begin
+				in3 = rs1w;
+				in4 = {59'b0, rs2[0+:5]};
 				rd = shift_sra;
 			end
 
@@ -595,18 +665,20 @@ module rv_alu (
 endmodule
 
 module adder (
-	input bit[31:0] arg1,
-	input bit[31:0] arg2,
+	input bit[63:0] arg1,
+	input bit[63:0] arg2,
 	input bit cin,
 
-	output bit[31:0] sum
+	output bit[63:0] sum,
+	output bit[63:0] sumw
 );
-	assign sum = arg1 + arg2 + {31'b0, cin};
+	assign sum = arg1 + arg2 + {63'b0, cin};
+	assign sumw = {{32{sum[31]}}, sum[0+:32]};
 endmodule
 
 module cmp (
-	input bit[31:0] arg1,
-	input bit[31:0] arg2,
+	input bit[63:0] arg1,
+	input bit[63:0] arg2,
 	input bit cmp_signed,
 
 	output bit lt,
@@ -621,12 +693,12 @@ module cmp (
 endmodule
 
 module logical (
-	input bit[31:0] arg1,
-	input bit[31:0] arg2,
+	input bit[63:0] arg1,
+	input bit[63:0] arg2,
 
-	output bit[31:0] out_and,
-	output bit[31:0] out_or,
-	output bit[31:0] out_xor
+	output bit[63:0] out_and,
+	output bit[63:0] out_or,
+	output bit[63:0] out_xor
 );
 	assign out_and = arg1 & arg2;
 	assign out_or = arg1 | arg2;
@@ -634,14 +706,16 @@ module logical (
 endmodule
 
 module shift (
-	input bit[31:0] value,
-	input bit[4:0] shamt,
+	input bit[63:0] value,
+	input bit[5:0] shamt,
 
-	output bit[31:0] sll,
-	output bit[31:0] srl,
-	output bit[31:0] sra
+	output bit[63:0] sll,
+	output bit[63:0] sllw,
+	output bit[63:0] srl,
+	output bit[63:0] sra
 );
 	assign sll = value << shamt;
+	assign sllw = {{32{sll[31]}}, sll[0+:32]};
 	assign srl = value >> shamt;
 	assign sra = unsigned'((signed'(value)) >>> shamt);
 endmodule

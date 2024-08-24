@@ -91,12 +91,16 @@ match [11:10] {
 		001 => c.xor,
 		010 => c.or,
 		011 => c.and,
+		100 => c.subw,
+		101 => c.addw,
 	},
 }
 
  */
 
-module rv_decompressor (
+module rv_decompressor #(
+	parameter rv64 = 1
+) (
 	input bit[31:0] in,
 
 	output bit sigill,
@@ -140,8 +144,15 @@ module rv_decompressor (
 				out[20+:12] = {5'b00000, in[5], in[10+:3], in[6], 2'b00};
 			end
 
-			// flw
-			5'b00011: begin
+			5'b00011: if (rv64) begin
+				// ld
+				out[0+:7] = 7'b0000011;
+				out[7+:5] = {2'b01, in[2+:3]};
+				out[12+:3] = 3'b011;
+				out[15+:5] = {2'b01, in[7+:3]};
+				out[20+:12] = {4'b0000, in[5+:2], in[10+:3], 3'b000};
+			end else begin
+				// flw
 				out[0+:7] = 7'b0000111;
 				out[7+:5] = {2'b01, in[2+:3]};
 				out[12+:3] = 3'b010;
@@ -173,8 +184,15 @@ module rv_decompressor (
 				{out[25+:7], out[7+:5]} = {5'b00000, in[5], in[10+:3], in[6], 2'b00};
 			end
 
-			// fsw
-			5'b00111: begin
+			5'b00111: if (rv64) begin
+				// sd
+				out[0+:7] = 7'b0100011;
+				out[12+:3] = 3'b011;
+				out[15+:5] = {2'b01, in[7+:3]};
+				out[20+:5] = {2'b01, in[2+:3]};
+				{out[25+:7], out[7+:5]} = {4'b0000, in[5+:2], in[10+:3], 3'b000};
+			end else begin
+				// fsw
 				out[0+:7] = 7'b0100111;
 				out[12+:3] = 3'b010;
 				out[15+:5] = {2'b01, in[7+:3]};
@@ -191,8 +209,15 @@ module rv_decompressor (
 				out[20+:12] = {{7{in[12]}}, in[2+:5]};
 			end
 
-			// jal
-			5'b01001: begin
+			5'b01001: if (rv64) begin
+				// addiw
+				out[0+:7] = 7'b0011011;
+				out[7+:5] = in[7+:5];
+				out[12+:3] = 3'b000;
+				out[15+:5] = in[7+:5];
+				out[20+:12] = {{7{in[12]}}, in[2+:5]};
+			end else begin
+				// jal
 				out[0+:7] = 7'b1101111;
 				out[7+:5] = 5'b00001;
 				{out[31], out[12+:8], out[20], out[21+:10]} = {{10{in[12]}}, in[8], in[9+:2], in[6], in[7], in[2], in[11], in[3+:3]};
@@ -294,6 +319,32 @@ module rv_decompressor (
 						out[25+:7] = 7'b0000000;
 					end
 
+					// subw
+					3'b100: if (rv64) begin
+						out[0+:7] = 7'b0111011;
+						out[7+:5] = {2'b01, in[7+:3]};
+						out[12+:3] = 3'b000;
+						out[15+:5] = {2'b01, in[7+:3]};
+						out[20+:5] = {2'b01, in[2+:3]};
+						out[25+:7] = 7'b0100000;
+					end else begin
+						sigill = '1;
+						is_compressed = 'x;
+					end
+
+					// addw
+					3'b101: if (rv64) begin
+						out[0+:7] = 7'b0111011;
+						out[7+:5] = {2'b01, in[7+:3]};
+						out[12+:3] = 3'b000;
+						out[15+:5] = {2'b01, in[7+:3]};
+						out[20+:5] = {2'b01, in[2+:3]};
+						out[25+:7] = 7'b0000000;
+					end else begin
+						sigill = '1;
+						is_compressed = 'x;
+					end
+
 					default: begin
 						sigill = '1;
 						is_compressed = 'x;
@@ -354,8 +405,15 @@ module rv_decompressor (
 				out[20+:12] = {4'b0000, in[2+:2], in[12], in[4+:3], 2'b00};
 			end
 
-			// flwsp
-			5'b10011: begin
+			5'b10011: if (rv64) begin
+				// ldsp
+				out[0+:7] = 7'b0000011;
+				out[7+:5] = in[7+:5];
+				out[12+:3] = 3'b011;
+				out[15+:5] = 5'b00010;
+				out[20+:12] = {3'b000, in[2+:3], in[12], in[5+:2], 3'b000};
+			end else begin
+				// flwsp
 				out[0+:7] = 7'b0000111;
 				out[7+:5] = in[7+:5];
 				out[12+:3] = 3'b010;
@@ -435,8 +493,15 @@ module rv_decompressor (
 				{out[25+:7], out[7+:5]} = {4'b0000, in[7+:2], in[9+:4], 2'b00};
 			end
 
-			// fswsp
-			5'b10111: begin
+			5'b10111: if (rv64) begin
+				// sdsp
+				out[0+:7] = 7'b0100011;
+				out[12+:3] = 3'b011;
+				out[15+:5] = 5'b00010;
+				out[20+:5] = in[2+:5];
+				{out[25+:7], out[7+:5]} = {3'b000, in[7+:3], in[10+:3], 3'b000};
+			end else begin
+				// fswsp
 				out[0+:7] = 7'b0100111;
 				out[12+:3] = 3'b010;
 				out[15+:5] = 5'b00010;

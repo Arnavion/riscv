@@ -1,4 +1,7 @@
-module rv_decompressing_decoder (
+module rv_decompressing_decoder #(
+	parameter rv64 = 1,
+	localparam xlen = rv64 ? 64 : 32
+) (
 	input bit[31:0] in,
 
 	output bit sigill,
@@ -10,7 +13,7 @@ module rv_decompressing_decoder (
 	output bit[2:0] funct3,
 	output bit[6:0] funct7,
 	output bit[4:0] funct5,
-	output logic[31:0] imm
+	output logic[xlen - 1:0] imm
 );
 	logic[4:0] rd;
 	logic rd_enable;
@@ -60,7 +63,7 @@ module rv_decompressing_decoder (
 				imm[11] = 1'b0;
 				imm[12+:8] = 8'b00000000;
 				imm[20+:11] = 11'b00000000000;
-				imm[31] = 1'b0;
+				imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
 			end
 
 			// fld
@@ -85,11 +88,28 @@ module rv_decompressing_decoder (
 				imm[11] = 1'b0;
 				imm[12+:8] = 8'b00000000;
 				imm[20+:11] = 11'b00000000000;
-				imm[31] = 1'b0;
+				imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
 			end
 
-			// flw
-			5'b00011: begin
+			5'b00011: if (rv64) begin
+				// ld
+				opcode = 5'b00000;
+				funct3 = 3'b011;
+				rd = {2'b01, in[2+:3]};
+				rd_enable = '1;
+				rs1 = {2'b01, in[7+:3]};
+				rs1_enable = '1;
+				rs2_enable = '0;
+
+				imm[0] = 1'b0;
+				imm[1+:4] = {in[10+:2], 2'b00};
+				imm[5+:6] = {3'b000, in[5+:2], in[12]};
+				imm[11] = 1'b0;
+				imm[12+:8] = 8'b00000000;
+				imm[20+:11] = 11'b00000000000;
+				imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
+			end else begin
+				// flw
 				sigill = '1;
 				is_compressed = 'x;
 			end
@@ -122,11 +142,28 @@ module rv_decompressing_decoder (
 				imm[11] = 1'b0;
 				imm[12+:8] = 8'b00000000;
 				imm[20+:11] = 11'b00000000000;
-				imm[31] = 1'b0;
+				imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
 			end
 
-			// fsw
-			5'b00111: begin
+			5'b00111: if (rv64) begin
+				// sd
+				opcode = 5'b01000;
+				funct3 = 3'b011;
+				rd_enable = '0;
+				rs1 = {2'b01, in[7+:3]};
+				rs1_enable = '1;
+				rs2 = {2'b01, in[2+:3]};
+				rs2_enable = '1;
+
+				imm[0] = 1'b0;
+				imm[1+:4] = {in[10+:2], 2'b00};
+				imm[5+:6] = {3'b000, in[5+:2], in[12]};
+				imm[11] = 1'b0;
+				imm[12+:8] = 8'b00000000;
+				imm[20+:11] = 11'b00000000000;
+				imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
+			end else begin
+				// fsw
 				sigill = '1;
 				is_compressed = 'x;
 			end
@@ -147,11 +184,28 @@ module rv_decompressing_decoder (
 				imm[11] = in[12];
 				imm[12+:8] = {8{in[12]}};
 				imm[20+:11] = {11{in[12]}};
-				imm[31] = in[12];
+				imm[31+:xlen - 31] = {(xlen - 31){in[12]}};
 			end
 
-			// jal
-			5'b01001: begin
+			5'b01001: if (rv64) begin
+				// addiw
+				opcode = 5'b00110;
+				funct3 = 3'b000;
+				rd = in[7+:5];
+				rd_enable = '1;
+				rs1 = in[7+:5];
+				rs1_enable = '1;
+				rs2_enable = '0;
+
+				imm[0] = in[2];
+				imm[1+:4] = in[3+:4];
+				imm[5+:6] = {6{in[12]}};
+				imm[11] = in[12];
+				imm[12+:8] = {8{in[12]}};
+				imm[20+:11] = {11{in[12]}};
+				imm[31+:xlen - 31] = {(xlen - 31){in[12]}};
+			end else begin
+				// jal
 				opcode = 5'b11011;
 				rd = 5'b00001;
 				rd_enable = '1;
@@ -164,7 +218,7 @@ module rv_decompressing_decoder (
 				imm[11] = in[12];
 				imm[12+:8] = {8{in[12]}};
 				imm[20+:11] = {11{in[12]}};
-				imm[31] = in[12];
+				imm[31+:xlen - 31] = {(xlen - 31){in[12]}};
 			end
 
 			// li
@@ -183,7 +237,7 @@ module rv_decompressing_decoder (
 				imm[11] = in[12];
 				imm[12+:8] = {8{in[12]}};
 				imm[20+:11] = {11{in[12]}};
-				imm[31] = in[12];
+				imm[31+:xlen - 31] = {(xlen - 31){in[12]}};
 			end
 
 			5'b01011: if (in[7+:5] == 5'b00010) begin
@@ -202,7 +256,7 @@ module rv_decompressing_decoder (
 				imm[11] = in[12];
 				imm[12+:8] = {8{in[12]}};
 				imm[20+:11] = {11{in[12]}};
-				imm[31] = in[12];
+				imm[31+:xlen - 31] = {(xlen - 31){in[12]}};
 			end else begin
 				// lui
 				opcode = 5'b01101;
@@ -217,7 +271,7 @@ module rv_decompressing_decoder (
 				imm[11] = 1'b0;
 				imm[12+:8] = {{3{in[12]}}, in[2+:5]};
 				imm[20+:11] = {11{in[12]}};
-				imm[31] = in[12];
+				imm[31+:xlen - 31] = {(xlen - 31){in[12]}};
 			end
 
 			// misc-alu
@@ -239,7 +293,7 @@ module rv_decompressing_decoder (
 					imm[11] = 1'b0;
 					imm[12+:8] = 8'b00000000;
 					imm[20+:11] = 11'b00000000000;
-					imm[31] = 1'b0;
+					imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
 				end
 
 				// srai
@@ -259,7 +313,7 @@ module rv_decompressing_decoder (
 					imm[11] = 1'b0;
 					imm[12+:8] = 8'b00000000;
 					imm[20+:11] = 11'b00000000000;
-					imm[31] = 1'b0;
+					imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
 				end
 
 				// andi
@@ -278,7 +332,7 @@ module rv_decompressing_decoder (
 					imm[11] = in[12];
 					imm[12+:8] = {8{in[12]}};
 					imm[20+:11] = {11{in[12]}};
-					imm[31] = in[12];
+					imm[31+:xlen - 31] = {(xlen - 31){in[12]}};
 				end
 
 				2'b11: unique case ({in[12], in[5+:2]})
@@ -334,6 +388,38 @@ module rv_decompressing_decoder (
 						rs2_enable = '1;
 					end
 
+					// subw
+					3'b100: if (rv64) begin
+						opcode = 5'b01110;
+						funct3 = 3'b000;
+						funct7 = 7'b0100000;
+						rd = {2'b01, in[7+:3]};
+						rd_enable = '1;
+						rs1 = {2'b01, in[7+:3]};
+						rs1_enable = '1;
+						rs2 = {2'b01, in[2+:3]};
+						rs2_enable = '1;
+					end else begin
+						sigill = '1;
+						is_compressed = 'x;
+					end
+
+					// addw
+					3'b101: if (rv64) begin
+						opcode = 5'b01110;
+						funct3 = 3'b000;
+						funct7 = 7'b000000;
+						rd = {2'b01, in[7+:3]};
+						rd_enable = '1;
+						rs1 = {2'b01, in[7+:3]};
+						rs1_enable = '1;
+						rs2 = {2'b01, in[2+:3]};
+						rs2_enable = '1;
+					end else begin
+						sigill = '1;
+						is_compressed = 'x;
+					end
+
 					default: begin
 						sigill = '1;
 						is_compressed = 'x;
@@ -355,7 +441,7 @@ module rv_decompressing_decoder (
 				imm[11] = in[12];
 				imm[12+:8] = {8{in[12]}};
 				imm[20+:11] = {11{in[12]}};
-				imm[31] = in[12];
+				imm[31+:xlen - 31] = {(xlen - 31){in[12]}};
 			end
 
 			// beqz
@@ -374,7 +460,7 @@ module rv_decompressing_decoder (
 				imm[11] = in[12];
 				imm[12+:8] = {8{in[12]}};
 				imm[20+:11] = {11{in[12]}};
-				imm[31] = in[12];
+				imm[31+:xlen - 31] = {(xlen - 31){in[12]}};
 			end
 
 			// bnez
@@ -393,7 +479,7 @@ module rv_decompressing_decoder (
 				imm[11] = in[12];
 				imm[12+:8] = {8{in[12]}};
 				imm[20+:11] = {11{in[12]}};
-				imm[31] = in[12];
+				imm[31+:xlen - 31] = {(xlen - 31){in[12]}};
 			end
 
 			// slli
@@ -412,7 +498,7 @@ module rv_decompressing_decoder (
 				imm[11] = 1'b0;
 				imm[12+:8] = 8'b00000000;
 				imm[20+:11] = 11'b00000000000;
-				imm[31] = 1'b0;
+				imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
 			end
 
 			// fldsp
@@ -437,11 +523,28 @@ module rv_decompressing_decoder (
 				imm[11] = 1'b0;
 				imm[12+:8] = 8'b00000000;
 				imm[20+:11] = 11'b00000000000;
-				imm[31] = 1'b0;
+				imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
 			end
 
-			// flwsp
-			5'b10011: begin
+			5'b10011: if (rv64) begin
+				// ldsp
+				opcode = 5'b00000;
+				funct3 = 3'b011;
+				rd = in[7+:5];
+				rd_enable = '1;
+				rs1 = 5'b00010;
+				rs1_enable = '1;
+				rs2_enable = '0;
+
+				imm[0] = 1'b0;
+				imm[1+:4] = {in[5+:2], 2'b00};
+				imm[5+:6] = {2'b00, in[2+:3], in[12]};
+				imm[11] = 1'b0;
+				imm[12+:8] = 8'b00000000;
+				imm[20+:11] = 11'b00000000000;
+				imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
+			end else begin
+				// flwsp
 				sigill = '1;
 				is_compressed = 'x;
 			end
@@ -463,7 +566,7 @@ module rv_decompressing_decoder (
 					imm[11] = 1'b0;
 					imm[12+:8] = 8'b00000000;
 					imm[20+:11] = 11'b00000000000;
-					imm[31] = 1'b0;
+					imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
 				end
 
 				// mv
@@ -506,7 +609,7 @@ module rv_decompressing_decoder (
 					imm[11] = 1'b0;
 					imm[12+:8] = 8'b00000000;
 					imm[20+:11] = 11'b00000000000;
-					imm[31] = 1'b0;
+					imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
 				end
 
 				// add
@@ -550,11 +653,28 @@ module rv_decompressing_decoder (
 				imm[11] = 1'b0;
 				imm[12+:8] = 8'b00000000;
 				imm[20+:11] = 11'b00000000000;
-				imm[31] = 1'b0;
+				imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
 			end
 
-			// fswsp
-			5'b10111: begin
+			5'b10111: if (rv64) begin
+				// sdsp
+				opcode = 5'b01000;
+				funct3 = 3'b011;
+				rd_enable = '0;
+				rs1 = 5'b00010;
+				rs1_enable = '1;
+				rs2 = in[2+:5];
+				rs2_enable = '1;
+
+				imm[0] = 1'b0;
+				imm[1+:4] = {in[10+:2], 2'b00};
+				imm[5+:6] = {2'b00, in[7+:3], in[12]};
+				imm[11] = 1'b0;
+				imm[12+:8] = 8'b00000000;
+				imm[20+:11] = 11'b00000000000;
+				imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
+			end else begin
+				// fswsp
 				sigill = '1;
 				is_compressed = 'x;
 			end
@@ -563,7 +683,7 @@ module rv_decompressing_decoder (
 				is_compressed = '0;
 
 				unique casez (in[2+:5])
-					5'b01100: // op
+					5'b011?0: // op, op-32
 					begin
 						opcode = in[2+:5];
 						funct3 = in[12+:3];
@@ -579,7 +699,7 @@ module rv_decompressing_decoder (
 					end
 
 					5'b00000, // load
-					5'b00100, // op-imm
+					5'b001?0, // op-imm, op-imm-32
 					5'b00111, // misc-mem
 					5'b11001, // jalr
 					5'b11100: // system
@@ -601,7 +721,7 @@ module rv_decompressing_decoder (
 						imm[11] = in[31];
 						imm[12+:8] = {8{in[31]}};
 						imm[20+:11] = {11{in[31]}};
-						imm[31] = in[31];
+						imm[31+:xlen - 31] = {(xlen - 31){in[31]}};
 					end
 
 					5'b01000: // store
@@ -623,7 +743,7 @@ module rv_decompressing_decoder (
 						imm[11] = in[31];
 						imm[12+:8] = {8{in[31]}};
 						imm[20+:11] = {11{in[31]}};
-						imm[31] = in[31];
+						imm[31+:xlen - 31] = {(xlen - 31){in[31]}};
 					end
 
 					5'b11000: // branch
@@ -645,7 +765,7 @@ module rv_decompressing_decoder (
 						imm[11] = in[7];
 						imm[12+:8] = {8{in[31]}};
 						imm[20+:11] = {11{in[31]}};
-						imm[31] = in[31];
+						imm[31+:xlen - 31] = {(xlen - 31){in[31]}};
 					end
 
 					5'b0?101: // auipc, lui
@@ -666,7 +786,7 @@ module rv_decompressing_decoder (
 						imm[11] = 1'b0;
 						imm[12+:8] = in[12+:8];
 						imm[20+:11] = in[20+:11];
-						imm[31] = in[31];
+						imm[31+:xlen - 31] = {(xlen - 31){in[31]}};
 					end
 
 					5'b11011: // jal
@@ -687,7 +807,7 @@ module rv_decompressing_decoder (
 						imm[11] = in[20];
 						imm[12+:8] = in[12+:8];
 						imm[20+:11] = {11{in[31]}};
-						imm[31] = in[31];
+						imm[31+:xlen - 31] = {(xlen - 31){in[31]}};
 					end
 
 					default: begin

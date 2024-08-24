@@ -1,4 +1,7 @@
-module rv_decoder (
+module rv_decoder #(
+	parameter rv64 = 1,
+	localparam xlen = rv64 ? 64 : 32
+) (
 	input bit[31:0] in,
 
 	output bit sigill,
@@ -9,7 +12,7 @@ module rv_decoder (
 	output logic[2:0] funct3,
 	output logic[6:0] funct7,
 	output logic[4:0] funct5,
-	output logic[31:0] imm
+	output logic[xlen - 1:0] imm
 );
 	logic rd_enable;
 	reg_decoder rd_decoder (in[7+:5], rd_enable, rd_decoded);
@@ -33,7 +36,7 @@ module rv_decoder (
 
 		if (in[0+:2] == 2'b11) begin
 			unique casez (in[2+:5])
-				5'b01100: // op
+				5'b011?0: // op, op-32
 					begin
 						sigill = '0;
 
@@ -48,7 +51,7 @@ module rv_decoder (
 					end
 
 				5'b00000, // load
-				5'b00100, // op-imm
+				5'b001?0, // op-imm, op-imm-32
 				5'b00111, // misc-mem
 				5'b11001, // jalr
 				5'b11100: // system
@@ -70,7 +73,7 @@ module rv_decoder (
 						imm[11] = in[31];
 						imm[12+:8] = {8{in[31]}};
 						imm[20+:11] = {11{in[31]}};
-						imm[31] = in[31];
+						imm[31+:xlen - 31] = {(xlen - 31){in[31]}};
 					end
 
 				5'b01000: // store
@@ -92,7 +95,7 @@ module rv_decoder (
 						imm[11] = in[31];
 						imm[12+:8] = {8{in[31]}};
 						imm[20+:11] = {11{in[31]}};
-						imm[31] = in[31];
+						imm[31+:xlen - 31] = {(xlen - 31){in[31]}};
 					end
 
 				5'b11000: // branch
@@ -114,7 +117,7 @@ module rv_decoder (
 						imm[11] = in[7];
 						imm[12+:8] = {8{in[31]}};
 						imm[20+:11] = {11{in[31]}};
-						imm[31] = in[31];
+						imm[31+:xlen - 31] = {(xlen - 31){in[31]}};
 					end
 
 				5'b0?101: // auipc, lui
@@ -136,7 +139,7 @@ module rv_decoder (
 						imm[11] = '0;
 						imm[12+:8] = in[12+:8];
 						imm[20+:11] = in[20+:11];
-						imm[31] = in[31];
+						imm[31+:xlen - 31] = {(xlen - 31){in[31]}};
 					end
 
 				5'b11011: // jal
@@ -158,7 +161,7 @@ module rv_decoder (
 						imm[11] = in[20];
 						imm[12+:8] = in[12+:8];
 						imm[20+:11] = {11{in[31]}};
-						imm[31] = in[31];
+						imm[31+:xlen - 31] = {(xlen - 31){in[31]}};
 					end
 
 				default: ;
