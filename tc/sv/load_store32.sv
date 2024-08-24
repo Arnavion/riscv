@@ -1,4 +1,4 @@
-module load_store (
+module load_store32 (
 	input bit[1:0] address,
 	input bit[2:0] funct3,
 	input bit[3:0][7:0] ram_load_value,
@@ -80,7 +80,7 @@ module load_store (
 endmodule
 
 `ifdef TESTING
-module test_load_store;
+module test_load_store32;
 	bit[1:0] address;
 	bit[2:0] funct3;
 	bit[31:0] ram_load_value;
@@ -88,7 +88,7 @@ module test_load_store;
 	wire efault;
 	wire[31:0] load_value;
 	wire[31:0] ram_store_value;
-	load_store load_store_module (
+	load_store32 load_store32_module (
 		.address(address),
 		.funct3(funct3),
 		.ram_load_value(ram_load_value),
