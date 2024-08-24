@@ -11,13 +11,13 @@ pub use register::Register;
 mod supported_extensions;
 pub use supported_extensions::SupportedExtensions;
 
-pub fn parse_program(program: &str) -> impl Iterator<Item = Result<Instruction, ParseError<'_>>> + '_ {
+pub fn parse_program(program: &str, supported_extensions: SupportedExtensions) -> impl Iterator<Item = Result<Instruction, ParseError<'_>>> + '_ {
 	program
 		.lines()
-		.flat_map(|line| match Instruction::parse(line) {
+		.flat_map(move |line| match Instruction::parse(line) {
 			Ok(Some(instruction)) => SmallIterator::One(Ok(instruction)),
 			Ok(None) => SmallIterator::Empty,
-			Err(_) => match pseudo_instruction::parse(line) {
+			Err(_) => match pseudo_instruction::parse(line, supported_extensions) {
 				Ok(instructions) => instructions.map(Ok),
 				Err(err) => SmallIterator::One(Err(err)),
 			},
@@ -57,6 +57,7 @@ impl<T> Iterator for SmallIterator<T> {
 
 #[derive(Debug)]
 pub enum ParseError<'a> {
+	ImmediateOverflow { line: &'a str },
 	InvalidUtf8 { token: &'a [u8] },
 	MalformedFenceSet { token: &'a [u8] },
 	MalformedImmediate { token: &'a [u8] },
@@ -73,6 +74,7 @@ impl core::error::Error for ParseError<'_> {}
 impl core::fmt::Display for ParseError<'_> {
 	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
 		match self {
+			Self::ImmediateOverflow { line } => write!(f, "immediate overflow {line:?}"),
 			Self::InvalidUtf8 { token } => write!(f, "invalid UTF-8 {token:?}"),
 			Self::MalformedFenceSet { token } => write!(f, "malformed fence set {token:?}"),
 			Self::MalformedImmediate { token } => write!(f, "malformed immediate {token:?}"),
@@ -109,7 +111,7 @@ mod tests {
 	use std::prelude::v1::*;
 
 	#[test]
-	fn full_uncompressed() {
+	fn full_uncompressed32() {
 		static TESTS: &[(&str, &[(u16, Option<u16>)])] = &[
 			// Registers and aliases
 			("add x0, x1, x2", &[(0x8033, Some(0x0020))]),
@@ -367,7 +369,7 @@ mod tests {
 			std::eprintln!("{input}");
 
 			let actual =
-				super::parse_program(input)
+				super::parse_program(input, SUPPORTED_EXTENSIONS)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
 					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
@@ -380,7 +382,7 @@ mod tests {
 	}
 
 	#[test]
-	fn full_compressed() {
+	fn full_compressed32() {
 		static TESTS: &[(&str, &[(u16, Option<u16>)])] = &[
 			// All registers and aliases
 			("add x8, x8, x9", &[(0x9426, None)]),
@@ -525,7 +527,142 @@ mod tests {
 			std::eprintln!("{input}");
 
 			let actual =
-				super::parse_program(input)
+				super::parse_program(input, SUPPORTED_EXTENSIONS)
+				.map(|i| -> Result<_, String> {
+					let i = i.map_err(|err| err.to_string())?;
+					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
+					Ok(encoded)
+				})
+				.collect::<Result<Vec<_>, _>>()
+				.unwrap();
+			assert_eq!(expected[..], actual[..]);
+		}
+	}
+
+	#[test]
+	fn full_uncompressed64() {
+		static TESTS: &[(&str, &[(u16, Option<u16>)])] = &[
+			// Instructions
+
+			("addiw a0, a1, -11", &[(0x851b, Some(0xff55))]),
+			("addiw a0, a1, 11", &[(0x851b, Some(0x00b5))]),
+
+			("addw a0, a1, a2", &[(0x853b, Some(0x00c5))]),
+
+			("ld a0, -36", &[(0x0517, Some(0x0000)), (0x3503, Some(0xfdc5))]),
+			("ld a0, 72", &[(0x0517, Some(0x0000)), (0x3503, Some(0x0485))]),
+			("ld a0, -11(a1)", &[(0xb503, Some(0xff55))]),
+			("ld a0, 11(a1)", &[(0xb503, Some(0x00b5))]),
+
+			("lwu a0, -100", &[(0x0517, Some(0x0000)), (0x6503, Some(0xf9c5))]),
+			("lwu a0, 8", &[(0x0517, Some(0x0000)), (0x6503, Some(0x0085))]),
+			("lwu a0, -11(a1)", &[(0xe503, Some(0xff55))]),
+			("lwu a0, 11(a1)", &[(0xe503, Some(0x00b5))]),
+
+			("negw a0, a1", &[(0x053b, Some(0x40b0))]),
+
+			("sd a0, -11(a1)", &[(0xbaa3, Some(0xfea5))]),
+			("sd a0, 11(a1)", &[(0xb5a3, Some(0x00a5))]),
+
+			("sext.b a0, a1", &[(0x9513, Some(0x0385)), (0x5513, Some(0x4385))]),
+
+			("sext.h a0, a1", &[(0x9513, Some(0x0305)), (0x5513, Some(0x4305))]),
+
+			("sext.w a0, a1", &[(0x851b, Some(0x0005))]),
+
+			("slli a0, a1, 63", &[(0x9513, Some(0x03f5))]),
+
+			("slliw a0, a1, 11", &[(0x951b, Some(0x00b5))]),
+			("slliw a0, a1, 31", &[(0x951b, Some(0x01f5))]),
+
+			("sllw a0, a1, a2", &[(0x953b, Some(0x00c5))]),
+
+			("srai a0, a1, 63", &[(0xd513, Some(0x43f5))]),
+
+			("sraiw a0, a1, 11", &[(0xd51b, Some(0x40b5))]),
+			("sraiw a0, a1, 31", &[(0xd51b, Some(0x41f5))]),
+
+			("sraw a0, a1, a2", &[(0xd53b, Some(0x40c5))]),
+
+			("srli a0, a1, 63", &[(0xd513, Some(0x03f5))]),
+
+			("srliw a0, a1, 11", &[(0xd51b, Some(0x00b5))]),
+			("srliw a0, a1, 31", &[(0xd51b, Some(0x01f5))]),
+
+			("srlw a0, a1, a2", &[(0xd53b, Some(0x00c5))]),
+
+			("subw a0, a1, a2", &[(0x853b, Some(0x40c5))]),
+
+			("zext.h a0, a1", &[(0x9513, Some(0x0305)), (0x5513, Some(0x0305))]),
+
+			("zext.w a0, a1", &[(0x9513, Some(0x0205)), (0x5513, Some(0x0205))]),
+		];
+		for &(input, expected) in TESTS {
+			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV64I;
+
+			std::eprintln!("{input}");
+
+			let actual =
+				super::parse_program(input, SUPPORTED_EXTENSIONS)
+				.map(|i| -> Result<_, String> {
+					let i = i.map_err(|err| err.to_string())?;
+					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
+					Ok(encoded)
+				})
+				.collect::<Result<Vec<_>, _>>()
+				.unwrap();
+			assert_eq!(expected[..], actual[..]);
+		}
+	}
+
+	#[test]
+	fn full_compressed64() {
+		static TESTS: &[(&str, &[(u16, Option<u16>)])] = &[
+			// Instructions
+
+			("addw x8, x8, x9", &[(0x9c25, None)]),
+			("addw x3, x3, x9", &[(0x81bb, Some(0x0091))]), // Incompressible register
+			("addw x8, x8, x4", &[(0x043b, Some(0x0044))]), // Incompressible register
+
+			("jal -22", &[(0xf0ef, Some(0xfebf))]), // Collides with c.addiw
+			("jal 22", &[(0x00ef, Some(0x0160))]), // Collides with c.addiw
+
+			("ld x8, 88(x9)", &[(0x6ca0, None)]),
+			("ld x3, 88(x9)", &[(0xb183, Some(0x0584))]), // Incompressible register
+			("ld x8, 88(x4)", &[(0x3403, Some(0x0582))]), // Incompressible register
+
+			("ldsp x3, 88(x2)", &[(0x61e6, None)]),
+			("ldsp x0, 88(x2)", &[(0x3003, Some(0x0581))]), // Reserved
+			("ld x3, 88(x2)", &[(0x61e6, None)]),
+			("ld x0, 88(x2)", &[(0x3003, Some(0x0581))]), // Reserved
+
+			("sd x8, 88(x9)", &[(0xeca0, None)]),
+			("sd x3, 88(x9)", &[(0xbc23, Some(0x0434))]), // Incompressible register
+			("sd x8, 88(x4)", &[(0x3c23, Some(0x0482))]), // Incompressible register
+
+			("sdsp x3, 88(x2)", &[(0xec8e, None)]),
+			("sdsp x0, 88(x2)", &[(0xec82, None)]),
+			("sd x3, 88(x2)", &[(0xec8e, None)]),
+			("sd x0, 88(x2)", &[(0xec82, None)]),
+
+			("slli x3, x3, 63", &[(0x11fe, None)]),
+			("slli x0, x0, 63", &[(0x1013, Some(0x03f0))]), // HINT
+
+			("srai x8, x8, 63", &[(0x947d, None)]),
+
+			("srli x8, x8, 63", &[(0x907d, None)]),
+
+			("subw x8, x8, x9", &[(0x9c05, None)]),
+			("subw x3, x3, x9", &[(0x81bb, Some(0x4091))]), // Incompressible register
+			("subw x8, x8, x4", &[(0x043b, Some(0x4044))]), // Incompressible register
+		];
+		for &(input, expected) in TESTS {
+			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV64C;
+
+			std::eprintln!("{input}");
+
+			let actual =
+				super::parse_program(input, SUPPORTED_EXTENSIONS)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
 					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
@@ -542,7 +679,7 @@ mod tests {
 	// /gas/testsuite/gas/riscv/
 
 	#[test]
-	fn gas_uncompressed() {
+	fn gas_uncompressed32() {
 		static TESTS: &[(&str, &[(u16, u16)])] = &[
 			// auipc-x0.s
 			("
@@ -768,7 +905,7 @@ mod tests {
 
 			let expected = expected.iter().map(|&(lo, hi)| (lo, Some(hi))).collect::<Vec<_>>();
 			let actual =
-				super::parse_program(input)
+				super::parse_program(input, SUPPORTED_EXTENSIONS)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
 					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
@@ -781,7 +918,7 @@ mod tests {
 	}
 
 	#[test]
-	fn gas_compressed() {
+	fn gas_compressed32() {
 		static TESTS: &[(&str, &[(u16, Option<u16>)])] = &[
 			// c-add-addi.s
 			("
@@ -1056,7 +1193,347 @@ mod tests {
 			std::eprintln!("{input}");
 
 			let actual =
-				super::parse_program(input)
+				super::parse_program(input, SUPPORTED_EXTENSIONS)
+				.map(|i| -> Result<_, String> {
+					let i = i.map_err(|err| err.to_string())?;
+					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
+					Ok(encoded)
+				})
+				.collect::<Result<Vec<_>, _>>()
+				.unwrap();
+			assert_eq!(expected[..], actual[..]);
+		}
+	}
+
+	#[test]
+	fn gas_uncompressed64() {
+		static TESTS: &[(&str, &[(u16, u16)])] = &[
+			// dis-addr-overflow.s
+			("
+				## Use hi_addr
+				# Load
+				lui t0, 0xfffff
+				lw s2, -4(t0)
+				# Store
+				lui t1, 0xffffe
+				sw s3, -8(t1)
+				# JALR (implicit destination, no offset)
+				lui t2, 0xffffd
+				jalr t2
+				# JALR (implicit destination, with offset)
+				lui t3, 0xffffc
+				jalr -12(t3)
+				# JALR (explicit destination, no offset)
+				lui t4, 0xffffb
+				jalr s4, t4
+				# ADDI (not compressed)
+				lui t5, 0xffffa
+				addi s5, t5, -16
+				# C.ADDI
+				lui t6, 0xffff9
+
+				# ADDIW (not compressed)
+				lui s6, 0xffff8
+				addiw s7, s6, -24
+				# C.ADDIW
+				lui s8, 0xffff7
+
+				# Use addresses relative to gp
+				lw t0, 0x400(gp)
+				lw t1, -0x400(gp)
+				# Use addresses relative to zero
+				lw t2, 0x100(zero)
+				lw t3, -0x800(zero)
+				jalr t4, 0x104(zero)
+				jalr t5, -0x7fc(zero)
+			", &[
+				(0xf2b7, 0xffff),
+				(0xa903, 0xffc2),
+				(0xe337, 0xffff),
+				(0x2c23, 0xff33),
+				(0xd3b7, 0xffff),
+				(0x80e7, 0x0003),
+				(0xce37, 0xffff),
+				(0x00e7, 0xff4e),
+				(0xbeb7, 0xffff),
+				(0x8a67, 0x000e),
+				(0xaf37, 0xffff),
+				(0x0a93, 0xff0f),
+				(0x9fb7, 0xffff),
+				(0x8b37, 0xffff),
+				(0x0b9b, 0xfe8b),
+				(0x7c37, 0xffff),
+				(0xa283, 0x4001),
+				(0xa303, 0xc001),
+				(0x2383, 0x1000),
+				(0x2e03, 0x8000),
+				(0x0ee7, 0x1040),
+				(0x0f67, 0x8040),
+			]),
+		];
+		for &(input, expected) in TESTS {
+			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV64I;
+
+			std::eprintln!("{input}");
+
+			let expected = expected.iter().map(|&(lo, hi)| (lo, Some(hi))).collect::<Vec<_>>();
+			let actual =
+				super::parse_program(input, SUPPORTED_EXTENSIONS)
+				.map(|i| -> Result<_, String> {
+					let i = i.map_err(|err| err.to_string())?;
+					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
+					Ok(encoded)
+				})
+				.collect::<Result<Vec<_>, _>>()
+				.unwrap();
+			assert_eq!(expected[..], actual[..]);
+		}
+	}
+
+	#[test]
+	fn gas_compressed64() {
+		static TESTS: &[(&str, &[(u16, Option<u16>)])] = &[
+			// c-ld.s
+			("
+				ld a0, (a0)  # 'Cl'
+				ld a0, 0(a0) # 'Cl'
+				sd a0, (a0)  # 'Cl'
+				sd a0, 0(a0) # 'Cl'
+				ld a0, (sp)  # 'Cn'
+				ld a0, 0(sp) # 'Cn'
+				sd a0, (sp)  # 'CN'
+				sd a0, 0(sp) # 'CN'
+			", &[
+				(0x6108, None),
+				(0x6108, None),
+				(0xe108, None),
+				(0xe108, None),
+				(0x6502, None),
+				(0x6502, None),
+				(0xe02a, None),
+				(0xe02a, None),
+			]),
+
+			// c-zero-imm-64.s
+			("
+				# These are valid instructions.
+				addiw a6,a6,0
+				addiw a7,a7,0
+			", &[
+				(0x2801, None),
+				(0x2881, None),
+			]),
+
+			// dis-addr-addiw.s
+			("
+				# _start + 0x00
+				auipc t0, 0
+				addiw t1, t0, 0x18
+				# _start + 0x08
+				auipc t2, 0
+				addiw t3, t2, 0x1c
+
+				# _start + 0x10
+				auipc t4, 0
+				addiw t4, t4, 0x0c
+				# _start + 0x16
+				auipc t5, 0
+				addiw t5, t5, 0x12
+			", &[
+				(0x0297, Some(0x0000)),
+				(0x831b, Some(0x0182)),
+				(0x0397, Some(0x0000)),
+				(0x8e1b, Some(0x01c3)),
+				(0x0e97, Some(0x0000)),
+				(0x2eb1, None),
+				(0x0f17, Some(0x0000)),
+				(0x2f49, None),
+			]),
+
+			// dis-addr-overflow.s
+			("
+				addi t6, t6, -20
+
+				addiw s8, s8, -28
+
+				# Use addresses relative to gp
+				lw t0, 0x400(gp)
+				lw t1, -0x400(gp)
+				# Use addresses relative to zero
+				lw t2, 0x100(zero)
+				lw t3, -0x800(zero)
+				jalr t4, 0x104(zero)
+				jalr t5, -0x7fc(zero)
+			", &[
+				(0x1fb1, None),
+				(0x3c11, None),
+				(0xa283, Some(0x4001)),
+				(0xa303, Some(0xc001)),
+				(0x2383, Some(0x1000)),
+				(0x2e03, Some(0x8000)),
+				(0x0ee7, Some(0x1040)),
+				(0x0f67, Some(0x8040)),
+			]),
+
+			// li64.s
+			/*
+			// TODO: Support li for large constants
+			("
+				li  a0, 0x8001
+				li  a0, 0x1f01
+				li  a0, 0x12345001
+				li  a0, 0xf2345001
+				li  a0, 0xf12345001
+				li  a0, 0xff00ff00ff001f01
+				li  a0, 0x7ffffffff2345001
+				li  a0, 0x7f0f243ff2345001
+			", &[
+				(0x6521, None),
+				(0x2505, None),
+				(0x6509, None),
+				(0x051b, Some(0xf015)),
+				(0x5537, Some(0x1234)),
+				(0x2505, None),
+				(0x2537, Some(0x000f)),
+				(0x051b, Some(0x3455)),
+				(0x0532, None),
+				(0x0505, None),
+				(0x2537, Some(0x00f1)),
+				(0x051b, Some(0x3455)),
+				(0x0532, None),
+				(0x0505, None),
+				(0x0537, Some(0xff01)),
+				(0x051b, Some(0xf015)),
+				(0x054e, None),
+				(0x0513, Some(0x8015)),
+				(0x0536, None),
+				(0x0513, Some(0xf015)),
+				(0x051b, Some(0x0010)),
+				(0x151a, None),
+				(0x1565, None),
+				(0x0536, None),
+				(0x0513, Some(0x3455)),
+				(0x0532, None),
+				(0x0505, None),
+				(0x4537, Some(0x01fc)),
+				(0x051b, Some(0xc915)),
+				(0x0536, None),
+				(0x1565, None),
+				(0x0536, None),
+				(0x0513, Some(0x3455)),
+				(0x0532, None),
+				(0x0505, None),
+			]),
+			*/
+
+			// zca.s
+			("
+				li x1, 31
+				li x2, 0
+				lui x1, 1
+				lui x3, 31
+				lw x8, (x9)
+				lw x9, 32(x10)
+				lw a0, (sp)
+				c.lwsp x1, (x2)
+				ld x8, (x15)
+				ld x9, 8(x10)
+				ld a0,(sp)
+				c.ldsp x1, (sp)
+				sw x8, (x9)
+				sw x9, 32(x10)
+				sw a0, (sp)
+				c.swsp x1, (x2)
+				sd x8, (x15)
+				sd x9, 8(x10)
+				sd a0, (sp)
+				c.sdsp x1, (sp)
+				addi x0, x0, 0
+				nop
+				add x1, x1, x2
+				addi a1, a1, 31
+				addi x2, x2, 0
+				addiw a1, a1, 31
+				addiw x2, x2, 0
+				addi4spn x8, x2, 4
+				addi16sp x2, 32
+				addw x8, x8, x9
+				sub x8, x8, x9
+				subw x8, x8, x9
+				and x8, x8, x9
+				andi x8, x8, 31
+				or x8, x8, x9
+				xor x8, x8, x9
+				mv x0, x1
+				slli x0, x0, 1
+				beqz x8, -80
+				bnez x8, -82
+				j -84
+				jr ra
+				jalr ra
+			", &[
+				(0x40fd, None),
+				(0x4101, None),
+				(0x6085, None),
+				(0x61fd, None),
+				(0x4080, None),
+				(0x5104, None),
+				(0x4502, None),
+				(0x4082, None),
+				(0x6380, None),
+				(0x6504, None),
+				(0x6502, None),
+				(0x6082, None),
+				(0xc080, None),
+				(0xd104, None),
+				(0xc02a, None),
+				(0xc006, None),
+				(0xe380, None),
+				(0xe504, None),
+				(0xe02a, None),
+				(0xe006, None),
+				(0x0001, None),
+				(0x0001, None),
+				(0x908a, None),
+				(0x05fd, None),
+				// gas wants this to be `(0x0101, None)` because the original is `c.addi` and `c.addi _, 0` is a HINT.
+				//
+				// We don't differentiate between `addi` and `c.addi` so we compress it as `c.mv` instead.
+				(0x810a, None),
+				(0x25fd, None),
+				(0x2101, None),
+				(0x0040, None),
+				(0x6105, None),
+				(0x9c25, None),
+				(0x8c05, None),
+				(0x9c05, None),
+				(0x8c65, None),
+				(0x887d, None),
+				(0x8c45, None),
+				(0x8c25, None),
+				// gas wants this to be `(0x8006, None)` because the original is `c.mv` which expands to `add x0, x0, x1`,
+				// and `add x0, x0, !x0` is a HINT.
+				//
+				// We don't differentiate between `mv` and `c.mv` so we treat the input as `addi x0, x0, x1`
+				(0x0001, None),
+				// gas wants this to be `(0x0006, None)` because the original is `c.slli` and `slli x0, _` is a HINT.
+				//
+				// We don't differentiate between `slli` and `c.slli` so we don't compress it.
+				(0x1013, Some(0x0010)),
+				(0xd845, None),
+				(0xf45d, None),
+				(0xb775, None),
+				(0x8082, None),
+				(0x9082, None),
+			]),
+		];
+		for &(input, expected) in TESTS {
+			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV64C;
+
+			std::eprintln!("{input}");
+
+			let actual =
+				super::parse_program(input, SUPPORTED_EXTENSIONS)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
 					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
