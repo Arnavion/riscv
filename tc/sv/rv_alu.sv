@@ -265,72 +265,83 @@ module rv_alu (
 	input bit[4:0] opcode,
 	input bit[2:0] funct3,
 	input bit[6:0] funct7,
-	input logic[31:0] rs1,
-	input logic[31:0] rs2,
-	input logic[31:0] imm,
-	input bit[31:1] pc,
-	input bit[31:1] pcnext_in,
-	input logic[31:0] ram_load_value,
+	input logic[63:0] rs1,
+	input logic[63:0] rs2,
+	input logic[31:0] immw,
+	input bit[63:1] pc,
+	input bit[63:1] pcnext_in,
+	input logic[63:0] ram_load_value,
 
 	output bit sigill,
-	output bit[31:1] pcnext_out,
-	output logic[31:0] rd,
+	output bit[63:1] pcnext_out,
+	output logic[63:0] rd,
 	output bit ram_load,
 	output bit ram_store,
 	output logic[2:0] ram_funct3,
-	output logic[31:0] ram_address,
-	output logic[31:0] ram_store_value
+	output logic[63:0] ram_address,
+	output logic[63:0] ram_store_value
 );
 	typedef enum bit[4:0] {
 		OpCode_Load = 5'b00000,
 		OpCode_OpImm = 5'b00100,
 		OpCode_Auipc = 5'b00101,
+		OpCode_OpImm32 = 5'b00110,
 		OpCode_Store = 5'b01000,
 		OpCode_Op = 5'b01100,
 		OpCode_Lui = 5'b01101,
+		OpCode_Op32 = 5'b01110,
 		OpCode_Branch = 5'b11000,
 		OpCode_Jalr = 5'b11001,
 		OpCode_Jal = 5'b11011
 	} OpCode;
 
-	logic[31:0] in1;
-	logic[31:0] in2;
-	logic[31:0] in3;
-	logic[31:0] in4;
+	wire[63:0] rs1uw = 64'(rs1[0+:32]);
+
+	wire[63:0] rs1w = unsigned'(64'(signed'(rs1[0+:32])));
+
+	wire[63:0] imm = unsigned'(64'(signed'(immw)));
+
+	logic[63:0] in1;
+	logic[63:0] in2;
+	logic[63:0] in3;
+	logic[63:0] in4;
 
 	logic add_cin;
-	wire[31:0] add_add;
-	adder #(.width(32)) adder_module (
+	wire[63:0] add_add;
+	wire[63:0] add_addw;
+	adder #(.width(64)) adder_module (
 		.arg1(in1), .arg2(in2), .cin(add_cin),
-		.add(add_add)
+		.add(add_add), .addw(add_addw)
 	);
 
 	logic cmp_signed;
 	wire cmp_lt;
 	wire cmp_eq;
-	cmp #(.width(32)) cmp_module (
+	cmp #(.width(64)) cmp_module (
 		.arg1(in3), .arg2(in4), .cmp_signed(cmp_signed),
 		.lt(cmp_lt), .eq(cmp_eq)
 	);
 
-	wire[31:0] logical_and;
-	wire[31:0] logical_or;
-	wire[31:0] logical_xor;
-	logical #(.width(32)) logical_module (
+	wire[63:0] logical_and;
+	wire[63:0] logical_or;
+	wire[63:0] logical_xor;
+	logical #(.width(64)) logical_module (
 		.arg1(in3), .arg2(in4),
 		.out_and(logical_and), .out_or(logical_or), .out_xor(logical_xor)
 	);
 
 	logic shift_arithmetic;
-	wire[31:0] shift_sll;
-	wire[31:0] shift_sr;
-	shift #(.width(32)) shift_module (
-		.value(in3), .shamt(in4[0+:5]), .arithmetic(shift_arithmetic),
-		.sll(shift_sll), .sr(shift_sr)
+	wire[63:0] shift_sll;
+	wire[63:0] shift_sllw;
+	wire[63:0] shift_sr;
+	wire[63:0] shift_srw;
+	shift #(.width(64)) shift_module (
+		.value(in3), .shamt(in4[0+:6]), .arithmetic(shift_arithmetic),
+		.sll(shift_sll), .sllw(shift_sllw), .sr(shift_sr), .srw(shift_srw)
 	);
 
 	bit jump;
-	assign pcnext_out = jump ? add_add[1+:31] : pcnext_in;
+	assign pcnext_out = jump ? add_add[1+:63] : pcnext_in;
 
 	always_comb begin
 		sigill = '0;
@@ -354,9 +365,9 @@ module rv_alu (
 		jump = '0;
 
 		unique case (OpCode'(opcode))
-			// lb, lh, lw, lbu, lhu
+			// lb, lh, lw, ld, lbu, lhu, lwu
 			OpCode_Load:
-				if (& funct3[0+:2] | & funct3[1+:2])
+				if (& funct3[0+:3])
 					sigill = '1;
 				else begin
 					in1 = rs1;
@@ -377,11 +388,11 @@ module rv_alu (
 					rd = add_add;
 				end
 
-				3'b001: unique case (imm[5+:7])
+				3'b001: unique case (imm[6+:6])
 					// slli
-					7'b0000000: begin
+					6'b000000: begin
 						in3 = rs1;
-						in4 = {27'bx, imm[0+:5]};
+						in4 = {58'bx, imm[0+:6]};
 						shift_arithmetic = imm[10];
 						rd = shift_sll;
 					end
@@ -394,7 +405,7 @@ module rv_alu (
 					in3 = rs1;
 					in4 = imm;
 					cmp_signed = ~funct3[0];
-					rd = 32'(cmp_lt);
+					rd = 64'(cmp_lt);
 				end
 
 				// xori
@@ -404,11 +415,11 @@ module rv_alu (
 					rd = logical_xor;
 				end
 
-				3'b101: unique casez (imm[5+:7])
+				3'b101: unique casez (imm[6+:6])
 					// srli, srai
-					7'b0?00000: begin
+					6'b0?0000: begin
 						in3 = rs1;
-						in4 = {27'bx, imm[0+:5]};
+						in4 = {58'bx, imm[0+:6]};
 						shift_arithmetic = imm[10];
 						rd = shift_sr;
 					end
@@ -439,9 +450,45 @@ module rv_alu (
 				rd = add_add;
 			end
 
-			// sb, sh, sw
+			OpCode_OpImm32: unique case (funct3)
+				// addiw
+				3'b000: begin
+					in1 = rs1;
+					in2 = imm;
+					add_cin = '0;
+					rd = add_addw;
+				end
+
+				3'b001: unique case (imm[5+:7])
+					// slliw
+					7'b0000000: begin
+						in3 = rs1;
+						in4 = {58'bx, imm[0+:6]};
+						shift_arithmetic = imm[10];
+						rd = shift_sllw;
+					end
+
+					default: sigill = '1;
+				endcase
+
+				3'b101: unique casez (imm[5+:7])
+					// srliw, sraiw
+					7'b0?00000: begin
+						in3 = rs1;
+						in4 = {58'bx, imm[0+:6]};
+						shift_arithmetic = imm[10];
+						rd = shift_srw;
+					end
+
+					default: sigill = '1;
+				endcase
+
+				default: sigill = '1;
+			endcase
+
+			// sb, sh, sw,sd
 			OpCode_Store:
-				if (funct3[2] | & funct3[0+:2])
+				if (funct3[2])
 					sigill = '1;
 				else begin
 					in1 = rs1;
@@ -465,7 +512,7 @@ module rv_alu (
 				// sll
 				10'b001_0000000: begin
 					in3 = rs1;
-					in4 = {27'bx, rs2[0+:5]};
+					in4 = {58'bx, rs2[0+:6]};
 					shift_arithmetic = funct7[5];
 					rd = shift_sll;
 				end
@@ -475,7 +522,7 @@ module rv_alu (
 					in3 = rs1;
 					in4 = rs2;
 					cmp_signed = ~funct3[0];
-					rd = 32'(cmp_lt);
+					rd = 64'(cmp_lt);
 				end
 
 				// xor
@@ -488,7 +535,7 @@ module rv_alu (
 				// srl, sra
 				10'b101_0?00000: begin
 					in3 = rs1;
-					in4 = {27'bx, rs2[0+:5]};
+					in4 = {58'bx, rs2[0+:6]};
 					shift_arithmetic = funct7[5];
 					rd = shift_sr;
 				end
@@ -514,6 +561,34 @@ module rv_alu (
 			OpCode_Lui: begin
 				rd = imm;
 			end
+
+			OpCode_Op32: unique casez ({funct3, funct7})
+				// addw, subw
+				10'b000_0?00000: begin
+					in1 = rs1;
+					in2 = funct7[5] ? ~rs2 : rs2;
+					add_cin = funct7[5];
+					rd = add_addw;
+				end
+
+				// sllw
+				10'b001_0000000: begin
+					in3 = rs1;
+					in4 = {58'bx, rs2[0+:6]};
+					shift_arithmetic = funct7[5];
+					rd = shift_sllw;
+				end
+
+				// srlw, sraw
+				10'b101_0?00000: begin
+					in3 = rs1;
+					in4 = {58'bx, rs2[0+:6]};
+					shift_arithmetic = funct7[5];
+					rd = shift_srw;
+				end
+
+				default: sigill = '1;
+			endcase
 
 			OpCode_Branch: unique casez (funct3)
 				// beq, bne
@@ -570,9 +645,11 @@ module adder #(
 	input bit[width - 1:0] arg2,
 	input bit cin,
 
-	output bit[width - 1:0] add
+	output bit[width - 1:0] add,
+	output bit[width - 1:0] addw
 );
 	assign add = arg1 + arg2 + width'(cin);
+	assign addw = unsigned'(width'(signed'(add[0+:width / 2])));
 endmodule
 
 module cmp #(
@@ -641,16 +718,30 @@ module shift #(
 	input bit arithmetic,
 
 	output bit[width - 1:0] sll,
-	output bit[width - 1:0] sr
+	output bit[width - 1:0] sllw,
+	output bit[width - 1:0] sr,
+	output bit[width - 1:0] srw
 );
+	bit[width / 2 - 1:0] sllw_inner;
+	bit[width / 2 - 1:0] srw_inner;
+
 	always_comb begin
 		sll = value;
+		sllw_inner = value[0+:width / 2];
 		sr = value;
+		srw_inner = value[0+:width / 2];
 
 		foreach (shamt[i])
 			if (shamt[i]) begin
 				sll = {sll[0+:width - (1 << i)], (1 << i)'('0)};
+				if (i < $clog2(width) - 1)
+					sllw_inner = {sllw_inner[0+:width / 2 - (1 << i)], (1 << i)'('0)};
 				sr = {{(1 << i){value[width - 1] & arithmetic}}, sr[1 << i+:width - (1 << i)]};
+				if (i < $clog2(width) - 1)
+					srw_inner = {{(1 << i){value[width / 2 - 1] & arithmetic}}, srw_inner[1 << i+:width / 2 - (1 << i)]};
 			end
+
+		sllw = unsigned'(width'(signed'(sllw_inner)));
+		srw = unsigned'(width'(signed'(srw_inner)));
 	end
 endmodule

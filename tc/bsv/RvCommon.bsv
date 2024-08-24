@@ -6,10 +6,12 @@ typedef enum {
 	OpCode_MiscMem = 5'b00011,
 	OpCode_OpImm = 5'b00100,
 	OpCode_Auipc = 5'b00101,
+	OpCode_OpImm32 = 5'b00110,
 	OpCode_Store = 5'b01000,
 	OpCode_StoreFp = 5'b01001,
 	OpCode_Op = 5'b01100,
 	OpCode_Lui = 5'b01101,
+	OpCode_Op32 = 5'b01110,
 	OpCode_Branch = 5'b11000,
 	OpCode_Jalr = 5'b11001,
 	OpCode_Jal = 5'b11011,
@@ -44,14 +46,19 @@ typedef union tagged {
 
 typedef enum {
 	Add,
+	Addw,
 	And,
 	Or,
 	Sll,
+	Sllw,
 	Slt,
 	Sltu,
 	Sra,
+	Sraw,
 	Srl,
+	Srlw,
 	Sub,
+	Subw,
 	Xor
 } BinaryOp deriving(Bits);
 
@@ -74,13 +81,16 @@ typedef enum {
 	ByteUnsigned,
 	HalfWord,
 	HalfWordUnsigned,
-	Word
+	Word,
+	WordUnsigned,
+	DoubleWord
 } LoadOp deriving(Bits);
 
 typedef enum {
 	Byte,
 	HalfWord,
-	Word
+	Word,
+	DoubleWord
 } StoreOp deriving(Bits);
 
 // Raw binary representation of instructions, to ensure that fields remain at constant offsets across all ops.

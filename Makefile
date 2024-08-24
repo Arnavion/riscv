@@ -80,8 +80,10 @@ test-lint:
 .PHONY: test-as
 test: test-as
 test-as:
-	for compressed in 'false' 'true'; do \
-		for f in tc/solutions/*.S; do cargo run -p as -- "--compressed=$$compressed" "$$f" >/dev/null || exit 1; done; \
+	for bitness in '--32' '--64'; do \
+		for compressed in 'false' 'true'; do \
+			for f in tc/solutions/*.S; do cargo run -p as -- $$bitness "--compressed=$$compressed" "$$f" >/dev/null || exit 1; done; \
+		done; \
 	done
 
 
@@ -109,7 +111,13 @@ test-decompressor_priority-bsv: tc/bsv/RvDecompressorPriority.bsv
 	$(test-bsv)
 
 
-.PHONY: test-load_store
-test: test-load_store
-test-load_store: tc/sv/load_store.sv
+.PHONY: test-load_store32
+test: test-load_store32
+test-load_store32: tc/sv/load_store32.sv
+	$(test-sv)
+
+
+.PHONY: test-load_store64
+test: test-load_store64
+test-load_store64: tc/sv/load_store64.sv
 	$(test-sv)

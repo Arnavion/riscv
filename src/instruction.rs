@@ -8,7 +8,7 @@ macro_rules! instructions {
 		$vis:vis
 		$ty:ident
 		{ $($variants:tt)* }
-		{ $self:ident $($encode_arms:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
 		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
 		{ $f:ident $($display_arms:tt)* }
 		{ }
@@ -19,7 +19,7 @@ macro_rules! instructions {
 		}
 
 		impl $ty {
-			fn encode_full($self) -> Result<(u16, Option<u16>), EncodeError> {
+			fn encode_full($self, $supported_extensions: SupportedExtensions) -> Result<(u16, Option<u16>), EncodeError> {
 				let raw_instruction = match $self {
 					$($encode_arms)*
 				};
@@ -56,7 +56,7 @@ macro_rules! instructions {
 		$vis:vis
 		$ty:ident
 		{ $($variants:tt)* }
-		{ $self:ident $($encode_arms:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
 		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
 		{ $f:ident $($display_arms:tt)* }
 		{ #[r( $asm:tt , $opcode:tt )] $variant:tt { dest: Register, src1: Register, src2: Register }, $($rest:tt)* }
@@ -71,6 +71,7 @@ macro_rules! instructions {
 			}
 			{
 				$self
+				$supported_extensions
 				$($encode_arms)*
 				Self::$variant { dest, src1, src2 } => RawInstruction::R {
 					opcode: OpCode::$opcode,
@@ -116,7 +117,7 @@ macro_rules! instructions {
 		$vis:vis
 		$ty:ident
 		{ $($variants:tt)* }
-		{ $self:ident $($encode_arms:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
 		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
 		{ $f:ident $($display_arms:tt)* }
 		{ #[i( $asm:tt , $opcode:tt )] $variant:tt, $($rest:tt)* }
@@ -131,6 +132,7 @@ macro_rules! instructions {
 			}
 			{
 				$self
+				$supported_extensions
 				$($encode_arms)*
 				Self::$variant => RawInstruction::I {
 					opcode: OpCode::$opcode,
@@ -166,7 +168,7 @@ macro_rules! instructions {
 		$vis:vis
 		$ty:ident
 		{ $($variants:tt)* }
-		{ $self:ident $($encode_arms:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
 		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
 		{ $f:ident $($display_arms:tt)* }
 		{ #[i( $asm:tt , $opcode:tt )] $variant:tt { dest: Register, src: Register, imm: i32 }, $($rest:tt)* }
@@ -181,6 +183,7 @@ macro_rules! instructions {
 			}
 			{
 				$self
+				$supported_extensions
 				$($encode_arms)*
 				Self::$variant { dest, src, imm } => RawInstruction::I {
 					opcode: OpCode::$opcode,
@@ -225,7 +228,7 @@ macro_rules! instructions {
 		$vis:vis
 		$ty:ident
 		{ $($variants:tt)* }
-		{ $self:ident $($encode_arms:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
 		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
 		{ $f:ident $($display_arms:tt)* }
 		{ #[i( $asm:tt , $opcode:tt )] $variant:tt { dest: Register, src: Register, shamt: i32 }, $($rest:tt)* }
@@ -240,10 +243,15 @@ macro_rules! instructions {
 			}
 			{
 				$self
+				$supported_extensions
 				$($encode_arms)*
 				Self::$variant { dest, src, shamt } => {
+					let max_significant_bits = if $supported_extensions.contains(SupportedExtensions::RV64I) { 6 } else { 5 };
 					// shamt is always treated as positive
-					assert!(shamt & ((1 << 5) - 1) == shamt, "shamt overflow in {:?}: 0x{shamt:08x}", $self);
+					if shamt & ((1 << max_significant_bits) - 1) != shamt {
+						return Err(EncodeError::ImmediateOverflow);
+					}
+
 					RawInstruction::I {
 						opcode: OpCode::$opcode,
 						rd: dest,
@@ -288,7 +296,7 @@ macro_rules! instructions {
 		$vis:vis
 		$ty:ident
 		{ $($variants:tt)* }
-		{ $self:ident $($encode_arms:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
 		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
 		{ $f:ident $($display_arms:tt)* }
 		{ #[i( $asm:tt , $opcode:tt )] $variant:tt { dest: Register, base: Register, offset: i32 }, $($rest:tt)* }
@@ -303,6 +311,7 @@ macro_rules! instructions {
 			}
 			{
 				$self
+				$supported_extensions
 				$($encode_arms)*
 				Self::$variant { dest, base, offset } => RawInstruction::I {
 					opcode: OpCode::$opcode,
@@ -345,7 +354,7 @@ macro_rules! instructions {
 		$vis:vis
 		$ty:ident
 		{ $($variants:tt)* }
-		{ $self:ident $($encode_arms:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
 		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
 		{ $f:ident $($display_arms:tt)* }
 		{ #[s( $asm:tt , $opcode:tt )] $variant:tt { base: Register, offset: i32, src: Register }, $($rest:tt)* }
@@ -360,6 +369,7 @@ macro_rules! instructions {
 			}
 			{
 				$self
+				$supported_extensions
 				$($encode_arms)*
 				Self::$variant { base, offset, src } => RawInstruction::S {
 					opcode: OpCode::$opcode,
@@ -402,7 +412,7 @@ macro_rules! instructions {
 		$vis:vis
 		$ty:ident
 		{ $($variants:tt)* }
-		{ $self:ident $($encode_arms:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
 		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
 		{ $f:ident $($display_arms:tt)* }
 		{ #[b( $asm:tt , $opcode:tt )] $variant:tt { src1: Register, src2: Register, offset: i32 }, $($rest:tt)* }
@@ -417,6 +427,7 @@ macro_rules! instructions {
 			}
 			{
 				$self
+				$supported_extensions
 				$($encode_arms)*
 				Self::$variant { src1, src2, offset } => RawInstruction::B {
 					opcode: OpCode::$opcode,
@@ -461,7 +472,7 @@ macro_rules! instructions {
 		$vis:vis
 		$ty:ident
 		{ $($variants:tt)* }
-		{ $self:ident $($encode_arms:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
 		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
 		{ $f:ident $($display_arms:tt)* }
 		{ #[u( $asm:tt , $opcode:tt )] $variant:tt { dest: Register, imm: i32 }, $($rest:tt)* }
@@ -476,6 +487,7 @@ macro_rules! instructions {
 			}
 			{
 				$self
+				$supported_extensions
 				$($encode_arms)*
 				Self::$variant { dest, imm } => RawInstruction::U {
 					opcode: OpCode::$opcode,
@@ -515,7 +527,7 @@ macro_rules! instructions {
 		$vis:vis
 		$ty:ident
 		{ $($variants:tt)* }
-		{ $self:ident $($encode_arms:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
 		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
 		{ $f:ident $($display_arms:tt)* }
 		{ #[j( $asm:tt , $opcode:tt )] $variant:tt { dest: Register, offset: i32 }, $($rest:tt)* }
@@ -530,6 +542,7 @@ macro_rules! instructions {
 			}
 			{
 				$self
+				$supported_extensions
 				$($encode_arms)*
 				Self::$variant { dest, offset } => RawInstruction::J {
 					opcode: OpCode::$opcode,
@@ -569,7 +582,7 @@ macro_rules! instructions {
 		$vis:vis
 		$ty:ident
 		{ $($variants:tt)* }
-		{ $self:ident $($encode_arms:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
 		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
 		{ $f:ident $($display_arms:tt)* }
 		{ Fence { predecessor_set: FenceSet, successor_set: FenceSet }, $($rest:tt)* }
@@ -584,6 +597,7 @@ macro_rules! instructions {
 			}
 			{
 				$self
+				$supported_extensions
 				$($encode_arms)*
 				Self::Fence { predecessor_set, successor_set } => RawInstruction::Fence {
 					fm: FenceFm::None,
@@ -635,7 +649,7 @@ macro_rules! instructions {
 		$vis:vis
 		$ty:ident
 		{ $($variants:tt)* }
-		{ $self:ident $($encode_arms:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
 		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
 		{ $f:ident $($display_arms:tt)* }
 		{ FenceTso, $($rest:tt)* }
@@ -650,6 +664,7 @@ macro_rules! instructions {
 			}
 			{
 				$self
+				$supported_extensions
 				$($encode_arms)*
 				Self::FenceTso => RawInstruction::Fence {
 					fm: FenceFm::Tso,
@@ -684,7 +699,7 @@ macro_rules! instructions {
 			$vis
 			$ty
 			{ }
-			{ self }
+			{ self supported_extensions }
 			{ line rest }
 			{ f }
 			{ $($rest)* }
@@ -699,6 +714,12 @@ instructions! {
 
 		#[i("addi", OpImm)]
 		Addi { dest: Register, src: Register, imm: i32 },
+
+		#[i("addiw", OpImm32)]
+		Addiw { dest: Register, src: Register, imm: i32 },
+
+		#[r("addw", Op32)]
+		Addw { dest: Register, src1: Register, src2: Register },
 
 		#[r("and", Op)]
 		And { dest: Register, src1: Register, src2: Register },
@@ -749,6 +770,9 @@ instructions! {
 		#[i("lbu", Load)]
 		Lbu { dest: Register, base: Register, offset: i32 },
 
+		#[i("ld", Load)]
+		Ld { dest: Register, base: Register, offset: i32 },
+
 		#[i("lh", Load)]
 		Lh { dest: Register, base: Register, offset: i32 },
 
@@ -761,6 +785,9 @@ instructions! {
 		#[i("lw", Load)]
 		Lw { dest: Register, base: Register, offset: i32 },
 
+		#[i("lwu", Load)]
+		Lwu { dest: Register, base: Register, offset: i32 },
+
 		#[r("or", Op)]
 		Or { dest: Register, src1: Register, src2: Register },
 
@@ -770,6 +797,9 @@ instructions! {
 		#[s("sb", Store)]
 		Sb { base: Register, offset: i32, src: Register },
 
+		#[s("sd", Store)]
+		Sd { base: Register, offset: i32, src: Register },
+
 		#[s("sh", Store)]
 		Sh { base: Register, offset: i32, src: Register },
 
@@ -778,6 +808,12 @@ instructions! {
 
 		#[i("slli", OpImm)]
 		Slli { dest: Register, src: Register, shamt: i32 },
+
+		#[i("slliw", OpImm32)]
+		Slliw { dest: Register, src: Register, shamt: i32 },
+
+		#[r("sllw", Op32)]
+		Sllw { dest: Register, src1: Register, src2: Register },
 
 		#[r("slt", Op)]
 		Slt { dest: Register, src1: Register, src2: Register },
@@ -797,14 +833,29 @@ instructions! {
 		#[i("srai", OpImm)]
 		Srai { dest: Register, src: Register, shamt: i32 },
 
+		#[i("sraiw", OpImm32)]
+		Sraiw { dest: Register, src: Register, shamt: i32 },
+
+		#[r("sraw", Op32)]
+		Sraw { dest: Register, src1: Register, src2: Register },
+
 		#[r("srl", Op)]
 		Srl { dest: Register, src1: Register, src2: Register },
 
 		#[i("srli", OpImm)]
 		Srli { dest: Register, src: Register, shamt: i32 },
 
+		#[i("srliw", OpImm32)]
+		Srliw { dest: Register, src: Register, shamt: i32 },
+
+		#[r("srlw", Op32)]
+		Srlw { dest: Register, src1: Register, src2: Register },
+
 		#[r("sub", Op)]
 		Sub { dest: Register, src1: Register, src2: Register },
+
+		#[r("subw", Op32)]
+		Subw { dest: Register, src1: Register, src2: Register },
 
 		#[s("sw", Store)]
 		Sw { base: Register, offset: i32, src: Register },
@@ -820,7 +871,7 @@ instructions! {
 impl Instruction {
 	pub fn encode(self, supported_extensions: SupportedExtensions) -> Result<(u16, Option<u16>), EncodeError> {
 		if !supported_extensions.contains(SupportedExtensions::RVC) {
-			return self.encode_full();
+			return self.encode_full(supported_extensions);
 		}
 
 		let raw_instruction = match self {
@@ -922,6 +973,29 @@ impl Instruction {
 				imm2: bit_slice::<5, 6>(imm),
 			},
 
+			Self::Addiw { dest, src, imm } if
+				dest != Register::X0 &&
+				dest == src &&
+				can_truncate_high::<6>(imm)
+			=> RawInstruction::Ci {
+				opcode: OpCodeC::Addiw,
+				rd_rs1: dest,
+				imm1: bit_slice::<0, 5>(imm),
+				imm2: bit_slice::<5, 6>(imm),
+			},
+
+			Self::Addw { dest, src1: src, src2: other } |
+			Self::Addw { dest, src1: other, src2: src } if
+				dest.is_compressible() &&
+				src.is_compressible() &&
+				other == dest
+			=> RawInstruction::Ca {
+				opcode: OpCodeC::Addw,
+				rd_rs1: dest,
+				rs2: src,
+				funct2: Funct2::Addw,
+			},
+
 			Self::And { dest, src1: src, src2: other } |
 			Self::And { dest, src1: other, src2: src } if
 				dest.is_compressible() &&
@@ -1002,6 +1076,7 @@ impl Instruction {
 			},
 
 			Self::Jal { dest: Register::X1, offset } if
+				!supported_extensions.contains(SupportedExtensions::RV64I) &&
 				can_truncate_low::<1>(offset) &&
 				can_truncate_high::<12>(offset)
 			=> RawInstruction::Cj {
@@ -1023,6 +1098,34 @@ impl Instruction {
 				opcode: OpCodeC::Jalr,
 				rd_rs1: base,
 				rs2: Register::X0,
+			},
+
+			Self::Ld { dest, base: Register::X2, offset } if
+				dest != Register::X0 &&
+				offset & ((1 << 9) - (1 << 3)) == offset
+			=> {
+				let imm1 =
+					bit_slice::<6, 9>(offset) |
+					(bit_slice::<3, 5>(offset) << 3);
+				let imm2 = bit_slice::<5, 6>(offset);
+				RawInstruction::Ci {
+					opcode: OpCodeC::Ldsp,
+					rd_rs1: dest,
+					imm1,
+					imm2,
+				}
+			},
+
+			Self::Ld { dest, base, offset } if
+				dest.is_compressible() &&
+				base.is_compressible() &&
+				offset & ((1 << 8) - (1 << 3)) == offset
+			=> RawInstruction::Cl {
+				opcode: OpCodeC::Ld,
+				rd: dest,
+				rs1: base,
+				imm1: bit_slice::<6, 8>(offset),
+				imm2: bit_slice::<3, 6>(offset),
 			},
 
 			Self::Lui { dest, imm } if
@@ -1091,7 +1194,46 @@ impl Instruction {
 				funct2: Funct2::Or,
 			},
 
+			Self::Sd { base: Register::X2, offset, src } if
+				offset & 0x1f8 == offset
+			=> {
+				let imm =
+					bit_slice::<6, 9>(offset) |
+					(bit_slice::<3, 6>(offset) << 3);
+				RawInstruction::Css {
+					opcode: OpCodeC::Sdsp,
+					rs2: src,
+					imm,
+				}
+			},
+
+			Self::Sd { base, offset, src } if
+				base.is_compressible() &&
+				src.is_compressible() &&
+				offset & ((1 << 8) - (1 << 3)) == offset
+			=> RawInstruction::Cs {
+				opcode: OpCodeC::Sd,
+				rs1: base,
+				rs2: src,
+				imm1: bit_slice::<6, 8>(offset),
+				imm2: bit_slice::<3, 6>(offset),
+			},
+
 			Self::Slli { dest, src, shamt } if
+				supported_extensions.contains(SupportedExtensions::RV64I) &&
+				dest != Register::X0 &&
+				dest == src &&
+				shamt != 0 &&
+				shamt & ((1 << 6) - 1) == shamt
+			=> RawInstruction::Ci {
+				opcode: OpCodeC::Slli,
+				rd_rs1: dest,
+				imm1: bit_slice::<0, 5>(shamt),
+				imm2: bit_slice::<5, 6>(shamt),
+			},
+
+			Self::Slli { dest, src, shamt } if
+				!supported_extensions.contains(SupportedExtensions::RV64I) &&
 				dest != Register::X0 &&
 				dest == src &&
 				shamt != 0 &&
@@ -1100,10 +1242,24 @@ impl Instruction {
 				opcode: OpCodeC::Slli,
 				rd_rs1: dest,
 				imm1: bit_slice::<0, 5>(shamt),
-				imm2: bit_slice::<5, 6>(shamt),
+				imm2: 0,
 			},
 
 			Self::Srai { dest, src, shamt } if
+				supported_extensions.contains(SupportedExtensions::RV64I) &&
+				dest.is_compressible() &&
+				src == dest &&
+				shamt != 0 &&
+				shamt & ((1 << 6) - 1) == shamt
+			=> RawInstruction::Cb {
+				opcode: OpCodeC::Srai,
+				rs1: dest,
+				imm1: bit_slice::<0, 5>(shamt),
+				imm2: bit_slice::<5, 6>(shamt) << 2,
+			},
+
+			Self::Srai { dest, src, shamt } if
+				!supported_extensions.contains(SupportedExtensions::RV64I) &&
 				dest.is_compressible() &&
 				src == dest &&
 				shamt != 0 &&
@@ -1112,10 +1268,24 @@ impl Instruction {
 				opcode: OpCodeC::Srai,
 				rs1: dest,
 				imm1: bit_slice::<0, 5>(shamt),
+				imm2: 0,
+			},
+
+			Self::Srli { dest, src, shamt } if
+				supported_extensions.contains(SupportedExtensions::RV64I) &&
+				dest.is_compressible() &&
+				src == dest &&
+				shamt != 0 &&
+				shamt & ((1 << 6) - 1) == shamt
+			=> RawInstruction::Cb {
+				opcode: OpCodeC::Srli,
+				rs1: dest,
+				imm1: bit_slice::<0, 5>(shamt),
 				imm2: bit_slice::<5, 6>(shamt) << 2,
 			},
 
 			Self::Srli { dest, src, shamt } if
+				!supported_extensions.contains(SupportedExtensions::RV64I) &&
 				dest.is_compressible() &&
 				src == dest &&
 				shamt != 0 &&
@@ -1124,7 +1294,7 @@ impl Instruction {
 				opcode: OpCodeC::Srli,
 				rs1: dest,
 				imm1: bit_slice::<0, 5>(shamt),
-				imm2: bit_slice::<5, 6>(shamt) << 2,
+				imm2: 0,
 			},
 
 			Self::Sub { dest, src1, src2 } if
@@ -1136,6 +1306,18 @@ impl Instruction {
 				rd_rs1: dest,
 				rs2: src2,
 				funct2: Funct2::Sub,
+			},
+
+			Self::Subw { dest, src1: src, src2: other } |
+			Self::Subw { dest, src1: other, src2: src } if
+				dest.is_compressible() &&
+				src.is_compressible() &&
+				other == dest
+			=> RawInstruction::Ca {
+				opcode: OpCodeC::Subw,
+				rd_rs1: dest,
+				rs2: src,
+				funct2: Funct2::Subw,
 			},
 
 			Self::Sw { base: Register::X2, offset, src } if
@@ -1181,7 +1363,7 @@ impl Instruction {
 				funct2: Funct2::Xor,
 			},
 
-			_ => return self.encode_full(),
+			_ => return self.encode_full(supported_extensions),
 		};
 
 		raw_instruction.encode()
@@ -1677,15 +1859,11 @@ enum OpCode {
 	Lui = 0b01101,
 	MiscMem = 0b00011,
 	Op = 0b01100,
+	Op32 = 0b01110,
 	OpImm = 0b00100,
+	OpImm32 = 0b00110,
 	Store = 0b01000,
 	System = 0b11100,
-
-	// RV64I
-	/*
-	Op32 = 0b01110,
-	OpImm32 = 0b00110,
-	*/
 
 	// RV{32,64}A
 	/*
@@ -1735,6 +1913,8 @@ funct! {
 	enum Funct3 {
 		Add = 0b000,
 		Addi = 0b000,
+		Addiw = 0b000,
+		Addw = 0b000,
 		And = 0b111,
 		Andi = 0b111,
 		Beq = 0b000,
@@ -1748,24 +1928,34 @@ funct! {
 		Jalr = 0b000,
 		Lb = 0b000,
 		Lbu = 0b100,
+		Ld = 0b011,
 		Lh = 0b001,
 		Lhu = 0b101,
 		Lw = 0b010,
+		Lwu = 0b110,
 		Or = 0b110,
 		Ori = 0b110,
 		Sb = 0b000,
+		Sd = 0b011,
 		Sh = 0b001,
 		Sll = 0b001,
 		Slli = 0b001,
+		Slliw = 0b001,
+		Sllw = 0b001,
 		Slt = 0b010,
 		Slti = 0b010,
 		Sltiu = 0b011,
 		Sltu = 0b011,
 		Sra = 0b101,
 		Srai = 0b101,
+		Sraiw = 0b101,
+		Sraw = 0b101,
 		Srl = 0b101,
 		Srli = 0b101,
+		Srliw = 0b101,
+		Srlw = 0b101,
 		Sub = 0b000,
+		Subw = 0b000,
 		Sw = 0b010,
 		Xor = 0b100,
 		Xori = 0b100,
@@ -1775,17 +1965,25 @@ funct! {
 funct! {
 	enum Funct7 {
 		Add = 0b000_0000,
+		Addw = 0b000_0000,
 		And = 0b000_0000,
 		Or = 0b000_0000,
 		Sll = 0b000_0000,
 		Slli = 0b000_0000,
+		Slliw = 0b000_0000,
+		Sllw = 0b000_0000,
 		Slt = 0b000_0000,
 		Sltu = 0b000_0000,
 		Sra = 0b010_0000,
 		Srai = 0b010_0000,
+		Sraiw = 0b010_0000,
+		Sraw = 0b010_0000,
 		Srl = 0b000_0000,
 		Srli = 0b000_0000,
+		Srliw = 0b000_0000,
+		Srlw = 0b000_0000,
 		Sub = 0b010_0000,
+		Subw = 0b010_0000,
 		Xor = 0b000_0000,
 	}
 }
@@ -1913,8 +2111,10 @@ opcodec! {
 	enum OpCodeC {
 		Add = (C2, 0b100_100),
 		Addi = (C1, 0b000_000),
+		Addiw = (C1, 0b001_000),
 		Addi4Spn = (C0, 0b000_000),
 		Addi16Sp = (C1, 0b011_000),
+		Addw = (C1, 0b100_111),
 		And = (C1, 0b100_011),
 		Andi = (C1, 0b100_010),
 		Beqz = (C1, 0b110_000),
@@ -1924,15 +2124,20 @@ opcodec! {
 		Jal = (C1, 0b001_000),
 		Jalr = (C2, 0b100_100),
 		Jr = (C2, 0b100_000),
+		Ld = (C0, 0b011_000),
+		Ldsp = (C2, 0b011_000),
 		Li = (C1, 0b010_000),
 		Lui = (C1, 0b011_000),
 		Lw = (C0, 0b010_000),
 		Lwsp = (C2, 0b010_000),
 		Mv = (C2, 0b100_000),
 		Or = (C1, 0b100_011),
+		Sd = (C0, 0b111_000),
+		Sdsp = (C2, 0b111_000),
 		Slli = (C2, 0b000_000),
 		Srai = (C1, 0b100_001),
 		Srli = (C1, 0b100_000),
+		Subw = (C1, 0b100_111),
 		Sw = (C0, 0b110_000),
 		Swsp = (C2, 0b110_000),
 		Sub = (C1, 0b100_011),
@@ -1942,9 +2147,11 @@ opcodec! {
 
 funct! {
 	enum Funct2 {
+		Addw = 0b01,
 		And = 0b11,
 		Or = 0b10,
 		Sub = 0b00,
+		Subw = 0b00,
 		Xor = 0b01,
 	}
 }

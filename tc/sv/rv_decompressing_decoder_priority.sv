@@ -1,4 +1,6 @@
-module rv_decompressing_decoder_priority (
+module rv_decompressing_decoder_priority #(
+	parameter rv64 = 1
+) (
 	input bit[31:0] in,
 
 	output bit sigill,
@@ -15,9 +17,11 @@ module rv_decompressing_decoder_priority (
 	typedef enum bit[4:0] {
 		OpCode_Load = 5'b00000,
 		OpCode_OpImm = 5'b00100,
+		OpCode_OpImm32 = 5'b00110,
 		OpCode_Store = 5'b01000,
 		OpCode_Op = 5'b01100,
 		OpCode_Lui = 5'b01101,
+		OpCode_Op32 = 5'b01110,
 		OpCode_Branch = 5'b11000,
 		OpCode_Jalr = 5'b11001,
 		OpCode_Jal = 5'b11011,
@@ -115,8 +119,18 @@ module rv_decompressing_decoder_priority (
 				imm_(32'({in[5], in[10+:3], in[6], 2'b0}));
 			end
 
-			// flw
-			16'b011_???_???_??_???_00: begin
+			16'b011_???_???_??_???_00: if (rv64) begin
+				// ld
+				opcode = OpCode_Load;
+				funct3 = 3'b011;
+
+				rd_({2'b01, in[2+:3]});
+				rs1_({2'b01, in[7+:3]});
+				rs2_(5'b00000);
+
+				imm_(32'({in[5+:2], in[10+:3], 3'b0}));
+			end else begin
+				// flw
 				sigill = '1;
 				is_compressed = 'x;
 			end
@@ -144,8 +158,18 @@ module rv_decompressing_decoder_priority (
 				imm_(32'({in[5], in[10+:3], in[6], 2'b0}));
 			end
 
-			// fsw
-			16'b111_???_???_??_???_00: begin
+			16'b111_???_???_??_???_00: if (rv64) begin
+				// sd
+				opcode = OpCode_Store;
+				funct3 = 3'b011;
+
+				rd_(5'b00000);
+				rs1_({2'b01, in[7+:3]});
+				rs2_({2'b01, in[2+:3]});
+
+				imm_(32'({in[5+:2], in[10+:3], 3'b0}));
+			end else begin
+				// fsw
 				sigill = '1;
 				is_compressed = 'x;
 			end
@@ -162,8 +186,18 @@ module rv_decompressing_decoder_priority (
 				imm_(unsigned'(32'(signed'({in[12], in[2+:5]}))));
 			end
 
-			// jal
-			16'b001_?_?????_?????_01: begin
+			16'b001_?_?????_?????_01: if (rv64) begin
+				// addiw
+				opcode = OpCode_OpImm32;
+				funct3 = 3'b000;
+
+				rd_(in[7+:5]);
+				rs1_(in[7+:5]);
+				rs2_(5'b00000);
+
+				imm_(unsigned'(32'(signed'({in[12], in[2+:5]}))));
+			end else begin
+				// jal
 				opcode = OpCode_Jal;
 
 				rd_(5'b00001);
@@ -197,7 +231,7 @@ module rv_decompressing_decoder_priority (
 			end
 
 			// srli, srai
-			16'b100_0_0?_???_?????_01: begin
+			16'b100_?_0?_???_?????_01: if (!rv64 && in[12]) begin
 				opcode = OpCode_OpImm;
 				funct3 = 3'b101;
 				funct7 = {1'b0, in[10], 4'b0000, in[12]};
@@ -207,6 +241,9 @@ module rv_decompressing_decoder_priority (
 				rs2_(5'b00000);
 
 				imm_(32'({in[10], 4'b0000, in[12], in[2+:5]}));
+			end else begin
+				sigill = '1;
+				is_compressed = 'x;
 			end
 
 			// andi
@@ -230,6 +267,20 @@ module rv_decompressing_decoder_priority (
 				rd_({2'b01, in[7+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_({2'b01, in[2+:3]});
+			end
+
+			16'b100_1_11_???_0?_???_01: if (rv64) begin
+				// subw, addw
+				opcode = OpCode_Op32;
+				funct3 = 3'b000;
+				funct7 = {1'b0, ~in[5], 5'b00000};
+
+				rd_({2'b01, in[7+:3]});
+				rs1_({2'b01, in[7+:3]});
+				rs2_({2'b01, in[2+:3]});
+			end else begin
+				sigill = '1;
+				is_compressed = 'x;
 			end
 
 			16'b100_1_11_???_??_???_01: begin
@@ -272,6 +323,21 @@ module rv_decompressing_decoder_priority (
 				imm_(32'({in[12], in[2+:5]}));
 			end
 
+			// slli
+			16'b000_1_?????_?????_10: if (rv64) begin
+				opcode = OpCode_OpImm;
+				funct3 = 3'b001;
+
+				rd_(in[7+:5]);
+				rs1_(in[7+:5]);
+				rs2_(5'b00000);
+
+				imm_(32'({in[12], in[2+:5]}));
+			end else begin
+				sigill = '1;
+				is_compressed = 'x;
+			end
+
 			// fldsp
 			16'b001_?_?????_?????_10: begin
 				sigill = '1;
@@ -290,8 +356,18 @@ module rv_decompressing_decoder_priority (
 				imm_(32'({in[2+:2], in[12], in[4+:3], 2'b0}));
 			end
 
-			// flwsp
-			16'b011_?_?????_?????_10: begin
+			16'b011_?_?????_?????_10: if (rv64) begin
+				// ldsp
+				opcode = OpCode_Load;
+				funct3 = 3'b011;
+
+				rd_(in[7+:5]);
+				rs1_(5'b00010);
+				rs2_(5'b00000);
+
+				imm_(32'({in[2+:3], in[12], in[5+:2], 3'b0}));
+			end else begin
+				// flwsp
 				sigill = '1;
 				is_compressed = 'x;
 			end
@@ -354,14 +430,24 @@ module rv_decompressing_decoder_priority (
 				imm_(32'({in[7+:2], in[9+:4], 2'b0}));
 			end
 
-			16'b111_??????_?????_10: begin
+			16'b111_??????_?????_10: if (rv64) begin
+				// sdsp
+				opcode = OpCode_Store;
+				funct3 = 3'b011;
+
+				rd_(5'b00000);
+				rs1_(5'b00010);
+				rs2_(in[2+:5]);
+
+				imm_(32'({in[7+:3], in[10+:3], 3'b0}));
+			end else begin
 				// fswsp
 				sigill = '1;
 				is_compressed = 'x;
 			end
 
-			// op
-			16'b?_???_?????_01100_11: begin
+			// op, op-32
+			16'b?_???_?????_011?0_11: begin
 				opcode = in[2+:5];
 				funct3 = in[12+:3];
 				funct7 = in[25+:7];
@@ -376,8 +462,8 @@ module rv_decompressing_decoder_priority (
 			16'b?_???_?????_00000_11,
 			// misc-mem
 			16'b?_???_?????_00011_11,
-			// op-imm
-			16'b?_???_?????_00100_11,
+			// op-imm, op-imm-32
+			16'b?_???_?????_001?0_11,
 			// jalr
 			16'b?_???_?????_11001_11: begin
 				opcode = in[2+:5];

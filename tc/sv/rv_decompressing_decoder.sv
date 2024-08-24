@@ -1,4 +1,6 @@
-module rv_decompressing_decoder (
+module rv_decompressing_decoder #(
+	parameter rv64 = 1
+) (
 	input bit[31:0] in,
 
 	output bit sigill,
@@ -15,9 +17,11 @@ module rv_decompressing_decoder (
 	typedef enum bit[4:0] {
 		OpCode_Load = 5'b00000,
 		OpCode_OpImm = 5'b00100,
+		OpCode_OpImm32 = 5'b00110,
 		OpCode_Store = 5'b01000,
 		OpCode_Op = 5'b01100,
 		OpCode_Lui = 5'b01101,
+		OpCode_Op32 = 5'b01110,
 		OpCode_Branch = 5'b11000,
 		OpCode_Jalr = 5'b11001,
 		OpCode_Jal = 5'b11011,
@@ -114,8 +118,18 @@ module rv_decompressing_decoder (
 					imm_(32'({in[5], in[10+:3], in[6], 2'b0}));
 				end
 
-				// flw
-				3'b011: begin
+				3'b011: if (rv64) begin
+					// ld
+					opcode = OpCode_Load;
+					funct3 = 3'b011;
+
+					rd_({2'b01, in[2+:3]});
+					rs1_({2'b01, in[7+:3]});
+					rs2_(5'b00000);
+
+					imm_(32'({in[5+:2], in[10+:3], 3'b0}));
+				end else begin
+					// flw
 					sigill = '1;
 					is_compressed = 'x;
 				end
@@ -144,8 +158,18 @@ module rv_decompressing_decoder (
 					imm_(32'({in[5], in[10+:3], in[6], 2'b0}));
 				end
 
-				// fsw
-				3'b111: begin
+				3'b111: if (rv64) begin
+					// sd
+					opcode = OpCode_Store;
+					funct3 = 3'b011;
+
+					rd_(5'b00000);
+					rs1_({2'b01, in[7+:3]});
+					rs2_({2'b01, in[2+:3]});
+
+					imm_(32'({in[5+:2], in[10+:3], 3'b0}));
+				end else begin
+					// fsw
 					sigill = '1;
 					is_compressed = 'x;
 				end
@@ -164,8 +188,18 @@ module rv_decompressing_decoder (
 					imm_(unsigned'(32'(signed'({in[12], in[2+:5]}))));
 				end
 
-				// jal
-				3'b001: begin
+				3'b001: if (rv64) begin
+					// addiw
+					opcode = OpCode_OpImm32;
+					funct3 = 3'b000;
+
+					rd_(in[7+:5]);
+					rs1_(in[7+:5]);
+					rs2_(5'b00000);
+
+					imm_(unsigned'(32'(signed'({in[12], in[2+:5]}))));
+				end else begin
+					// jal
 					opcode = OpCode_Jal;
 
 					rd_(5'b00001);
@@ -198,7 +232,7 @@ module rv_decompressing_decoder (
 
 				3'b100: unique casez (in[10+:2])
 					// srli, srai
-					2'b0?: if (in[12]) begin
+					2'b0?: if (!rv64 && in[12]) begin
 						sigill = '1;
 						is_compressed = 'x;
 					end else begin
@@ -225,9 +259,9 @@ module rv_decompressing_decoder (
 						imm_(unsigned'(32'(signed'({in[12], in[2+:5]}))));
 					end
 
-					2'b11: unique casez (in[12])
+					2'b11: unique casez ({in[12], in[6]})
 						// sub, xor, or, and
-						1'b0: begin
+						2'b0?: begin
 							opcode = OpCode_Op;
 							funct3 = {| in[5+:2], in[6], & in[5+:2]};
 							funct7 = {1'b0, ~| in[5+:2], 5'b00000};
@@ -235,6 +269,20 @@ module rv_decompressing_decoder (
 							rd_({2'b01, in[7+:3]});
 							rs1_({2'b01, in[7+:3]});
 							rs2_({2'b01, in[2+:3]});
+						end
+
+						2'b10: if (rv64) begin
+							// subw, addw
+							opcode = OpCode_Op32;
+							funct3 = 3'b000;
+							funct7 = {1'b0, ~in[5], 5'b00000};
+
+							rd_({2'b01, in[7+:3]});
+							rs1_({2'b01, in[7+:3]});
+							rs2_({2'b01, in[2+:3]});
+						end else begin
+							sigill = '1;
+							is_compressed = 'x;
 						end
 
 						default: begin
@@ -270,7 +318,7 @@ module rv_decompressing_decoder (
 
 			2'b10: unique case (in[13+:3])
 				// slli
-				3'b000: if (in[12]) begin
+				3'b000: if (!rv64 && in[12]) begin
 					sigill = '1;
 					is_compressed = 'x;
 				end else begin
@@ -302,8 +350,18 @@ module rv_decompressing_decoder (
 					imm_(32'({in[2+:2], in[12], in[4+:3], 2'b0}));
 				end
 
-				// flwsp
-				3'b011: begin
+				3'b011: if (rv64) begin
+					// ldsp
+					opcode = OpCode_Load;
+					funct3 = 3'b011;
+
+					rd_(in[7+:5]);
+					rs1_(5'b00010);
+					rs2_(5'b00000);
+
+					imm_(32'({in[2+:3], in[12], in[5+:2], 3'b0}));
+				end else begin
+					// flwsp
 					sigill = '1;
 					is_compressed = 'x;
 				end
@@ -371,16 +429,26 @@ module rv_decompressing_decoder (
 					imm_(32'({in[7+:2], in[9+:4], 2'b0}));
 				end
 
-				// fswsp
-				3'b111: begin
+				3'b111: if (rv64) begin
+					// sdsp
+					opcode = OpCode_Store;
+					funct3 = 3'b011;
+
+					rd_(5'b00000);
+					rs1_(5'b00010);
+					rs2_(in[2+:5]);
+
+					imm_(32'({in[7+:3], in[10+:3], 3'b0}));
+				end else begin
+					// fswsp
 					sigill = '1;
 					is_compressed = 'x;
 				end
 			endcase
 
 			2'b11: unique casez (in[2+:5])
-				// op
-				5'b01100: begin
+				// op, op-32
+				5'b011?0: begin
 					opcode = in[2+:5];
 					funct3 = in[12+:3];
 					funct7 = in[25+:7];
@@ -395,8 +463,8 @@ module rv_decompressing_decoder (
 				5'b00000,
 				// misc-mem
 				5'b00011,
-				// op-imm
-				5'b00100,
+				// op-imm, op-imm-32
+				5'b001?0,
 				// jalr
 				5'b11001: begin
 					opcode = in[2+:5];

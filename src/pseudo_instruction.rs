@@ -5,10 +5,14 @@ use crate::{
 	ParseError,
 	Register,
 	SmallIterator,
+	SupportedExtensions,
 };
 
 #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-pub(crate) fn parse(line: &str) -> Result<SmallIterator<Instruction>, ParseError<'_>> {
+pub(crate) fn parse(
+	line: &str,
+	supported_extensions: SupportedExtensions,
+) -> Result<SmallIterator<Instruction>, ParseError<'_>> {
 	let mut tokens = tokens(line.as_bytes());
 
 	let Some(token) = tokens.next() else {
@@ -365,6 +369,43 @@ pub(crate) fn parse(line: &str) -> Result<SmallIterator<Instruction>, ParseError
 			)
 		},
 
+		"ld" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest = dest.try_into()?;
+
+			let offset = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let Imm(offset) = offset.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			let (offset1, offset2) = hi_lo(offset);
+
+			SmallIterator::Two(
+				Instruction::Auipc { dest, imm: offset1 },
+				Instruction::Ld { dest, base: dest, offset: offset2 },
+			)
+		},
+
+		"ldsp" | "c.ldsp" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest = dest.try_into()?;
+
+			let Some((base, offset)) = parse_base_and_offset(&mut tokens) else {
+				return Err(ParseError::MalformedInstruction { line });
+			};
+			let base @ Register::X2 = base else {
+				return Err(ParseError::SpInstructionRegIsNotX2 { pos: "base", line });
+			};
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Ld { dest, base, offset })
+		},
+
 		"lh" => {
 			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
 			let dest = dest.try_into()?;
@@ -410,18 +451,26 @@ pub(crate) fn parse(line: &str) -> Result<SmallIterator<Instruction>, ParseError
 			let imm = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
 			let Imm(imm) = imm.try_into()?;
 
-			if can_truncate_low::<12>(imm) {
+			if can_truncate_low::<12>(imm) && can_truncate_high::<32>(imm) {
 				SmallIterator::One(Instruction::Lui { dest, imm: imm >> 12 })
 			}
 			else if can_truncate_high::<12>(imm) {
 				SmallIterator::One(Instruction::Addi { dest, src: Register::X0, imm })
 			}
-			else {
+			else if can_truncate_high::<32>(imm) {
 				let (imm1, imm2) = hi_lo(imm);
 				SmallIterator::Two(
 					Instruction::Lui { dest, imm: imm1 },
-					Instruction::Addi { dest, src: dest, imm: imm2 },
+					if supported_extensions.contains(SupportedExtensions::RV64I) {
+						Instruction::Addiw { dest, src: dest, imm: imm2 }
+					}
+					else {
+						Instruction::Addi { dest, src: dest, imm: imm2 }
+					}
 				)
+			}
+			else {
+				return Err(ParseError::ImmediateOverflow { line });
 			}
 		},
 
@@ -460,6 +509,25 @@ pub(crate) fn parse(line: &str) -> Result<SmallIterator<Instruction>, ParseError
 			SmallIterator::Two(
 				Instruction::Auipc { dest, imm: offset1 },
 				Instruction::Lw { dest, base: dest, offset: offset2 },
+			)
+		},
+
+		"lwu" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest = dest.try_into()?;
+
+			let offset = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let Imm(offset) = offset.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			let (offset1, offset2) = hi_lo(offset);
+
+			SmallIterator::Two(
+				Instruction::Auipc { dest, imm: offset1 },
+				Instruction::Lwu { dest, base: dest, offset: offset2 },
 			)
 		},
 
@@ -507,6 +575,20 @@ pub(crate) fn parse(line: &str) -> Result<SmallIterator<Instruction>, ParseError
 			}
 
 			SmallIterator::One(Instruction::Sub { dest, src1: Register::X0, src2: src })
+		},
+
+		"negw" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest = dest.try_into()?;
+
+			let src = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let src = src.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Subw { dest, src1: Register::X0, src2: src })
 		},
 
 		"nop" => {
@@ -582,6 +664,24 @@ pub(crate) fn parse(line: &str) -> Result<SmallIterator<Instruction>, ParseError
 			SmallIterator::One(Instruction::Jalr { dest: Register::X0, base: Register::X1, offset: 0 })
 		},
 
+		"sdsp" | "c.sdsp" => {
+			let src = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let src = src.try_into()?;
+
+			let Some((base, offset)) = parse_base_and_offset(&mut tokens) else {
+				return Err(ParseError::MalformedInstruction { line });
+			};
+			let base @ Register::X2 = base else {
+				return Err(ParseError::SpInstructionRegIsNotX2 { pos: "base", line });
+			};
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Sd { base, offset, src })
+		},
+
 		"seqz" => {
 			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
 			let dest = dest.try_into()?;
@@ -607,7 +707,7 @@ pub(crate) fn parse(line: &str) -> Result<SmallIterator<Instruction>, ParseError
 				return Err(ParseError::TrailingGarbage { line });
 			}
 
-			let xlen = 32;
+			let xlen = if supported_extensions.contains(SupportedExtensions::RV64I) { 64 } else { 32 };
 
 			SmallIterator::Two(
 				Instruction::Slli { dest, src, shamt: xlen - 8 },
@@ -626,12 +726,26 @@ pub(crate) fn parse(line: &str) -> Result<SmallIterator<Instruction>, ParseError
 				return Err(ParseError::TrailingGarbage { line });
 			}
 
-			let xlen = 32;
+			let xlen = if supported_extensions.contains(SupportedExtensions::RV64I) { 64 } else { 32 };
 
 			SmallIterator::Two(
 				Instruction::Slli { dest, src, shamt: xlen - 16 },
 				Instruction::Srai { dest, src: dest, shamt: xlen - 16 },
 			)
+		},
+
+		"sext.w" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest: Register = dest.try_into()?;
+
+			let src = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let src: Register = src.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Addiw { dest, src, imm: 0 })
 		},
 
 		"sgtz" => {
@@ -735,12 +849,34 @@ pub(crate) fn parse(line: &str) -> Result<SmallIterator<Instruction>, ParseError
 				return Err(ParseError::TrailingGarbage { line });
 			}
 
-			let xlen = 32;
+			let xlen = if supported_extensions.contains(SupportedExtensions::RV64I) { 64 } else { 32 };
 
 			SmallIterator::Two(
 				Instruction::Slli { dest, src, shamt: xlen - 16 },
 				Instruction::Srli { dest, src: dest, shamt: xlen - 16 },
 			)
+		},
+
+		"zext.w" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest: Register = dest.try_into()?;
+
+			let src = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let src: Register = src.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			if supported_extensions.contains(SupportedExtensions::RV64I) {
+				SmallIterator::Two(
+					Instruction::Slli { dest, src, shamt: 32 },
+					Instruction::Srli { dest, src: dest, shamt: 32 },
+				)
+			}
+			else {
+				SmallIterator::One(Instruction::Addi { dest, src, imm: 0 })
+			}
 		},
 
 		_ => return Err(ParseError::UnknownInstruction { line }),

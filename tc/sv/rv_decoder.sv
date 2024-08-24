@@ -35,8 +35,8 @@ module rv_decoder (
 
 		if (~sigill) begin
 			unique casez (in[2+:5])
-				// op
-				5'b01100: begin
+				// op, op-32
+				5'b011?0: begin
 					opcode = in[2+:5];
 					funct3 = in[12+:3];
 					funct7 = in[25+:7];
@@ -51,8 +51,8 @@ module rv_decoder (
 				5'b00000,
 				// misc-mem
 				5'b00011,
-				// op-imm
-				5'b00100,
+				// op-imm, op-imm-32
+				5'b001?0,
 				// jalr
 				5'b11001: begin
 					opcode = in[2+:5];
