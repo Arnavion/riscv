@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	let mut pc = 0_u64;
 
-	for instruction in riscv::parse_program(&program) {
+	for instruction in riscv::parse_program(&program, supported_extensions) {
 		let instruction = instruction.map_err(|err| err.to_string())?;
 		let (lo, hi) =
 			instruction.encode(supported_extensions)
@@ -47,6 +47,10 @@ fn parse_args(mut args: impl Iterator<Item = std::ffi::OsString>, argv0: &std::f
 
 			Some("--compressed=false") => supported_extensions &= !riscv::SupportedExtensions::RVC,
 
+			Some("--32") => supported_extensions &= !riscv::SupportedExtensions::RV64I,
+
+			Some("--64") => supported_extensions |= riscv::SupportedExtensions::RV64I,
+
 			_ if path.is_none() => path = Some(opt),
 
 			_ => write_usage_and_crash(argv0),
@@ -65,5 +69,5 @@ fn write_usage_and_crash(argv0: &std::ffi::OsStr) -> ! {
 }
 
 fn write_usage(mut w: impl std::io::Write, argv0: &std::ffi::OsStr) {
-	_ = writeln!(w, "Usage: {} [ -c | --compressed | --compressed=[true|false] ] [ -- ] <program.S>", argv0.to_string_lossy());
+	_ = writeln!(w, "Usage: {} [ --32 | --64 ] [ -c | --compressed | --compressed=[true|false] ] [ -- ] <program.S>", argv0.to_string_lossy());
 }
