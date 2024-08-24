@@ -1,50 +1,53 @@
-module rv_register_file (
+module rv_register_file #(
+	parameter rv64 = 1,
+	parameter xlen = rv64 ? 64 : 32
+) (
 	input bit clock,
 
 	input bit[31:0] rd,
 	input bit[31:0] rs1,
 	input bit[31:0] rs2,
 
-	input logic[31:0] rd_value,
+	input logic[xlen - 1:0] rd_value,
 
-	output logic [31:0] rs1_value,
-	output logic [31:0] rs2_value
+	output logic [xlen - 1:0] rs1_value,
+	output logic [xlen - 1:0] rs2_value
 );
 	// TODO:
-	// Would be nice to do `bit [31:0] registers[31:1] = '{31{'0}};` but yosys doesn't support the cast.
-	// Alternative is `bit [31:0] registers[31:1] = {'0, '0, '0, ...};` but yosys rejects that
+	// Would be nice to do `bit [xlen - 1:0] registers[31:1] = '{31{'0}};` but yosys doesn't support the cast.
+	// Alternative is `bit [xlen - 1:0] registers[31:1] = {'0, '0, '0, ...};` but yosys rejects that
 	// with a baroque "invalid array index" error.
-	bit[31:0] x1 = '0;
-	bit[31:0] x2 = '0;
-	bit[31:0] x3 = '0;
-	bit[31:0] x4 = '0;
-	bit[31:0] x5 = '0;
-	bit[31:0] x6 = '0;
-	bit[31:0] x7 = '0;
-	bit[31:0] x8 = '0;
-	bit[31:0] x9 = '0;
-	bit[31:0] x10 = '0;
-	bit[31:0] x11 = '0;
-	bit[31:0] x12 = '0;
-	bit[31:0] x13 = '0;
-	bit[31:0] x14 = '0;
-	bit[31:0] x15 = '0;
-	bit[31:0] x16 = '0;
-	bit[31:0] x17 = '0;
-	bit[31:0] x18 = '0;
-	bit[31:0] x19 = '0;
-	bit[31:0] x20 = '0;
-	bit[31:0] x21 = '0;
-	bit[31:0] x22 = '0;
-	bit[31:0] x23 = '0;
-	bit[31:0] x24 = '0;
-	bit[31:0] x25 = '0;
-	bit[31:0] x26 = '0;
-	bit[31:0] x27 = '0;
-	bit[31:0] x28 = '0;
-	bit[31:0] x29 = '0;
-	bit[31:0] x30 = '0;
-	bit[31:0] x31 = '0;
+	bit[xlen - 1:0] x1 = '0;
+	bit[xlen - 1:0] x2 = '0;
+	bit[xlen - 1:0] x3 = '0;
+	bit[xlen - 1:0] x4 = '0;
+	bit[xlen - 1:0] x5 = '0;
+	bit[xlen - 1:0] x6 = '0;
+	bit[xlen - 1:0] x7 = '0;
+	bit[xlen - 1:0] x8 = '0;
+	bit[xlen - 1:0] x9 = '0;
+	bit[xlen - 1:0] x10 = '0;
+	bit[xlen - 1:0] x11 = '0;
+	bit[xlen - 1:0] x12 = '0;
+	bit[xlen - 1:0] x13 = '0;
+	bit[xlen - 1:0] x14 = '0;
+	bit[xlen - 1:0] x15 = '0;
+	bit[xlen - 1:0] x16 = '0;
+	bit[xlen - 1:0] x17 = '0;
+	bit[xlen - 1:0] x18 = '0;
+	bit[xlen - 1:0] x19 = '0;
+	bit[xlen - 1:0] x20 = '0;
+	bit[xlen - 1:0] x21 = '0;
+	bit[xlen - 1:0] x22 = '0;
+	bit[xlen - 1:0] x23 = '0;
+	bit[xlen - 1:0] x24 = '0;
+	bit[xlen - 1:0] x25 = '0;
+	bit[xlen - 1:0] x26 = '0;
+	bit[xlen - 1:0] x27 = '0;
+	bit[xlen - 1:0] x28 = '0;
+	bit[xlen - 1:0] x29 = '0;
+	bit[xlen - 1:0] x30 = '0;
+	bit[xlen - 1:0] x31 = '0;
 
 	always_ff @(posedge clock) begin
 		unique case (rd)
