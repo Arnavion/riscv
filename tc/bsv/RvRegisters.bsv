@@ -3,15 +3,15 @@ import Vector::*;
 import RvCommon::*;
 
 interface RvRegisters;
-	method Instruction#(Int#(32), Int#(32)) load(Instruction#(XReg, Either#(XReg, Int#(12))) inst);
-	method Action store(XReg rd, Int#(32) rd_value);
+	method Instruction#(Int#(64), Int#(64)) load(Instruction#(XReg, Either#(XReg, Int#(12))) inst);
+	method Action store(XReg rd, Int#(64) rd_value);
 endinterface
 
 (* synthesize *)
 module mkRvRegisters(RvRegisters);
-	Vector#(32, Reg#(Int#(32))) x_regs <- replicateM(mkReg(0));
+	Vector#(32, Reg#(Int#(64))) x_regs <- replicateM(mkReg(0));
 
-	method Instruction#(Int#(32), Int#(32)) load(Instruction#(XReg, Either#(XReg, Int#(12))) inst);
+	method Instruction#(Int#(64), Int#(64)) load(Instruction#(XReg, Either#(XReg, Int#(12))) inst);
 		case (inst) matches
 			tagged Auipc { rd: .rd, imm: .imm }: return tagged Auipc {
 				rd: rd,
@@ -69,13 +69,13 @@ module mkRvRegisters(RvRegisters);
 		endcase
 	endmethod
 
-	method Action store(XReg rd, Int#(32) rd_value);
+	method Action store(XReg rd, Int#(64) rd_value);
 		if (rd != 0)
 			x_regs[rd] <= rd_value;
 	endmethod
 endmodule
 
-function Int#(32) load_x_reg(Vector#(32, Reg#(Int#(32))) x_regs, Either#(XReg, Int#(12)) rs);
+function Int#(64) load_x_reg(Vector#(32, Reg#(Int#(64))) x_regs, Either#(XReg, Int#(12)) rs);
 	case (rs) matches
 		tagged Left .rs: return x_regs[rs];
 		tagged Right .imm: return extend(imm);

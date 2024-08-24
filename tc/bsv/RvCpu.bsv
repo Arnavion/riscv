@@ -19,7 +19,7 @@ typedef struct {
 
 typedef struct {
 	State state;
-	Int#(32) pc;
+	Int#(64) pc;
 } RvCpuResponse deriving(Bits);
 
 typedef union tagged {
@@ -33,12 +33,12 @@ module mkRvCpu(RvCpu);
 	Reg#(State) decoder_state <- mkReg(tagged Running);
 	Reg#(State) decompressor_state <- mkReg(tagged Running);
 	Reg#(State) execute_state <- mkReg(tagged Running);
-	Reg#(Int#(31)) pc_hi <- mkReg(0);
+	Reg#(Int#(63)) pc_hi <- mkReg(0);
 	Wire#(InstructionLength) inst_len <- mkWire;
 
 	RvRegisters registers <- mkRvRegisters;
 
-	RvDecompressor decompressor <- mkRvDecompressor;
+	RvDecompressor decompressor <- mkRvDecompressor(True);
 
 	RvDecoder decoder <- mkRvDecoder;
 

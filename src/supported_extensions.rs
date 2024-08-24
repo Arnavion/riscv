@@ -3,9 +3,11 @@ pub struct SupportedExtensions(u8);
 
 impl SupportedExtensions {
 	pub const RV32I: Self = Self(0);
+	pub const RV64I: Self = Self(1 << 0);
 	pub const RVC: Self = Self(1 << 1);
 
 	pub const RV32C: Self = Self(Self::RV32I.0 | Self::RVC.0);
+	pub const RV64C: Self = Self(Self::RV64I.0 | Self::RVC.0);
 }
 
 impl SupportedExtensions {
