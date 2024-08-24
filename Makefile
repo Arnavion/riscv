@@ -21,8 +21,10 @@ print:
 .PHONY: test
 test:
 	cargo test --workspace
-	for compressed in 'false' 'true'; do \
-		for f in tc/*.S; do cargo run -p as -- "--compressed=$$compressed" "$$f" >/dev/null || exit 1; done; \
+	for bitness in '--32' '--64'; do \
+		for compressed in 'false' 'true'; do \
+			for f in tc/*.S; do cargo run -p as -- $$bitness "--compressed=$$compressed" "$$f" >/dev/null || exit 1; done; \
+		done; \
 	done
 	cargo clippy --workspace --tests --examples
 	cargo machete
@@ -52,4 +54,4 @@ test-load_store:
 	src="$$PWD" && \
 	d="$$(mktemp -d)" && \
 	trap "rm -rf '$$d'" EXIT && \
-	(cd "$$d" && iverilog -g2012 -DTESTING -o test "$$src/tc/sv/load_store.sv" && ./test)
+	(cd "$$d" && iverilog -g2012 -DTESTING -o test "$$src/tc/sv/load_store32.sv" "$$src/tc/sv/load_store64.sv" && ./test)

@@ -6,9 +6,9 @@ import RvCommon::*;
 typedef Server#(AluRequest, AluResponse) RvAlu;
 
 typedef struct {
-	Int#(32) pc;
-	Int#(32) next_pc;
-	Instruction#(Int#(32), Int#(32)) inst;
+	Int#(64) pc;
+	Int#(64) next_pc;
+	Instruction#(Int#(64), Int#(64)) inst;
 } AluRequest deriving(Bits);
 
 typedef union tagged {
@@ -19,8 +19,8 @@ typedef union tagged {
 
 typedef struct {
 	XReg x_regs_rd;
-	Int#(32) x_regs_rd_value;
-	Int#(32) next_pc;
+	Int#(64) x_regs_rd_value;
+	Int#(64) next_pc;
 } AluResponseOk deriving(Bits);
 
 (* synthesize *)
@@ -30,9 +30,9 @@ module mkRvAlu(RvAlu);
 	Logical logical <- mkLogical;
 	Shift shift <- mkShift;
 
-	Wire#(Int#(32)) pc <- mkWire;
-	Wire#(Int#(32)) next_pc <- mkWire;
-	Wire#(Instruction#(Int#(32), Int#(32))) inst <- mkWire;
+	Wire#(Int#(64)) pc <- mkWire;
+	Wire#(Int#(64)) next_pc <- mkWire;
+	Wire#(Instruction#(Int#(64), Int#(64))) inst <- mkWire;
 
 	RWire#(AluResponse) result <- mkRWire;
 
@@ -50,6 +50,24 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: adder_response.add,
+			next_pc: next_pc
+		});
+	endrule
+
+	// addw
+	rule addw_1(inst matches tagged Binary { op: Addw, rs1: .rs1, rs2: .rs2 });
+		adder.request.put(AdderRequest {
+			arg1: rs1,
+			arg2: rs2,
+			cin: False
+		});
+	endrule
+
+	rule addw_end(inst matches tagged Binary { op: Addw, rd: .rd });
+		let adder_response <- adder.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: adder_response.addw,
 			next_pc: next_pc
 		});
 	endrule
@@ -75,7 +93,7 @@ module mkRvAlu(RvAlu);
 	rule auipc_1(inst matches tagged Auipc { imm: .imm });
 		adder.request.put(AdderRequest {
 			arg1: pc,
-			arg2: imm,
+			arg2: extend(imm),
 			cin: False
 		});
 	endrule
@@ -93,7 +111,7 @@ module mkRvAlu(RvAlu);
 	rule branch_1(inst matches tagged Branch { imm: .imm });
 		adder.request.put(AdderRequest {
 			arg1: pc,
-			arg2: imm,
+			arg2: extend(imm),
 			cin: False
 		});
 	endrule
@@ -167,7 +185,7 @@ module mkRvAlu(RvAlu);
 	rule jal_1(inst matches tagged Jal { base: tagged Pc, offset: .offset });
 		adder.request.put(AdderRequest {
 			arg1: pc,
-			arg2: offset,
+			arg2: extend(offset),
 			cin: False
 		});
 	endrule
@@ -175,7 +193,7 @@ module mkRvAlu(RvAlu);
 	rule jal_2(inst matches tagged Jal { base: tagged XReg .base, offset: .offset });
 		adder.request.put(AdderRequest {
 			arg1: base,
-			arg2: offset,
+			arg2: extend(offset),
 			cin: False
 		});
 	endrule
@@ -193,7 +211,7 @@ module mkRvAlu(RvAlu);
 	rule li_end(inst matches tagged Li { rd: .rd, imm: .imm });
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
-			x_regs_rd_value: imm,
+			x_regs_rd_value: extend(imm),
 			next_pc: next_pc
 		});
 	endrule
@@ -233,6 +251,24 @@ module mkRvAlu(RvAlu);
 		});
 	endrule
 
+	// sllw
+	rule sllw_1(inst matches tagged Binary { op: Sllw, rs1: .rs1, rs2: .rs2 });
+		shift.request.put(ShiftRequest {
+			value: rs1,
+			shamt: rs2,
+			arithmetic: ?
+		});
+	endrule
+
+	rule sllw_end(inst matches tagged Binary { op: Sllw, rd: .rd });
+		let shift_response <- shift.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: shift_response.sllw,
+			next_pc: next_pc
+		});
+	endrule
+
 	// sra
 	rule sra_1(inst matches tagged Binary { op: Sra, rs1: .rs1, rs2: .rs2 });
 		shift.request.put(ShiftRequest {
@@ -251,6 +287,24 @@ module mkRvAlu(RvAlu);
 		});
 	endrule
 
+	// sraw
+	rule sraw_1(inst matches tagged Binary { op: Sraw, rs1: .rs1, rs2: .rs2 });
+		shift.request.put(ShiftRequest {
+			value: rs1,
+			shamt: rs2,
+			arithmetic: True
+		});
+	endrule
+
+	rule sraw_end(inst matches tagged Binary { op: Sraw, rd: .rd });
+		let shift_response <- shift.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: shift_response.srw,
+			next_pc: next_pc
+		});
+	endrule
+
 	// srl
 	rule srl_1(inst matches tagged Binary { op: Srl, rs1: .rs1, rs2: .rs2 });
 		shift.request.put(ShiftRequest {
@@ -265,6 +319,24 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: shift_response.sr,
+			next_pc: next_pc
+		});
+	endrule
+
+	// srlw
+	rule srlw_1(inst matches tagged Binary { op: Srlw, rs1: .rs1, rs2: .rs2 });
+		shift.request.put(ShiftRequest {
+			value: rs1,
+			shamt: rs2,
+			arithmetic: False
+		});
+	endrule
+
+	rule srlw_end(inst matches tagged Binary { op: Srlw, rd: .rd });
+		let shift_response <- shift.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: shift_response.srw,
 			next_pc: next_pc
 		});
 	endrule
@@ -323,6 +395,24 @@ module mkRvAlu(RvAlu);
 		});
 	endrule
 
+	// subw
+	rule subw_1(inst matches tagged Binary { op: Subw, rs1: .rs1, rs2: .rs2 });
+		adder.request.put(AdderRequest {
+			arg1: rs1,
+			arg2: ~rs2,
+			cin: True
+		});
+	endrule
+
+	rule subw_end(inst matches tagged Binary { op: Subw, rd: .rd });
+		let adder_response <- adder.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: adder_response.addw,
+			next_pc: next_pc
+		});
+	endrule
+
 	// xor
 	rule xor_1(inst matches tagged Binary { op: Xor, rs1: .rs1, rs2: .rs2 });
 		logical.request.put(LogicalRequest {
@@ -351,7 +441,7 @@ module mkRvAlu(RvAlu);
 	interface response = toGet(result);
 endmodule
 
-typedef Server#(AdderRequest#(32), AdderResponse#(32)) Adder;
+typedef Server#(AdderRequest#(64), AdderResponse#(64)) Adder;
 
 typedef struct {
 	Int#(width) arg1;
@@ -361,24 +451,27 @@ typedef struct {
 
 typedef struct {
 	Int#(width) add;
+	Int#(width) addw;
 } AdderResponse#(numeric type width) deriving(Bits);
 
 (* synthesize *)
 module mkAdder(Adder);
-	Wire #(Int#(32)) arg1 <- mkWire;
-	Wire #(Int#(32)) arg2 <- mkWire;
+	Wire #(Int#(64)) arg1 <- mkWire;
+	Wire #(Int#(64)) arg2 <- mkWire;
 	Wire #(Bool) cin <- mkWire;
-	RWire#(AdderResponse#(32)) result <- mkRWire;
+	RWire#(AdderResponse#(64)) result <- mkRWire;
 
 	rule run;
 		let add = add_inner(arg1, arg2, cin);
+		Int#(32) addw = truncate(add);
 		result.wset(AdderResponse {
-			add: add
+			add: add,
+			addw: extend(addw)
 		});
 	endrule
 
 	interface Put request;
-		method Action put(AdderRequest#(32) request);
+		method Action put(AdderRequest#(64) request);
 			arg1 <= request.arg1;
 			arg2 <= request.arg2;
 			cin <= request.cin;
@@ -394,7 +487,7 @@ function Int#(width) add_inner(Int#(width) arg1, Int#(width) arg2, Bool cin);
 	return arg1 + arg2 + (cin ? 1 : 0);
 endfunction
 
-typedef Server#(CmpRequest#(32), CmpResponse) Cmp;
+typedef Server#(CmpRequest#(64), CmpResponse) Cmp;
 
 typedef struct {
 	Int#(width) arg1;
@@ -409,8 +502,8 @@ typedef struct {
 
 (* synthesize *)
 module mkCmp(Cmp);
-	Wire#(Int#(32)) arg1 <- mkWire;
-	Wire#(Int#(32)) arg2 <- mkWire;
+	Wire#(Int#(64)) arg1 <- mkWire;
+	Wire#(Int#(64)) arg2 <- mkWire;
 	Wire#(Bool) signed_ <- mkWire;
 	RWire#(CmpResponse) result <- mkRWire;
 
@@ -419,7 +512,7 @@ module mkCmp(Cmp);
 	endrule
 
 	interface Put request;
-		method Action put(CmpRequest#(32) request);
+		method Action put(CmpRequest#(64) request);
 			arg1 <= request.arg1;
 			arg2 <= request.arg2;
 			signed_ <= request.signed_;
@@ -464,7 +557,7 @@ provisos (
 	endfunction
 endinstance
 
-typedef Server#(LogicalRequest#(32), LogicalResponse#(32)) Logical;
+typedef Server#(LogicalRequest#(64), LogicalResponse#(64)) Logical;
 
 typedef struct {
 	Int#(width) arg1;
@@ -479,16 +572,16 @@ typedef struct {
 
 (* synthesize *)
 module mkLogical(Logical);
-	Wire#(Int#(32)) arg1 <- mkWire;
-	Wire#(Int#(32)) arg2 <- mkWire;
-	RWire#(LogicalResponse#(32)) result <- mkRWire;
+	Wire#(Int#(64)) arg1 <- mkWire;
+	Wire#(Int#(64)) arg2 <- mkWire;
+	RWire#(LogicalResponse#(64)) result <- mkRWire;
 
 	rule run;
 		result.wset(logical_inner(arg1, arg2));
 	endrule
 
 	interface Put request;
-		method Action put(LogicalRequest#(32) request);
+		method Action put(LogicalRequest#(64) request);
 			arg1 <= request.arg1;
 			arg2 <= request.arg2;
 		endmethod
@@ -507,7 +600,7 @@ function LogicalResponse#(width) logical_inner(Int#(width) arg1, Int#(width) arg
 	};
 endfunction
 
-typedef Server#(ShiftRequest#(32), ShiftResponse#(32)) Shift;
+typedef Server#(ShiftRequest#(64), ShiftResponse#(64)) Shift;
 
 typedef struct {
 	Int#(width) value;
@@ -517,24 +610,38 @@ typedef struct {
 
 typedef struct {
 	Int#(width) sll;
+	Int#(width) sllw;
 	Int#(width) sr;
+	Int#(width) srw;
 } ShiftResponse#(numeric type width) deriving(Bits);
 
 (* synthesize *)
 module mkShift(Shift);
-	Wire#(Int#(32)) value <- mkWire;
-	Wire#(Int#(32)) shamt <- mkWire;
+	Wire#(Int#(64)) value <- mkWire;
+	Wire#(Int#(64)) shamt <- mkWire;
 	Wire#(Bool) arithmetic <- mkWire;
-	RWire#(ShiftResponse#(32)) result <- mkRWire;
+	RWire#(ShiftResponse#(64)) result <- mkRWire;
 
 	rule run;
-		Bit#(5) shamt_ = truncate(pack(shamt));
-		Bit#(33) value_ = arithmetic ? signExtend(pack(value)) : zeroExtend(pack(value));
-		result.wset(shift_inner(value, unpack(value_), shamt_, 16));
+		Bit#(5) shamt32 = truncate(pack(shamt));
+		Int#(32) sll_value32 = truncate(value);
+		Bit#(33) sr_value32 = arithmetic ? signExtend(pack(sll_value32)) : zeroExtend(pack(sll_value32));
+		let shift_inner_result32 = shift_inner(sll_value32, unpack(sr_value32), shamt32, 16);
+
+		Bit#(6) shamt64 = truncate(pack(shamt));
+		Bit#(65) sr_value64 = arithmetic ? signExtend(pack(value)) : zeroExtend(pack(value));
+		let shift_inner_result64 = shift_inner(value, unpack(sr_value64), shamt64, 32);
+
+		result.wset(ShiftResponse {
+			sll: shift_inner_result64.sll,
+			sllw: signExtend(shift_inner_result32.sll),
+			sr: shift_inner_result64.sr,
+			srw: signExtend(shift_inner_result32.sr)
+		});
 	endrule
 
 	interface Put request;
-		method Action put(ShiftRequest#(32) request);
+		method Action put(ShiftRequest#(64) request);
 			value <= request.value;
 			shamt <= request.shamt;
 			arithmetic <= request.arithmetic;
@@ -545,12 +652,17 @@ module mkShift(Shift);
 endmodule
 
 typeclass Shifter#(numeric type width, numeric type shamt_width);
-	function ShiftResponse#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(shamt_width) shamt, Integer offset);
+	function ShiftInnerResponse#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(shamt_width) shamt, Integer offset);
 endtypeclass
 
+typedef struct {
+	Int#(width) sll;
+	Int#(width) sr;
+} ShiftInnerResponse#(numeric type width) deriving(Bits);
+
 instance Shifter#(width, 0);
-	function ShiftResponse#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(0) shamt, Integer offset);
-		return ShiftResponse {
+	function ShiftInnerResponse#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(0) shamt, Integer offset);
+		return ShiftInnerResponse {
 			sll: sll,
 			sr: unpack(truncate(pack(sr)))
 		};
@@ -561,7 +673,7 @@ instance Shifter#(width, shamt_width)
 provisos (
 	Shifter#(width, TSub#(shamt_width, 1))
 );
-	function ShiftResponse#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(shamt_width) shamt, Integer offset);
+	function ShiftInnerResponse#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(shamt_width) shamt, Integer offset);
 		if (shamt[valueOf(TSub#(shamt_width, 1))] != 0) begin
 			sll = sll << offset;
 			sr = sr >> offset;

@@ -15,8 +15,8 @@ typedef struct {
 
 typedef struct {
 	State state;
-	Int#(32) pc;
-	Vector#(32, Int#(32)) x_regs;
+	Int#(64) pc;
+	Vector#(32, Int#(64)) x_regs;
 } RvCpuResponse deriving(Bits);
 
 typedef union tagged {
@@ -30,12 +30,12 @@ module mkRvCpu(RvCpu);
 	Reg#(State) decoder_state <- mkReg(tagged Running);
 	Reg#(State) decompressor_state <- mkReg(tagged Running);
 	Reg#(State) execute_state <- mkReg(tagged Running);
-	Reg#(Int#(31)) pc_hi <- mkReg(0);
-	Vector#(32, Reg#(Int#(32))) x_regs <- replicateM(mkReg(0));
+	Reg#(Int#(63)) pc_hi <- mkReg(0);
+	Vector#(32, Reg#(Int#(64))) x_regs <- replicateM(mkReg(0));
 
 	Wire#(Bit#(32)) in <- mkWire;
 
-	RvDecompressor decompressor <- mkRvDecompressor;
+	RvDecompressor decompressor <- mkRvDecompressor(True);
 
 	Wire#(InstructionLength) inst_len <- mkWire;
 
@@ -75,7 +75,7 @@ module mkRvCpu(RvCpu);
 	rule load;
 		let inst = loader;
 
-		Instruction#(Int#(32), Int#(32)) ready_inst = case (inst) matches
+		Instruction#(Int#(64), Int#(64)) ready_inst = case (inst) matches
 			tagged Auipc { rd: .rd, imm: .imm }: return tagged Auipc {
 				rd: rd,
 				imm: imm
@@ -194,7 +194,7 @@ typedef enum {
 	Four
 } InstructionLength deriving(Bits);
 
-function Int#(32) load_x_reg(Vector#(32, Reg#(Int#(32))) x_regs, Either#(XReg, Int#(12)) rs);
+function Int#(64) load_x_reg(Vector#(32, Reg#(Int#(64))) x_regs, Either#(XReg, Int#(12)) rs);
 	case (rs) matches
 		tagged Left .rs: return x_regs[rs];
 		tagged Right .imm: return extend(imm);
