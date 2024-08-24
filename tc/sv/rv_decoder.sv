@@ -24,7 +24,7 @@ module rv_decoder (
 
 		if (in[0+:2] == 2'b11) begin
 			unique casez (in[2+:5])
-				5'b01100: // op
+				5'b011?0: // op, op-32
 					begin
 						sigill = '0;
 
@@ -39,7 +39,7 @@ module rv_decoder (
 					end
 
 				5'b00000, // load
-				5'b00100, // op-imm
+				5'b001?0, // op-imm, op-imm-32
 				5'b00111, // misc-mem
 				5'b11001: // jalr
 					begin
