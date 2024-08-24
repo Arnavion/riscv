@@ -5,9 +5,9 @@ import RvDecoder::*;
 
 interface RvAlu;
 	method ExecuteResult execute(
-		Int#(32) pc,
-		Int#(32) next_pc,
-		Instruction#(Int#(32)) inst
+		Int#(64) pc,
+		Int#(64) next_pc,
+		Instruction#(Int#(64)) inst
 	);
 endinterface
 
@@ -19,8 +19,8 @@ typedef union tagged {
 
 typedef struct {
 	XReg x_regs_rd;
-	Int#(32) x_regs_rd_value;
-	Maybe#(Int#(32)) jump_pc;
+	Int#(64) x_regs_rd_value;
+	Maybe#(Int#(64)) jump_pc;
 } ExecuteResultOk deriving(Bits);
 
 (* synthesize *)
@@ -31,9 +31,9 @@ module mkRvAlu(RvAlu);
 	Shift shift <- mkShift;
 
 	method ExecuteResult execute(
-		Int#(32) pc,
-		Int#(32) next_pc,
-		Instruction#(Int#(32)) inst
+		Int#(64) pc,
+		Int#(64) next_pc,
+		Instruction#(Int#(64)) inst
 	);
 		match { .adder_a, .adder_b, .adder_cin } = case (inst) matches
 			tagged Auipc { imm: .imm }:
@@ -42,7 +42,9 @@ module mkRvAlu(RvAlu);
 			tagged Binary { op: .op, rs1: .rs1, rs2: .rs2 }:
 				case (op) matches
 					tagged Add: return tuple3(rs1, rs2, False);
+					tagged Addw: return tuple3(rs1, rs2, False);
 					tagged Sub: return tuple3(rs1, ~rs2, True);
+					tagged Subw: return tuple3(rs1, ~rs2, True);
 					default: return ?;
 				endcase
 
@@ -57,7 +59,7 @@ module mkRvAlu(RvAlu);
 
 			default: return ?;
 		endcase;
-		let add_result = adder.add(adder_a, adder_b, adder_cin);
+		let add_result = adder.run(adder_a, adder_b, adder_cin);
 
 		match { .cmp_a, .cmp_b, .cmp_signed } = case (inst) matches
 			tagged Binary { op: .op, rs1: .rs1, rs2: .rs2 }:
@@ -98,8 +100,11 @@ module mkRvAlu(RvAlu);
 			tagged Binary { op: .op, rs1: .rs1, rs2: .rs2 }:
 				case (op) matches
 					tagged Sll: return tuple3(rs1, rs2, ?);
+					tagged Sllw: return tuple3(rs1, rs2, ?);
 					tagged Sra: return tuple3(rs1, rs2, True);
+					tagged Sraw: return tuple3(rs1, rs2, True);
 					tagged Srl: return tuple3(rs1, rs2, False);
+					tagged Srlw: return tuple3(rs1, rs2, False);
 					default: return ?;
 				endcase
 
@@ -111,7 +116,7 @@ module mkRvAlu(RvAlu);
 			tagged Auipc { rd: .rd }:
 				return tagged Ok ExecuteResultOk {
 					x_regs_rd: rd,
-					x_regs_rd_value: add_result,
+					x_regs_rd_value: add_result.add,
 					jump_pc: tagged Invalid
 				};
 
@@ -119,15 +124,20 @@ module mkRvAlu(RvAlu);
 				return tagged Ok ExecuteResultOk {
 					x_regs_rd: rd,
 					x_regs_rd_value: case (op) matches
-						tagged Add: return add_result;
+						tagged Add: return add_result.add;
+						tagged Addw: return add_result.addw;
 						tagged And: return logical_result.and_;
 						tagged Or: return logical_result.or_;
 						tagged Sll: return shift_result.sll;
+						tagged Sllw: return shift_result.sll;
 						tagged Slt: return cmp_result.lt ? 1 : 0;
 						tagged Sltu: return cmp_result.lt ? 1 : 0;
 						tagged Sra: return shift_result.sr;
+						tagged Sraw: return shift_result.sr;
 						tagged Srl: return shift_result.sr;
-						tagged Sub: return add_result;
+						tagged Srlw: return shift_result.sr;
+						tagged Sub: return add_result.add;
+						tagged Subw: return add_result.addw;
 						tagged Xor: return logical_result.xor_;
 					endcase,
 					jump_pc: tagged Invalid
@@ -145,7 +155,7 @@ module mkRvAlu(RvAlu);
 				return tagged Ok ExecuteResultOk {
 					x_regs_rd: 0,
 					x_regs_rd_value: ?,
-					jump_pc: jump ? tagged Valid add_result : tagged Invalid
+					jump_pc: jump ? tagged Valid add_result.add : tagged Invalid
 				};
 			end
 
@@ -153,7 +163,7 @@ module mkRvAlu(RvAlu);
 				return tagged Ok ExecuteResultOk {
 					x_regs_rd: rd,
 					x_regs_rd_value: next_pc,
-					jump_pc: tagged Valid add_result
+					jump_pc: tagged Valid add_result.add
 				};
 
 			tagged Lui { rd: .rd, imm: .imm }:
@@ -169,13 +179,23 @@ module mkRvAlu(RvAlu);
 endmodule
 
 interface Adder;
-	method Int#(32) add(Int#(32) arg1, Int#(32) arg2, Bool cin);
+	method AddResult#(64) run(Int#(64) arg1, Int#(64) arg2, Bool cin);
 endinterface
+
+typedef struct {
+	Int#(width) add;
+	Int#(width) addw;
+} AddResult#(numeric type width) deriving(Bits);
 
 (* synthesize *)
 module mkAdder(Adder);
-	method Int#(32) add(Int#(32) arg1, Int#(32) arg2, Bool cin);
-		return add_inner(arg1, arg2, cin);
+	method AddResult#(64) run(Int#(64) arg1, Int#(64) arg2, Bool cin);
+		let add = add_inner(arg1, arg2, cin);
+		Int#(32) addw = truncate(add);
+		return AddResult {
+			add: add,
+			addw: extend(addw)
+		};
 	endmethod
 endmodule
 
@@ -186,7 +206,7 @@ function Int#(width) add_inner(Int#(width) arg1, Int#(width) arg2, Bool cin);
 endfunction
 
 interface Cmp;
-	method CmpResult cmp(Int#(32) arg1, Int#(32) arg2, Bool cmp_signed);
+	method CmpResult cmp(Int#(64) arg1, Int#(64) arg2, Bool cmp_signed);
 endinterface
 
 typedef struct {
@@ -196,7 +216,7 @@ typedef struct {
 
 (* synthesize *)
 module mkCmp(Cmp);
-	method CmpResult cmp(Int#(32) arg1, Int#(32) arg2, Bool cmp_signed);
+	method CmpResult cmp(Int#(64) arg1, Int#(64) arg2, Bool cmp_signed);
 		return cmp_inner(pack(arg1), pack(arg2), cmp_signed);
 	endmethod
 endmodule
@@ -237,7 +257,7 @@ provisos (
 endinstance
 
 interface Logical;
-	method LogicalResult#(32) run(Int#(32) arg1, Int#(32) arg2);
+	method LogicalResult#(64) run(Int#(64) arg1, Int#(64) arg2);
 endinterface
 
 typedef struct {
@@ -248,7 +268,7 @@ typedef struct {
 
 (* synthesize *)
 module mkLogical(Logical);
-	method LogicalResult#(32) run(Int#(32) arg1, Int#(32) arg2);
+	method LogicalResult#(64) run(Int#(64) arg1, Int#(64) arg2);
 		return logical_inner(arg1, arg2);
 	endmethod
 endmodule
@@ -264,30 +284,49 @@ function LogicalResult#(width) logical_inner(Int#(width) arg1, Int#(width) arg2)
 endfunction
 
 interface Shift;
-	method ShiftResult#(32) run(Int#(32) value, Int#(32) shamt, Bool arithmetic);
+	method ShiftResult#(64) run(Int#(64) value, Int#(64) shamt, Bool arithmetic);
 endinterface
 
 typedef struct {
 	Int#(width) sll;
+	Int#(width) sllw;
 	Int#(width) sr;
+	Int#(width) srw;
 } ShiftResult#(numeric type width) deriving(Bits);
 
 (* synthesize *)
 module mkShift(Shift);
-	method ShiftResult#(32) run(Int#(32) value, Int#(32) shamt, Bool arithmetic);
-		Bit#(5) shamt_ = truncate(pack(shamt));
-		Bit#(33) value_ = arithmetic ? signExtend(pack(value)) : zeroExtend(pack(value));
-		return shift_inner(value, unpack(value_), shamt_, 16);
+	method ShiftResult#(64) run(Int#(64) value, Int#(64) shamt, Bool arithmetic);
+		Bit#(5) shamt32 = truncate(pack(shamt));
+		Int#(32) sll_value32 = truncate(value);
+		Bit#(33) sr_value32 = arithmetic ? signExtend(pack(sll_value32)) : zeroExtend(pack(sll_value32));
+		let shift_inner_result32 = shift_inner(sll_value32, unpack(sr_value32), shamt32, 16);
+
+		Bit#(6) shamt64 = truncate(pack(shamt));
+		Bit#(65) sr_value64 = arithmetic ? signExtend(pack(value)) : zeroExtend(pack(value));
+		let shift_inner_result64 = shift_inner(value, unpack(sr_value64), shamt64, 32);
+
+		return ShiftResult {
+			sll: shift_inner_result64.sll,
+			sllw: signExtend(shift_inner_result32.sll),
+			sr: shift_inner_result64.sr,
+			srw: signExtend(shift_inner_result32.sr)
+		};
 	endmethod
 endmodule
 
 typeclass Shifter#(numeric type width, numeric type shamt_width);
-	function ShiftResult#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(shamt_width) shamt, Integer offset);
+	function ShiftInnerResult#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(shamt_width) shamt, Integer offset);
 endtypeclass
 
+typedef struct {
+	Int#(width) sll;
+	Int#(width) sr;
+} ShiftInnerResult#(numeric type width) deriving(Bits);
+
 instance Shifter#(width, 0);
-	function ShiftResult#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(0) shamt, Integer offset);
-		return ShiftResult {
+	function ShiftInnerResult#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(0) shamt, Integer offset);
+		return ShiftInnerResult {
 			sll: sll,
 			sr: unpack(truncate(pack(sr)))
 		};
@@ -298,7 +337,7 @@ instance Shifter#(width, shamt_width)
 provisos (
 	Shifter#(width, TSub#(shamt_width, 1))
 );
-	function ShiftResult#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(shamt_width) shamt, Integer offset);
+	function ShiftInnerResult#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(shamt_width) shamt, Integer offset);
 		if (shamt[valueOf(TSub#(shamt_width, 1))] != 0) begin
 			sll = sll << offset;
 			sr = sr >> offset;

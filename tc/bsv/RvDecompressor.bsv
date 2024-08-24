@@ -10,7 +10,7 @@ typedef union tagged {
 } DecompressedInstruction deriving(Bits);
 
 (* synthesize *)
-module mkRvDecompressor(RvDecompressor);
+module mkRvDecompressor#(parameter Bool rv64)(RvDecompressor);
 	method Maybe#(DecompressedInstruction) decompress(Bit#(32) in);
 		case (in[1:0]) matches
 			2'b00: case (in[15:13]) matches
@@ -30,9 +30,14 @@ module mkRvDecompressor(RvDecompressor);
 				3'b010: return tagged Valid tagged Compressed
 					type_i(OpCode_Load, { 2'b01, in[4:2] }, 3'b010, { 2'b01, in[9:7] }, zeroExtend({ in[5], in[12:10], in[6], 2'b00 }));
 
-				// flw
-				3'b011: return tagged Valid tagged Compressed
-					type_i(OpCode_LoadFp, { 2'b01, in[4:2] }, 3'b010, { 2'b01, in[9:7] }, zeroExtend({ in[5], in[12:10], in[6], 2'b00 }));
+				3'b011: if (rv64)
+					// ld
+					return tagged Valid tagged Compressed
+						type_i(OpCode_Load, { 2'b01, in[4:2] }, 3'b011, { 2'b01, in[9:7] }, zeroExtend({ in[6:5], in[12:10], 3'b000 }));
+				else
+					// flw
+					return tagged Valid tagged Compressed
+						type_i(OpCode_LoadFp, { 2'b01, in[4:2] }, 3'b010, { 2'b01, in[9:7] }, zeroExtend({ in[5], in[12:10], in[6], 2'b00 }));
 
 				// Zcb
 				3'b100: return tagged Invalid;
@@ -45,9 +50,14 @@ module mkRvDecompressor(RvDecompressor);
 				3'b110: return tagged Valid tagged Compressed
 					type_s(OpCode_Store, 3'b010, { 2'b01, in[9:7] }, { 2'b01, in[4:2] }, zeroExtend({ in[5], in[12:10], in[6], 2'b00 }));
 
-				// fsw
-				3'b111: return tagged Valid tagged Compressed
-					type_s(OpCode_StoreFp, 3'b010, { 2'b01, in[9:7] }, { 2'b01, in[4:2] }, zeroExtend({ in[5], in[12:10], in[6], 2'b00 }));
+				3'b111: if (rv64)
+					// sd
+					return tagged Valid tagged Compressed
+						type_s(OpCode_Store, 3'b011, { 2'b01, in[9:7] }, { 2'b01, in[4:2] }, zeroExtend({ in[6:5], in[12:10], 3'b000 }));
+				else
+					// fsw
+					return tagged Valid tagged Compressed
+						type_s(OpCode_StoreFp, 3'b010, { 2'b01, in[9:7] }, { 2'b01, in[4:2] }, zeroExtend({ in[5], in[12:10], in[6], 2'b00 }));
 			endcase
 
 			2'b01: case (in[15:13]) matches
@@ -55,9 +65,14 @@ module mkRvDecompressor(RvDecompressor);
 				3'b000: return tagged Valid tagged Compressed
 					type_i(OpCode_OpImm, in[11:7], 3'b000, in[11:7], signExtend({ in[12], in[6:2] }));
 
-				// jal
-				3'b001: return tagged Valid tagged Compressed
-					type_j(OpCode_Jal, 5'b00001, signExtend({ in[12], in[8], in[10:9], in[6], in[7], in[2], in[11], in[5:3] }));
+				3'b001: if (rv64)
+					// addiw
+					return tagged Valid tagged Compressed
+						type_i(OpCode_OpImm32, in[11:7], 3'b000, in[11:7], signExtend({ in[12], in[6:2] }));
+				else
+					// jal
+					return tagged Valid tagged Compressed
+						type_j(OpCode_Jal, 5'b00001, signExtend({ in[12], in[8], in[10:9], in[6], in[7], in[2], in[11], in[5:3] }));
 
 				// li
 				3'b010: return tagged Valid tagged Compressed
@@ -102,6 +117,20 @@ module mkRvDecompressor(RvDecompressor);
 						3'b011: return tagged Valid tagged Compressed
 							type_r(OpCode_Op, { 2'b01, in[9:7] }, 3'b111, { 2'b01, in[9:7] }, { 2'b01, in[4:2] }, 7'b0000000);
 
+						3'b100: if (rv64)
+							// subw
+							return tagged Valid tagged Compressed
+								type_r(OpCode_Op32, { 2'b01, in[9:7] }, 3'b000, { 2'b01, in[9:7] }, { 2'b01, in[4:2] }, 7'b0100000);
+						else
+							return tagged Invalid;
+
+						3'b101: if (rv64)
+							// addw
+							return tagged Valid tagged Compressed
+								type_r(OpCode_Op32, { 2'b01, in[9:7] }, 3'b000, { 2'b01, in[9:7] }, { 2'b01, in[4:2] }, 7'b0000000);
+						else
+							return tagged Invalid;
+
 						default: return tagged Invalid;
 					endcase
 				endcase
@@ -132,9 +161,14 @@ module mkRvDecompressor(RvDecompressor);
 				3'b010: return tagged Valid tagged Compressed
 					type_i(OpCode_Load, in[11:7], 3'b010, 5'b00010, zeroExtend({ in[3:2], in[12], in[6:4], 2'b00 }));
 
-				// flwsp
-				3'b011: return tagged Valid tagged Compressed
-					type_i(OpCode_LoadFp, in[11:7], 3'b010, 5'b00010, zeroExtend({ in[3:2], in[12], in[6:4], 2'b00 }));
+				3'b011: if (rv64)
+					// ldsp
+					return tagged Valid tagged Compressed
+						type_i(OpCode_Load, in[11:7], 3'b011, 5'b00010, zeroExtend({ in[4:2], in[12], in[6:5], 3'b000 }));
+				else
+					// flwsp
+					return tagged Valid tagged Compressed
+						type_i(OpCode_LoadFp, in[11:7], 3'b010, 5'b00010, zeroExtend({ in[3:2], in[12], in[6:4], 2'b00 }));
 
 				3'b100: case ({ | in[11:7], | in[6:2] }) matches
 					2'b00: if (unpack(in[12]))
@@ -162,9 +196,14 @@ module mkRvDecompressor(RvDecompressor);
 				3'b110: return tagged Valid tagged Compressed
 					type_s(OpCode_Store, 3'b010, 5'b00010, in[6:2], zeroExtend({ in[8:7], in[12:9], 2'b00 }));
 
-				// fswsp
-				3'b111: return tagged Valid tagged Compressed
-					type_s(OpCode_StoreFp, 3'b010, 5'b00010, in[6:2], zeroExtend({ in[8:7], in[12:9], 2'b00 }));
+				3'b111: if (rv64)
+					// sdsp
+					return tagged Valid tagged Compressed
+						type_s(OpCode_Store, 3'b011, 5'b00010, in[6:2], zeroExtend({ in[9:7], in[12:10], 3'b000 }));
+				else
+					// fswsp
+					return tagged Valid tagged Compressed
+						type_s(OpCode_StoreFp, 3'b010, 5'b00010, in[6:2], zeroExtend({ in[8:7], in[12:9], 2'b00 }));
 			endcase
 
 			// uncompressed

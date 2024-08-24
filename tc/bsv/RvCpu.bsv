@@ -12,8 +12,8 @@ endinterface
 
 typedef struct {
 	State state;
-	Int#(32) pc;
-	Vector#(32, Int#(32)) x_regs;
+	Int#(64) pc;
+	Vector#(32, Int#(64)) x_regs;
 } InspectResult deriving(Bits);
 
 typedef union tagged {
@@ -25,12 +25,12 @@ typedef union tagged {
 (* synthesize *)
 module mkRvCpu(RvCpu);
 	Reg#(State) state <- mkReg(tagged Running);
-	Reg#(Int#(32)) pc <- mkReg(0);
-	Vector#(32, Reg#(Int#(32))) x_regs <- replicateM(mkReg(0));
+	Reg#(Int#(64)) pc <- mkReg(0);
+	Vector#(32, Reg#(Int#(64))) x_regs <- replicateM(mkReg(0));
 
 	RvAlu alu <- mkRvAlu;
 	RvDecoder decoder <- mkRvDecoder;
-	RvDecompressor decompressor <- mkRvDecompressor;
+	RvDecompressor decompressor <- mkRvDecompressor(True);
 
 	method Action feed(Bit#(32) in) if (state matches Running);
 		case (decode(decompressor, decoder, in)) matches
@@ -39,7 +39,7 @@ module mkRvCpu(RvCpu);
 			tagged Valid { .inst, .inst_len }: begin
 				let x_regs_ = readVReg(x_regs);
 
-				Instruction#(Int#(32)) ready_inst = case (inst) matches
+				Instruction#(Int#(64)) ready_inst = case (inst) matches
 					tagged Auipc { rd: .rd, imm: .imm }: return tagged Auipc {
 						rd: rd,
 						imm: imm
@@ -135,7 +135,7 @@ typedef enum {
 	Four
 } InstructionLength deriving(Bits);
 
-function Maybe#(Tuple2#(Instruction#(Either#(XReg, Int#(32))), InstructionLength)) decode(RvDecompressor decompressor, RvDecoder decoder, Bit#(32) in);
+function Maybe#(Tuple2#(Instruction#(Either#(XReg, Int#(64))), InstructionLength)) decode(RvDecompressor decompressor, RvDecoder decoder, Bit#(32) in);
 	let inst_decompressed = decompressor.decompress(in);
 
 	case (inst_decompressed) matches
@@ -156,7 +156,7 @@ function Maybe#(Tuple2#(Instruction#(Either#(XReg, Int#(32))), InstructionLength
 	endcase
 endfunction
 
-function Int#(32) fetch_x_reg(Vector#(32, Int#(32)) x_regs, Either#(XReg, Int#(32)) rs);
+function Int#(64) fetch_x_reg(Vector#(32, Int#(64)) x_regs, Either#(XReg, Int#(64)) rs);
 	case (rs) matches
 		tagged Left .rs: return x_regs[rs];
 		tagged Right .rs: return rs;

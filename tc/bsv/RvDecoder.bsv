@@ -1,12 +1,12 @@
 import RvCommon::*;
 
 interface RvDecoder;
-	method Maybe#(Instruction#(Either#(XReg, Int#(32)))) decode(Bit#(32) in);
+	method Maybe#(Instruction#(Either#(XReg, Int#(64)))) decode(Bit#(32) in);
 endinterface
 
 (* synthesize *)
 module mkRvDecoder(RvDecoder);
-	method Maybe#(Instruction#(Either#(XReg, Int#(32)))) decode(Bit#(32) in);
+	method Maybe#(Instruction#(Either#(XReg, Int#(64)))) decode(Bit#(32) in);
 		if (unpack(~& in[1:0]))
 			return tagged Invalid;
 
@@ -37,16 +37,16 @@ module mkRvDecoder(RvDecoder);
 
 				OpCode_OpImm: case (funct3) matches
 					3'b000: return tagged Valid tagged Binary { op: Add, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
-					3'b001: case (pack(i_imm)[11:5]) matches
-						7'b0000000: return tagged Valid tagged Binary { op: Sll, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
+					3'b001: case (pack(i_imm)[11:6]) matches
+						6'b000000: return tagged Valid tagged Binary { op: Sll, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
 						default: return tagged Invalid;
 					endcase
 					3'b010: return tagged Valid tagged Binary { op: Slt, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
 					3'b011: return tagged Valid tagged Binary { op: Sltu, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
 					3'b100: return tagged Valid tagged Binary { op: Xor, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
-					3'b101: case (pack(i_imm)[11:5]) matches
-						7'b0000000: return tagged Valid tagged Binary { op: Srl, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
-						7'b0100000: return tagged Valid tagged Binary { op: Sra, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
+					3'b101: case (pack(i_imm)[11:6]) matches
+						6'b000000: return tagged Valid tagged Binary { op: Srl, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
+						6'b010000: return tagged Valid tagged Binary { op: Sra, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
 						default: return tagged Invalid;
 					endcase
 					3'b110: return tagged Valid tagged Binary { op: Or, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
@@ -54,6 +54,20 @@ module mkRvDecoder(RvDecoder);
 				endcase
 
 				OpCode_Auipc: return tagged Valid tagged Auipc { rd: rd, imm: u_imm };
+
+				OpCode_OpImm32: case (funct3) matches
+					3'b000: return tagged Valid tagged Binary { op: Addw, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
+					3'b001: case (pack(i_imm)[11:5]) matches
+						7'b0000000: return tagged Valid tagged Binary { op: Sllw, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
+						default: return tagged Invalid;
+					endcase
+					3'b101: case (pack(i_imm)[11:5]) matches
+						7'b0000000: return tagged Valid tagged Binary { op: Srlw, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
+						7'b0100000: return tagged Valid tagged Binary { op: Sraw, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
+						default: return tagged Invalid;
+					endcase
+					default: return tagged Invalid;
+				endcase
 
 				OpCode_Store: case (parse_store_op(funct3)) matches
 					tagged Invalid: return tagged Invalid;
@@ -76,6 +90,15 @@ module mkRvDecoder(RvDecoder);
 				endcase
 
 				OpCode_Lui: return tagged Valid tagged Lui { rd: rd, imm: u_imm };
+
+				OpCode_Op32: case ({ funct3, funct7 }) matches
+					10'b000_0000000: return tagged Valid tagged Binary { op: Addw, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b000_0100000: return tagged Valid tagged Binary { op: Subw, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b001_0000000: return tagged Valid tagged Binary { op: Sllw, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b101_0000000: return tagged Valid tagged Binary { op: Srlw, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b101_0100000: return tagged Valid tagged Binary { op: Sraw, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					default: return tagged Invalid;
+				endcase
 
 				OpCode_Branch: case (parse_branch_op(funct3)) matches
 					tagged Invalid: return tagged Invalid;
@@ -120,8 +143,10 @@ function Maybe#(LoadOp) parse_load_op(Bit#(3) funct3);
 		3'b000: return tagged Valid Byte;
 		3'b001: return tagged Valid HalfWord;
 		3'b010: return tagged Valid Word;
+		3'b011: return tagged Valid DoubleWord;
 		3'b100: return tagged Valid ByteUnsigned;
 		3'b101: return tagged Valid HalfWordUnsigned;
+		3'b110: return tagged Valid WordUnsigned;
 		default: return tagged Invalid;
 	endcase
 endfunction
@@ -131,6 +156,7 @@ function Maybe#(StoreOp) parse_store_op(Bit#(3) funct3);
 		3'b000: return tagged Valid Byte;
 		3'b001: return tagged Valid HalfWord;
 		3'b010: return tagged Valid Word;
+		3'b011: return tagged Valid DoubleWord;
 		default: return tagged Invalid;
 	endcase
 endfunction
