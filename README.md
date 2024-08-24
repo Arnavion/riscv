@@ -12,6 +12,8 @@ Per the [unprivileged ISA spec version 20240411,](https://github.com/riscv/riscv
 
 - RV32I 2.1 (32-bit integer register instructions)
 
+- RV64I 2.1 (64-bit integer register instructions)
+
 - Zca 1.0.0 (compressed instructions for integer registers)
 
 Further extensions are not supported, notably instructions for hardware multiplication and division (M) and hardware floats (F, D).
@@ -26,9 +28,19 @@ The `tc/solutions/` directory contains solutions for some of the game's architec
 
 The `*.S` files contain the assembler programs. Running `cargo run -p as -- tc/solutions/foo.S` will print the compiled program to stdout which can then be copy-pasted into the game's Program component. The component must have "Data width" set to "16 Bit". Running `cargo run -p as -- --compressed tc/solutions/foo.S` will do the same but enable compressed instructions.
 
-The `*.c` files contain equivalent C solutions that can be put in [Compiler Explorer](https://gcc.godbolt.org/) with compiler set to `RISC-V (32-bits) gcc` or `RISC-V rv32gc clang` and flags set to `--std=c23 -Os -march=rv32id`. Note that the assembler programs are hand-written and will not exactly match the compiler's output.
+The assembler does not consider whether the target architecture is 32-bit or 64-bit and will simply encode whatever instructions are given to it. This works fine because RV64I does not modify the behavior of RV32I instructions, except for a few situations:
 
-The emulator has the Level Input and Level Output wired up to memory address `2^32 - 8`, which is why the assembler programs refer to `lbu rd, -8(zero)` and the C programs refer to `IO = (volatile uint8_t*)(intptr_t)-8; x = *IO;`.
+1. The shift instructions take 5-bit shift amount in RV32I and 6-bit shift amount in RV64I.
+
+2. The pseudo-instructions `sext.b`, `sext.h` and `zext.h` shift the source register by different amounts in RV32I vs RV64I.
+
+3. `c.jal` is only valid in RV32C; an RV64C implementation would interpret it as `c.addiw` instead. Thus `jal` cannot be compressed into `c.jal` on RV64C.
+
+Therefore the assembler also has a `--64` flag to explicitly set the target architecture to RV64I. When combined with the `--compressed` flag it will instruct the assembler to not compress `jal`.
+
+The `*.c` files contain equivalent C solutions that can be put in [Compiler Explorer](https://gcc.godbolt.org/) with compiler set to `RISC-V (32-bits) gcc` or `RISC-V rv32gc clang` or corresponding 64-bit version, and flags set to `--std=c23 -Os -march=rv32id` or `--std=c23 -Os -march=rv64id`. Note that the assembler programs are hand-written and will not exactly match the compiler's output.
+
+The emulator has the Level Input and Level Output wired up to memory address `2^xlen - 8`, which is why the assembler programs refer to `lbu rd, -8(zero)` and the C programs refer to `IO = (volatile uint8_t*)(intptr_t)-8; x = *IO;`.
 
 ---
 
