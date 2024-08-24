@@ -12,8 +12,9 @@ import RvDecompressorCommon::*;
 (* descending_urgency = "ebreak, mv_add" *)
 (* descending_urgency = "jr_jalr, mv_add" *)
 (* descending_urgency = "addi4spn, invalid" *)
-(* descending_urgency = "fld_lw_flw, invalid" *)
-(* descending_urgency = "fsd_sw_fsw, invalid" *)
+(* descending_urgency = "fld_ld_lw_flw, invalid" *)
+(* descending_urgency = "fsd_sd_sw_fsw, invalid" *)
+(* descending_urgency = "addi_addiw_li, invalid" *)
 (* descending_urgency = "addi_li, invalid" *)
 (* descending_urgency = "jal_j, invalid" *)
 (* descending_urgency = "addi16sp, invalid" *)
@@ -21,15 +22,17 @@ import RvDecompressorCommon::*;
 (* descending_urgency = "srli_srai, invalid" *)
 (* descending_urgency = "andi, invalid" *)
 (* descending_urgency = "sub_xor_or_and, invalid" *)
+(* descending_urgency = "subw_addw, invalid" *)
+(* descending_urgency = "j, invalid" *)
 (* descending_urgency = "beqz_bnez, invalid" *)
 (* descending_urgency = "slli, invalid" *)
-(* descending_urgency = "fldsp_lwsp_flwsp, invalid" *)
+(* descending_urgency = "fldsp_ldsp_lwsp_flwsp, invalid" *)
 (* descending_urgency = "ebreak, invalid" *)
 (* descending_urgency = "jr_jalr, invalid" *)
 (* descending_urgency = "mv_add, invalid" *)
-(* descending_urgency = "fsdsp_swsp_fswsp, invalid" *)
+(* descending_urgency = "fsdsp_sdsp_swsp_fswsp, invalid" *)
 (* descending_urgency = "uncompressed, invalid" *)
-module mkRvDecompressorPriority(RvDecompressor);
+module mkRvDecompressorPriority#(parameter Bool rv64)(RvDecompressor);
 	FIFO#(RvDecompressorRequest) args_ <- mkBypassFIFO;
 	GetS#(RvDecompressorRequest) args = fifoToGetS(args_);
 	FIFO#(RvDecompressorResponse) result_ <- mkBypassFIFO;
@@ -45,27 +48,37 @@ module mkRvDecompressorPriority(RvDecompressor);
 		));
 	endrule
 
-	rule fld_lw_flw(args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b0??_???_???_??_???_00 &&& unpack(| in[14:13]));
+	rule fld_ld_lw_flw(args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b0??_???_???_??_???_00 &&& unpack(| in[14:13]));
 		write_out(in, result, type_i(
-			opcode_load(in[13]),
+			opcode_load(rv64 ? ~in[14] : in[13]),
 			{ 2'b01, in[4:2] },
-			{ 2'b01, ~in[14] },
+			{ 2'b01, rv64 ? in[13] : ~in[14] },
 			{ 2'b01, in[9:7] },
-			zeroExtend({ ~in[14] & in[6], in[5], in[12:10], in[14] & in[6], 2'b00 })
+			zeroExtend({ (rv64 ? in[13] : ~in[14]) & in[6], in[5], in[12:10], (rv64 ? ~in[13] : in[14]) & in[6], 2'b00 })
 		));
 	endrule
 
-	rule fsd_sw_fsw(args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b1??_???_???_??_???_00 &&& unpack(| in[14:13]));
+	rule fsd_sd_sw_fsw(args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b1??_???_???_??_???_00 &&& unpack(| in[14:13]));
 		write_out(in, result, type_s(
-			opcode_store(in[13]),
-			{ 2'b01, ~in[14] },
+			opcode_store(rv64 ? ~in[14] : in[13]),
+			{ 2'b01, rv64 ? in[13] : ~in[14] },
 			{ 2'b01, in[9:7] },
 			{ 2'b01, in[4:2] },
-			zeroExtend({ ~in[14] & in[6], in[5], in[12:10], in[14] & in[6], 2'b00 })
+			zeroExtend({ (rv64 ? in[13] : ~in[14]) & in[6], in[5], in[12:10], (rv64 ? ~in[13] : in[14]) & in[6], 2'b00 })
 		));
 	endrule
 
-	rule addi_li(args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b0?0_?_?????_?????_01);
+	rule addi_addiw_li(rv64 &&& args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b0??_?_?????_?????_01 &&& unpack(~& in[14:13]));
+		write_out(in, result, type_i(
+			opcode_opimm(in[13]),
+			in[11:7],
+			3'b000,
+			signExtend(~in[14]) & in[11:7],
+			signExtend({ in[12], in[6:2] })
+		));
+	endrule
+
+	rule addi_li(!rv64 &&& args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b0?0_?_?????_?????_01);
 		write_out(in, result, type_i(
 			OpCode_OpImm,
 			in[11:7],
@@ -75,7 +88,7 @@ module mkRvDecompressorPriority(RvDecompressor);
 		));
 	endrule
 
-	rule jal_j(args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b?01_???????????_01);
+	rule jal_j(!rv64 &&& args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b?01_???????????_01);
 		write_out(in, result, type_j(
 			OpCode_Jal,
 			{ 4'b0000, ~in[15] },
@@ -132,6 +145,25 @@ module mkRvDecompressorPriority(RvDecompressor);
 		));
 	endrule
 
+	rule subw_addw(rv64 &&& args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b100_111_???_0?_???_01);
+		write_out(in, result, type_r(
+			OpCode_Op32,
+			{ 2'b01, in[9:7] },
+			3'b000,
+			{ 2'b01, in[9:7] },
+			{ 2'b01, in[4:2] },
+			{ 1'b0, ~in[5], 5'b00000 }
+		));
+	endrule
+
+	rule j(rv64 &&& args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b101_???????????_01);
+		write_out(in, result, type_j(
+			OpCode_Jal,
+			5'b00000,
+			signExtend({ in[12], in[8], in[10:9], in[6], in[7], in[2], in[11], in[5:3] })
+		));
+	endrule
+
 	rule beqz_bnez(args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b11?_?_?????_?????_01);
 		write_out(in, result, type_b(
 			OpCode_Branch,
@@ -152,13 +184,13 @@ module mkRvDecompressorPriority(RvDecompressor);
 		));
 	endrule
 
-	rule fldsp_lwsp_flwsp(args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b0??_?_?????_?????_10 &&& unpack(| in[14:13]));
+	rule fldsp_ldsp_lwsp_flwsp(args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b0??_?_?????_?????_10 &&& unpack(| in[14:13]));
 		write_out(in, result, type_i(
-			opcode_load(in[13]),
+			opcode_load(rv64 ? ~in[14] : in[13]),
 			in[11:7],
-			{ 2'b01, ~in[14] },
+			{ 2'b01, rv64 ? in[13] : ~in[14] },
 			5'b00010,
-			zeroExtend({ ~in[14] & in[4], in[3:2], in[12], in[6:5], in[14] & in[4], 2'b00 })
+			zeroExtend({ (rv64 ? in[13] : ~in[14]) & in[4], in[3:2], in[12], in[6:5], (rv64 ? ~in[13] : in[14]) & in[4], 2'b00 })
 		));
 	endrule
 
@@ -194,13 +226,13 @@ module mkRvDecompressorPriority(RvDecompressor);
 		));
 	endrule
 
-	rule fsdsp_swsp_fswsp(args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b1??_??????_?????_10 &&& unpack(| in[14:13]));
+	rule fsdsp_sdsp_swsp_fswsp(args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b1??_??????_?????_10 &&& unpack(| in[14:13]));
 		write_out(in, result, type_s(
-			opcode_store(in[13]),
-			{ 2'b01, ~in[14] },
+			opcode_store(rv64 ? ~in[14] : in[13]),
+			{ 2'b01, rv64 ? in[13] : ~in[14] },
 			5'b00010,
 			in[6:2],
-			zeroExtend({ ~in[14] & in[9], in[8:7], in[12:10], in[14] & in[9], 2'b00 })
+			zeroExtend({ (rv64 ? in[13] : ~in[14]) & in[9], in[8:7], in[12:10], (rv64 ? ~in[13] : in[14]) & in[9], 2'b00 })
 		));
 	endrule
 
@@ -236,8 +268,9 @@ import Vector::*;
 
 (* synthesize *)
 module mkTest();
-	let decompressor <- mkRvDecompressorPriority;
-	let m <- mkTestDecompressorModule(decompressor);
+	let decompressor32 <- mkRvDecompressorPriority(False);
+	let decompressor64 <- mkRvDecompressorPriority(True);
+	let m <- mkTestDecompressorModule(decompressor32, decompressor64);
 	return m;
 endmodule
 `endif
