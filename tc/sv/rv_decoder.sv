@@ -1,4 +1,7 @@
-module rv_decoder (
+module rv_decoder #(
+	parameter rv64 = 1,
+	localparam xlen = rv64 ? 64 : 32
+) (
 	input bit[31:0] in,
 
 	output bit sigill,
@@ -9,7 +12,7 @@ module rv_decoder (
 	output logic[2:0] funct3,
 	output logic[6:0] funct7,
 	output logic[4:0] funct5,
-	output logic[31:0] imm
+	output logic[xlen - 1:0] imm
 );
 	typedef enum {
 		InstructionType_R,
@@ -35,11 +38,13 @@ module rv_decoder (
 	always_comb begin
 		if (in[0+:2] == 2'b11) begin
 			unique case (in[2+:5])
-				5'b01100: // op
+				5'b01100, // op
+				5'b01110: // op-32
 					instruction_type = InstructionType_R;
 
 				5'b00000, // load
 				5'b00100, // op-imm
+				5'b00110, // op-imm-32
 				5'b00111, // misc-mem
 				5'b11001, // jalr
 				5'b11100: // system
@@ -125,19 +130,29 @@ module rv_decoder (
 
 		unique case (instruction_type)
 			InstructionType_I:
-				imm = {{20{in[31]}}, in[20+:12]};
+				imm = rv64 ?
+					{{52{in[31]}}, in[20+:12]} :
+					{{20{in[31]}}, in[20+:12]};
 
 			InstructionType_S:
-				imm = {{20{in[31]}}, in[25+:7], in[7+:5]};
+				imm = rv64 ?
+					{{52{in[31]}}, in[25+:7], in[7+:5]} :
+					{{20{in[31]}}, in[25+:7], in[7+:5]};
 
 			InstructionType_B:
-				imm = {{19{in[31]}}, in[31], in[7], in[25+:6], in[8+:4], 1'b0};
+				imm = rv64 ?
+					{{51{in[31]}}, in[31], in[7], in[25+:6], in[8+:4], 1'b0} :
+					{{19{in[31]}}, in[31], in[7], in[25+:6], in[8+:4], 1'b0};
 
 			InstructionType_U:
-				imm = {in[12+:20], 12'b0};
+				imm = rv64 ?
+					{{32{in[31]}}, in[12+:20], 12'b0} :
+					{in[12+:20], 12'b0};
 
 			InstructionType_J:
-				imm = {{11{in[31]}}, in[31], in[12+:8], in[20], in[21+:10], 1'b0};
+				imm = rv64 ?
+					{{43{in[31]}}, in[31], in[12+:8], in[20], in[21+:10], 1'b0} :
+					{{11{in[31]}}, in[31], in[12+:8], in[20], in[21+:10], 1'b0};
 
 			InstructionType_R,
 			InstructionType_Illegal:
