@@ -21,8 +21,10 @@ print:
 .PHONY: test
 test:
 	cargo test --workspace
-	for compress in 'false' 'true'; do \
-		for f in tc/*.S; do cargo run -- "--compress=$$compress" "$$f" >/dev/null || exit 1; done; \
+	for bitness in '--32' '--64'; do \
+		for compress in 'false' 'true'; do \
+			for f in tc/*.S; do cargo run -- $$bitness "--compress=$$compress" "$$f" >/dev/null || exit 1; done; \
+		done; \
 	done
 	cargo clippy --workspace --tests --examples
 	cargo machete
