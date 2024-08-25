@@ -1,16 +1,14 @@
+li a5, -8
+
 li a4, 5         # toggle magnet
 
-lbu a0, -8(zero) # disk_nr
-lbu a1, -8(zero) # source
-lbu a2, -8(zero) # destination
-lbu a3, -8(zero) # spare
+lbu a0, 0(a5) # disk_nr
+lbu a1, 0(a5) # source
+lbu a2, 0(a5) # destination
+lbu a3, 0(a5) # spare
 
 li sp, 0x100
-<<<<<<< HEAD
-j 24 # move_start
-=======
 j 12 # move_start
->>>>>>> 1faa157 (Support RV32C.)
 
 # move
 #
@@ -41,10 +39,10 @@ mv a3, s2
 j -30 # move
 
 # move_middle
-sb s1, -8(zero)
-sb a4, -8(zero)
-sb s2, -8(zero)
-sb a4, -8(zero)
+sb s1, 0(a5)
+sb a4, 0(a5)
+sb s2, 0(a5)
+sb a4, 0(a5)
 
 beqz s0, 18 # move_end
 
@@ -52,7 +50,7 @@ addi s0, s0, -1
 xor s1, s1, s3
 xor s3, s1, s3
 xor s1, s1, s3
-j -46 # move_start_post, tail call
+j -40 # move_start_post, tail call
 
 # move_end
 lw s0, 0(sp)
@@ -60,4 +58,4 @@ lw s1, 4(sp)
 lw s2, 8(sp)
 lw s3, 12(sp)
 addi sp, sp, 16
-j -44 # move_middle
+j -38 # move_middle
