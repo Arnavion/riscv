@@ -1,4 +1,5 @@
-# zero = LEFT = 0
+li fp, -8
+# s1 = LEFT = 0
 # a1 = FORWARD = 1
 li a1, 1
 # a2 = RIGHT = 2
@@ -7,15 +8,15 @@ li a2, 2
 li a4, 4
 
 # loop
-sb zero, -8(zero)
+sb s1, 0(fp)
 
 # check_and_turn_right
-sb a4, -8(zero)
-lbu a3, -8(zero)
-beqz a3, 8 # done_turning_right
-sb a2, -8(zero)
-j -14 # check_and_turn_right
+sb a4, 0(fp)
+lbu a3, 0(fp)
+beqz a3, 6 # done_turning_right
+sb a2, 0(fp)
+j -8 # check_and_turn_right
 
 # done_turning_right
-sb a1, -8(zero)
-j -24 # loop
+sb a1, 0(fp)
+j -14 # loop

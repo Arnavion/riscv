@@ -13,6 +13,8 @@ import RvDecompressorCommon::*;
 (* descending_urgency = "jr_jalr, mv_add" *)
 (* descending_urgency = "addi4spn, invalid" *)
 (* descending_urgency = "fld_ld_lw_flw, invalid" *)
+(* descending_urgency = "lbu_lhu_lh, invalid" *)
+(* descending_urgency = "sb_sh, invalid" *)
 (* descending_urgency = "fsd_sd_sw_fsw, invalid" *)
 (* descending_urgency = "addi_addiw_li, invalid" *)
 (* descending_urgency = "addi_li, invalid" *)
@@ -23,6 +25,8 @@ import RvDecompressorCommon::*;
 (* descending_urgency = "andi, invalid" *)
 (* descending_urgency = "sub_xor_or_and, invalid" *)
 (* descending_urgency = "subw_addw, invalid" *)
+(* descending_urgency = "zext_b, invalid" *)
+(* descending_urgency = "not_, invalid" *)
 (* descending_urgency = "j, invalid" *)
 (* descending_urgency = "beqz_bnez, invalid" *)
 (* descending_urgency = "slli, invalid" *)
@@ -55,6 +59,26 @@ module mkRvDecompressorPriority#(parameter Bool rv64)(RvDecompressor);
 			{ 2'b01, rv64 ? in[13] : ~in[14] },
 			{ 2'b01, in[9:7] },
 			zeroExtend({ (rv64 ? in[13] : ~in[14]) & in[6], in[5], in[12:10], (rv64 ? ~in[13] : in[14]) & in[6], 2'b00 })
+		));
+	endrule
+
+	rule lbu_lhu_lh(args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b100_00?_???_??_???_00);
+		write_out(in, result, type_i(
+			OpCode_Load,
+			{ 2'b01, in[4:2] },
+			{ ~in[10] | ~in[6], 1'b0, in[10] },
+			{ 2'b01, in[9:7] },
+			zeroExtend({ in[5], ~in[10] & in[6] })
+		));
+	endrule
+
+	rule sb_sh(args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b100_01?_???_??_???_00);
+		write_out(in, result, type_s(
+			OpCode_Store,
+			{ 2'b00, in[10] },
+			{ 2'b01, in[9:7] },
+			{ 2'b01, in[4:2] },
+			zeroExtend({ in[5], ~in[10] & in[6] })
 		));
 	endrule
 
@@ -153,6 +177,26 @@ module mkRvDecompressorPriority#(parameter Bool rv64)(RvDecompressor);
 			{ 2'b01, in[9:7] },
 			{ 2'b01, in[4:2] },
 			{ 1'b0, ~in[5], 5'b00000 }
+		));
+	endrule
+
+	rule zext_b(args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b100_111_???_11_000_01);
+		write_out(in, result, type_i(
+			OpCode_OpImm,
+			{ 2'b01, in[9:7] },
+			3'b111,
+			{ 2'b01, in[9:7] },
+			12'b000011111111
+		));
+	endrule
+
+	rule not_(args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b100_111_???_11_101_01);
+		write_out(in, result, type_i(
+			OpCode_OpImm,
+			{ 2'b01, in[9:7] },
+			3'b100,
+			{ 2'b01, in[9:7] },
+			12'b111111111111
 		));
 	endrule
 

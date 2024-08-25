@@ -134,11 +134,36 @@ module rv_decompressing_decoder #(
 					is_compressed = 'x;
 				end
 
-				// Zcb
-				3'b100: begin
-					sigill = '1;
-					is_compressed = 'x;
-				end
+				3'b100: unique case (in[11+:2])
+					// lbu, lhu, lh
+					2'b00: begin
+						opcode = OpCode_Load;
+						funct3 = {~in[10] | ~in[6], 1'b0, in[10]};
+
+						rd_({2'b01, in[2+:3]});
+						rs1_({2'b01, in[7+:3]});
+						rs2_(5'b00000);
+
+						imm_(32'({in[5], ~in[10] & in[6]}));
+					end
+
+					// sb, sh
+					2'b01: begin
+						opcode = OpCode_Store;
+						funct3 = {2'b00, in[10]};
+
+						rd_(5'b00000);
+						rs1_({2'b01, in[7+:3]});
+						rs2_({2'b01, in[2+:3]});
+
+						imm_(32'({in[5], ~in[10] & in[6]}));
+					end
+
+					default: begin
+						sigill = '1;
+						is_compressed = 'x;
+					end
+				endcase
 
 				// fsd
 				3'b101: begin
@@ -259,9 +284,9 @@ module rv_decompressing_decoder #(
 						imm_(unsigned'(32'(signed'({in[12], in[2+:5]}))));
 					end
 
-					2'b11: unique casez ({in[12], in[6]})
+					2'b11: unique casez ({in[12], in[5+:2]})
 						// sub, xor, or, and
-						2'b0?: begin
+						3'b0??: begin
 							opcode = OpCode_Op;
 							funct3 = {| in[5+:2], in[6], & in[5+:2]};
 							funct7 = {1'b0, ~| in[5+:2], 5'b00000};
@@ -271,7 +296,7 @@ module rv_decompressing_decoder #(
 							rs2_({2'b01, in[2+:3]});
 						end
 
-						2'b10: if (rv64) begin
+						3'b10?: if (rv64) begin
 							// subw, addw
 							opcode = OpCode_Op32;
 							funct3 = 3'b000;
@@ -284,6 +309,37 @@ module rv_decompressing_decoder #(
 							sigill = '1;
 							is_compressed = 'x;
 						end
+
+						3'b111: unique case (in[2+:3])
+							// zext.b
+							3'b000: begin
+								opcode = OpCode_OpImm;
+								funct3 = 3'b111;
+
+								rd_({2'b01, in[7+:3]});
+								rs1_({2'b01, in[7+:3]});
+								rs2_(5'b00000);
+
+								imm_(32'(8'('1)));
+							end
+
+							// not
+							3'b101: begin
+								opcode = OpCode_OpImm;
+								funct3 = 3'b100;
+
+								rd_({2'b01, in[7+:3]});
+								rs1_({2'b01, in[7+:3]});
+								rs2_(5'b00000);
+
+								imm_(32'('1));
+							end
+
+							default: begin
+								sigill = '1;
+								is_compressed = 'x;
+							end
+						endcase
 
 						default: begin
 							sigill = '1;

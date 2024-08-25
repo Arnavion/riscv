@@ -81,7 +81,7 @@ test-lint:
 test: test-as
 test-as:
 	for bitness in '--32' '--64'; do \
-		for compressed in 'false' 'true'; do \
+		for compressed in 'false' 'true' 'Zcb'; do \
 			for f in tc/solutions/*.S; do cargo run -p as -- $$bitness "--compressed=$$compressed" "$$f" >/dev/null || exit 1; done; \
 		done; \
 	done

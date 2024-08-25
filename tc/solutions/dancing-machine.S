@@ -1,4 +1,5 @@
-lbu a0, -8(zero)
+li fp, -8
+lbu a0, 0(fp)
 
 # loop
 srli a1, a0, 1
@@ -9,5 +10,5 @@ xor a2, a1, a2
 srli a0, a2, 2
 xor a0, a0, a2
 andi a1, a0, 0b11
-sb a1, -8(zero)
-j -30 # loop
+sb a1, 0(fp)
+j -26 # loop

@@ -1008,6 +1008,17 @@ impl Instruction {
 				funct2: Funct2::And,
 			},
 
+			Self::Andi { dest, src, imm: 0xff } if
+				supported_extensions.contains(SupportedExtensions::ZCB) &&
+				dest.is_compressible() &&
+				src == dest
+			=> RawInstruction::Zcb {
+				opcode: OpCodeC::ZextB,
+				reg: dest,
+				imm1: 0b000,
+				imm2: 0b11,
+			},
+
 			Self::Andi { dest, src, imm } if
 				dest.is_compressible() &&
 				src == dest &&
@@ -1100,6 +1111,18 @@ impl Instruction {
 				rs2: Register::X0,
 			},
 
+			Self::Lbu { dest, base, offset } if
+				supported_extensions.contains(SupportedExtensions::ZCB) &&
+				dest.is_compressible() &&
+				base.is_compressible() &&
+				offset & 0b11 == offset
+			=> RawInstruction::Zcb {
+				opcode: OpCodeC::Lbu,
+				reg: base,
+				imm1: dest.encode_3b()?,
+				imm2: offset,
+			},
+
 			Self::Ld { dest, base: Register::X2, offset } if
 				dest != Register::X0 &&
 				offset & ((1 << 9) - (1 << 3)) == offset
@@ -1126,6 +1149,30 @@ impl Instruction {
 				rs1: base,
 				imm1: bit_slice::<6, 8>(offset),
 				imm2: bit_slice::<3, 6>(offset),
+			},
+
+			Self::Lh { dest, base, offset } if
+				supported_extensions.contains(SupportedExtensions::ZCB) &&
+				dest.is_compressible() &&
+				base.is_compressible() &&
+				offset & (1 << 1) == offset
+			=> RawInstruction::Zcb {
+				opcode: OpCodeC::Lh,
+				reg: base,
+				imm1: dest.encode_3b()?,
+				imm2: offset | (1 << 0),
+			},
+
+			Self::Lhu { dest, base, offset } if
+				supported_extensions.contains(SupportedExtensions::ZCB) &&
+				dest.is_compressible() &&
+				base.is_compressible() &&
+				offset & (1 << 1) == offset
+			=> RawInstruction::Zcb {
+				opcode: OpCodeC::Lhu,
+				reg: base,
+				imm1: dest.encode_3b()?,
+				imm2: offset,
 			},
 
 			Self::Lui { dest, imm } if
@@ -1194,6 +1241,18 @@ impl Instruction {
 				funct2: Funct2::Or,
 			},
 
+			Self::Sb { base, offset, src } if
+				supported_extensions.contains(SupportedExtensions::ZCB) &&
+				base.is_compressible() &&
+				src.is_compressible() &&
+				offset & 0xff == offset
+			=> RawInstruction::Zcb {
+				opcode: OpCodeC::Sb,
+				reg: base,
+				imm1: src.encode_3b()?,
+				imm2: offset,
+			},
+
 			Self::Sd { base: Register::X2, offset, src } if
 				offset & 0x1f8 == offset
 			=> {
@@ -1217,6 +1276,18 @@ impl Instruction {
 				rs2: src,
 				imm1: bit_slice::<6, 8>(offset),
 				imm2: bit_slice::<3, 6>(offset),
+			},
+
+			Self::Sh { base, offset, src } if
+				supported_extensions.contains(SupportedExtensions::ZCB) &&
+				base.is_compressible() &&
+				src.is_compressible() &&
+				offset & (1 << 1) == offset
+			=> RawInstruction::Zcb {
+				opcode: OpCodeC::Sh,
+				reg: base,
+				imm1: src.encode_3b()?,
+				imm2: offset,
 			},
 
 			Self::Slli { dest, src, shamt } if
@@ -1361,6 +1432,17 @@ impl Instruction {
 				rd_rs1: dest,
 				rs2: src,
 				funct2: Funct2::Xor,
+			},
+
+			Self::Xori { dest, src, imm: -1 } if
+				supported_extensions.contains(SupportedExtensions::ZCB) &&
+				dest.is_compressible() &&
+				src == dest
+			=> RawInstruction::Zcb {
+				opcode: OpCodeC::Not,
+				reg: dest,
+				imm1: 0b101,
+				imm2: 0b11,
 			},
 
 			_ => return self.encode_full(supported_extensions),
@@ -1642,6 +1724,13 @@ enum RawInstruction {
 		opcode: OpCodeC,
 		imm: i32,
 	},
+
+	Zcb {
+		opcode: OpCodeC,
+		reg: Register,
+		imm1: u32,
+		imm2: i32,
+	},
 }
 
 impl RawInstruction {
@@ -1843,6 +1932,14 @@ impl RawInstruction {
 					(bit_slice::<11, 12>(imm) << 12)
 				)
 			},
+
+			Self::Zcb { opcode, reg, imm1, imm2 } => Encoded::Compressed(
+				opcode.encode() |
+				((imm1 & 0x7) << 2) |
+				(bit_slice::<1, 2>(imm2) << 5) |
+				(bit_slice::<0, 1>(imm2) << 6) |
+				(reg.encode_3b()? << 7)
+			),
 		};
 		Ok(encoded.into_parts())
 	}
@@ -2124,16 +2221,22 @@ opcodec! {
 		Jal = (C1, 0b001_000),
 		Jalr = (C2, 0b100_100),
 		Jr = (C2, 0b100_000),
+		Lbu = (C0, 0b100_000),
 		Ld = (C0, 0b011_000),
 		Ldsp = (C2, 0b011_000),
+		Lh = (C0, 0b100_001),
+		Lhu = (C0, 0b100_001),
 		Li = (C1, 0b010_000),
 		Lui = (C1, 0b011_000),
 		Lw = (C0, 0b010_000),
 		Lwsp = (C2, 0b010_000),
 		Mv = (C2, 0b100_000),
+		Not = (C1, 0b100_111),
 		Or = (C1, 0b100_011),
+		Sb = (C0, 0b100_010),
 		Sd = (C0, 0b111_000),
 		Sdsp = (C2, 0b111_000),
+		Sh = (C0, 0b100_011),
 		Slli = (C2, 0b000_000),
 		Srai = (C1, 0b100_001),
 		Srli = (C1, 0b100_000),
@@ -2142,6 +2245,7 @@ opcodec! {
 		Swsp = (C2, 0b110_000),
 		Sub = (C1, 0b100_011),
 		Xor = (C1, 0b100_011),
+		ZextB = (C1, 0b100_111),
 	}
 }
 
