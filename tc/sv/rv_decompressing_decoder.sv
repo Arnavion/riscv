@@ -134,11 +134,60 @@ module rv_decompressing_decoder #(
 					is_compressed = 'x;
 				end
 
-				// Zcb
-				3'b100: begin
-					sigill = '1;
-					is_compressed = 'x;
-				end
+				3'b100: unique case (in[10+:3])
+					// lbu
+					3'b000: begin
+						opcode = OpCode_Load;
+						funct3 = 3'b100;
+
+						rd_({2'b01, in[2+:3]});
+						rs1_({2'b01, in[7+:3]});
+						rs2_(5'b00000);
+
+						imm_(32'({in[5], in[6]}));
+					end
+
+					// lhu / lh
+					3'b001: begin
+						opcode = OpCode_Load;
+						funct3 = {!in[6], 2'b01};
+
+						rd_({2'b01, in[2+:3]});
+						rs1_({2'b01, in[7+:3]});
+						rs2_(5'b00000);
+
+						imm_(32'({in[5], 1'b0}));
+					end
+
+					// sb
+					3'b010: begin
+						opcode = OpCode_Store;
+						funct3 = 3'b000;
+
+						rd_(5'b00000);
+						rs1_({2'b01, in[7+:3]});
+						rs2_({2'b01, in[2+:3]});
+
+						imm_(32'({in[5], in[6]}));
+					end
+
+					// sh
+					3'b011: begin
+						opcode = OpCode_Store;
+						funct3 = 3'b001;
+
+						rd_(5'b00000);
+						rs1_({2'b01, in[7+:3]});
+						rs2_({2'b01, in[2+:3]});
+
+						imm_(32'({in[5], 1'b0}));
+					end
+
+					default: begin
+						sigill = '1;
+						is_compressed = 'x;
+					end
+				endcase
 
 				// fsd
 				3'b101: begin
@@ -359,6 +408,37 @@ module rv_decompressing_decoder #(
 							sigill = '1;
 							is_compressed = 'x;
 						end
+
+						3'b111: unique case (in[2+:3])
+							// zext.b
+							3'b000: begin
+								opcode = OpCode_OpImm;
+								funct3 = 3'b111;
+
+								rd_({2'b01, in[7+:3]});
+								rs1_({2'b01, in[7+:3]});
+								rs2_(5'b00000);
+
+								imm_(32'(8'('1)));
+							end
+
+							// not
+							3'b101: begin
+								opcode = OpCode_OpImm;
+								funct3 = 3'b100;
+
+								rd_({2'b01, in[7+:3]});
+								rs1_({2'b01, in[7+:3]});
+								rs2_(5'b00000);
+
+								imm_(32'('1));
+							end
+
+							default: begin
+								sigill = '1;
+								is_compressed = 'x;
+							end
+						endcase
 
 						default: begin
 							sigill = '1;

@@ -135,6 +135,54 @@ module rv_decompressing_decoder_priority #(
 				is_compressed = 'x;
 			end
 
+			// lbu
+			16'b100_000_???_??_???_00: begin
+				opcode = OpCode_Load;
+				funct3 = 3'b100;
+
+				rd_({2'b01, in[2+:3]});
+				rs1_({2'b01, in[7+:3]});
+				rs2_(5'b00000);
+
+				imm_(32'({in[5], in[6]}));
+			end
+
+			// lhu / lh
+			16'b100_001_???_??_???_00: begin
+				opcode = OpCode_Load;
+				funct3 = {!in[6], 2'b01};
+
+				rd_({2'b01, in[2+:3]});
+				rs1_({2'b01, in[7+:3]});
+				rs2_(5'b00000);
+
+				imm_(32'({in[5], 1'b0}));
+			end
+
+			// sb
+			16'b100_010_???_??_???_00: begin
+				opcode = OpCode_Store;
+				funct3 = 3'b000;
+
+				rd_(5'b00000);
+				rs1_({2'b01, in[7+:3]});
+				rs2_({2'b01, in[2+:3]});
+
+				imm_(32'({in[5], in[6]}));
+			end
+
+			// sh
+			16'b100_011_???_??_???_00: begin
+				opcode = OpCode_Store;
+				funct3 = 3'b001;
+
+				rd_(5'b00000);
+				rs1_({2'b01, in[7+:3]});
+				rs2_({2'b01, in[2+:3]});
+
+				imm_(32'({in[5], 1'b0}));
+			end
+
 			16'b100_???_???_??_???_00: begin
 				sigill = '1;
 				is_compressed = 'x;
@@ -382,6 +430,30 @@ module rv_decompressing_decoder_priority #(
 			end else begin
 				sigill = '1;
 				is_compressed = 'x;
+			end
+
+			// zext.b
+			16'b100_1_11_???_11_000_01: begin
+				opcode = OpCode_OpImm;
+				funct3 = 3'b111;
+
+				rd_({2'b01, in[7+:3]});
+				rs1_({2'b01, in[7+:3]});
+				rs2_(5'b00000);
+
+				imm_(32'(8'('1)));
+			end
+
+			// not
+			16'b100_1_11_???_11_101_01: begin
+				opcode = OpCode_OpImm;
+				funct3 = 3'b100;
+
+				rd_({2'b01, in[7+:3]});
+				rs1_({2'b01, in[7+:3]});
+				rs2_(5'b00000);
+
+				imm_(32'('1));
 			end
 
 			16'b100_1_11_???_??_???_01: begin
