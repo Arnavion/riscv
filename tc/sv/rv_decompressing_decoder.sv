@@ -107,11 +107,80 @@ module rv_decompressing_decoder #(
 					is_compressed = 'x;
 				end
 
-				// Zcb
-				3'b100: begin
-					sigill = '1;
-					is_compressed = 'x;
-				end
+				3'b100: unique case ({in[10+:3]})
+					// lbu
+					3'b000: begin
+						opcode = OpCode_Load;
+						funct3 = 3'b100;
+
+						rd = {2'b01, in[2+:3]};
+						rs1 = {2'b01, in[7+:3]};
+						rs2 = 5'b00000;
+
+						imm[0] = in[6];
+						imm[1+:4] = {3'b000, in[5]};
+						imm[5+:6] = 6'b000000;
+						imm[11] = 1'b0;
+						imm[12+:8] = 8'b00000000;
+						imm[20+:12] = 12'b000000000000;
+					end
+
+					// lhu / lh
+					3'b001: begin
+						opcode = OpCode_Load;
+						funct3 = {!in[6], 2'b01};
+
+						rd = {2'b01, in[2+:3]};
+						rs1 = {2'b01, in[7+:3]};
+						rs2 = 5'b00000;
+
+						imm[0] = 1'b0;
+						imm[1+:4] = {3'b000, in[5]};
+						imm[5+:6] = 6'b000000;
+						imm[11] = 1'b0;
+						imm[12+:8] = 8'b00000000;
+						imm[20+:12] = 12'b000000000000;
+					end
+
+					// sb
+					3'b010: begin
+						opcode = OpCode_Store;
+						funct3 = 3'b000;
+
+						rd = 5'b00000;
+						rs1 = {2'b01, in[7+:3]};
+						rs2 = {2'b01, in[2+:3]};
+
+						imm[0] = in[6];
+						imm[1+:4] = {3'b000, in[5]};
+						imm[5+:6] = 6'b000000;
+						imm[11] = 1'b0;
+						imm[12+:8] = 8'b00000000;
+						imm[20+:12] = 12'b000000000000;
+					end
+
+					// sh
+					3'b011: begin
+						opcode = OpCode_Store;
+						funct3 = 3'b001;
+
+						rd = 5'b00000;
+						rs1 = {2'b01, in[7+:3]};
+						rs2 = {2'b01, in[2+:3]};
+
+						imm[0] = 1'b0;
+						imm[1+:4] = {3'b000, in[5]};
+						imm[5+:6] = 6'b000000;
+						imm[11] = 1'b0;
+						imm[12+:8] = 8'b00000000;
+						imm[20+:12] = 12'b000000000000;
+					end
+
+					default: begin
+						sigill = '1;
+						is_compressed = 'x;
+					end
+				endcase
 
 				// fsd
 				3'b101: begin
@@ -383,6 +452,47 @@ module rv_decompressing_decoder #(
 							sigill = '1;
 							is_compressed = 'x;
 						end
+
+						2'b11: unique case (in[2+:3])
+							// zext.b
+							3'b000: begin
+								opcode = OpCode_OpImm;
+								funct3 = 3'b111;
+
+								rd = {2'b01, in[7+:3]};
+								rs1 = {2'b01, in[7+:3]};
+								rs2 = 5'b00000;
+
+								imm[0] = 1'b1;
+								imm[1+:4] = 4'b1111;
+								imm[5+:6] = 6'b000111;
+								imm[11] = 1'b0;
+								imm[12+:8] = 8'b00000000;
+								imm[20+:12] = 12'b000000000000;
+							end
+
+							// not
+							3'b101: begin
+								opcode = OpCode_OpImm;
+								funct3 = 3'b100;
+
+								rd = {2'b01, in[7+:3]};
+								rs1 = {2'b01, in[7+:3]};
+								rs2 = 5'b00000;
+
+								imm[0] = 1'b1;
+								imm[1+:4] = 4'b1111;
+								imm[5+:6] = 6'b111111;
+								imm[11] = 1'b1;
+								imm[12+:8] = 8'b11111111;
+								imm[20+:12] = 12'b111111111111;
+							end
+
+							default: begin
+								sigill = '1;
+								is_compressed = 'x;
+							end
+						endcase
 
 						default: begin
 							sigill = '1;
