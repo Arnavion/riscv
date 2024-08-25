@@ -114,11 +114,88 @@ module rv_decompressing_decoder #(
 				is_compressed = 'x;
 			end
 
-			// Zcb
-			5'b00100: begin
-				sigill = '1;
-				is_compressed = 'x;
-			end
+			5'b00100: unique case ({in[10+:3]})
+				// lbu
+				3'b000: begin
+					opcode = 5'b00000;
+					funct3 = 3'b100;
+					rd = {2'b01, in[2+:3]};
+					rd_enable = '1;
+					rs1 = {2'b01, in[7+:3]};
+					rs1_enable = '1;
+					rs2_enable = '0;
+
+					imm[0] = in[6];
+					imm[1+:4] = {3'b000, in[5]};
+					imm[5+:6] = 6'b000000;
+					imm[11] = 1'b0;
+					imm[12+:8] = 8'b00000000;
+					imm[20+:11] = 11'b00000000000;
+					imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
+				end
+
+				// lhu / lh
+				3'b001: begin
+					opcode = 5'b00000;
+					funct3 = {!in[6], 2'b01};
+					rd = {2'b01, in[2+:3]};
+					rd_enable = '1;
+					rs1 = {2'b01, in[7+:3]};
+					rs1_enable = '1;
+					rs2_enable = '0;
+
+					imm[0] = 1'b0;
+					imm[1+:4] = {3'b000, in[5]};
+					imm[5+:6] = 6'b000000;
+					imm[11] = 1'b0;
+					imm[12+:8] = 8'b00000000;
+					imm[20+:11] = 11'b00000000000;
+					imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
+				end
+
+				// sb
+				3'b010: begin
+					opcode = 5'b01000;
+					funct3 = 3'b000;
+					rd_enable = '0;
+					rs1 = {2'b01, in[7+:3]};
+					rs1_enable = '1;
+					rs2 = {2'b01, in[2+:3]};
+					rs2_enable = '1;
+
+					imm[0] = in[6];
+					imm[1+:4] = {3'b000, in[5]};
+					imm[5+:6] = 6'b000000;
+					imm[11] = 1'b0;
+					imm[12+:8] = 8'b00000000;
+					imm[20+:11] = 11'b00000000000;
+					imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
+				end
+
+				// sh
+				3'b011: begin
+					opcode = 5'b01000;
+					funct3 = 3'b001;
+					rd_enable = '0;
+					rs1 = {2'b01, in[7+:3]};
+					rs1_enable = '1;
+					rs2 = {2'b01, in[2+:3]};
+					rs2_enable = '1;
+
+					imm[0] = 1'b0;
+					imm[1+:4] = {3'b000, in[5]};
+					imm[5+:6] = 6'b000000;
+					imm[11] = 1'b0;
+					imm[12+:8] = 8'b00000000;
+					imm[20+:11] = 11'b00000000000;
+					imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
+				end
+
+				default: begin
+					sigill = '1;
+					is_compressed = 'x;
+				end
+			endcase
 
 			// fsd
 			5'b00101: begin
@@ -419,6 +496,51 @@ module rv_decompressing_decoder #(
 						sigill = '1;
 						is_compressed = 'x;
 					end
+
+					3'b111: unique case (in[2+:3])
+						// zext.b
+						3'b000: begin
+							opcode = 5'b00100;
+							funct3 = 3'b111;
+							rd = {2'b01, in[7+:3]};
+							rd_enable = '1;
+							rs1 = {2'b01, in[7+:3]};
+							rs1_enable = '1;
+							rs2_enable = '0;
+
+							imm[0] = 1'b1;
+							imm[1+:4] = 4'b1111;
+							imm[5+:6] = 6'b000111;
+							imm[11] = 1'b0;
+							imm[12+:8] = 8'b00000000;
+							imm[20+:11] = 11'b00000000000;
+							imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
+						end
+
+						// not
+						3'b101: begin
+							opcode = 5'b00100;
+							funct3 = 3'b100;
+							rd = {2'b01, in[7+:3]};
+							rd_enable = '1;
+							rs1 = {2'b01, in[7+:3]};
+							rs1_enable = '1;
+							rs2_enable = '0;
+
+							imm[0] = 1'b1;
+							imm[1+:4] = 4'b1111;
+							imm[5+:6] = 6'b111111;
+							imm[11] = 1'b1;
+							imm[12+:8] = 8'b11111111;
+							imm[20+:11] = 11'b11111111111;
+							imm[31+:xlen - 31] = {(xlen - 31){1'b1}};
+						end
+
+						default: begin
+							sigill = '1;
+							is_compressed = 'x;
+						end
+					endcase
 
 					default: begin
 						sigill = '1;

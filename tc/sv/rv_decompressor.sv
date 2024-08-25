@@ -93,6 +93,10 @@ match [11:10] {
 		011 => c.and,
 		100 => c.subw,
 		101 => c.addw,
+		111 => match [4:2] {
+			000 => c.zext.b,
+			101 => c.not,
+		},
 	},
 }
 
@@ -160,11 +164,48 @@ module rv_decompressor #(
 				out[20+:12] = {5'b00000, in[5], in[10+:3], in[6], 2'b00};
 			end
 
-			// Zcb
-			5'b00100: begin
-				sigill = '1;
-				is_compressed = 'x;
-			end
+			5'b00100: unique case ({in[10+:3]})
+				// lbu
+				3'b000: begin
+					out[0+:7] = 7'b0000011;
+					out[7+:5] = {2'b01, in[2+:3]};
+					out[12+:3] = 3'b100;
+					out[15+:5] = {2'b01, in[7+:3]};
+					out[20+:12] = {10'b0000000000, in[5], in[6]};
+				end
+
+				// lhu / lh
+				3'b001: begin
+					out[0+:7] = 7'b0000011;
+					out[7+:5] = {2'b01, in[2+:3]};
+					out[12+:3] = {!in[6], 2'b01};
+					out[15+:5] = {2'b01, in[7+:3]};
+					out[20+:12] = {10'b0000000000, in[5], 1'b0};
+				end
+
+				// sb
+				3'b010: begin
+					out[0+:7] = 7'b0100011;
+					out[12+:3] = 3'b000;
+					out[15+:5] = {2'b01, in[7+:3]};
+					out[20+:5] = {2'b01, in[2+:3]};
+					{out[25+:7], out[7+:5]} = {10'b000000000, in[5], in[6]};
+				end
+
+				// sh
+				3'b011: begin
+					out[0+:7] = 7'b0100011;
+					out[12+:3] = 3'b001;
+					out[15+:5] = {2'b01, in[7+:3]};
+					out[20+:5] = {2'b01, in[2+:3]};
+					{out[25+:7], out[7+:5]} = {10'b0000000000, in[5], 1'b0};
+				end
+
+				default: begin
+					sigill = '1;
+					is_compressed = 'x;
+				end
+			endcase
 
 			// fsd
 			5'b00101: begin
@@ -344,6 +385,31 @@ module rv_decompressor #(
 						sigill = '1;
 						is_compressed = 'x;
 					end
+
+					3'b111: unique case (in[2+:3])
+						// zext.b
+						3'b000: begin
+							out[0+:7] = 7'b0010011;
+							out[7+:5] = {2'b01, in[7+:3]};
+							out[12+:3] = 3'b111;
+							out[15+:5] = {2'b01, in[7+:3]};
+							out[20+:12] = 12'b000011111111;
+						end
+
+						// not
+						3'b101: begin
+							out[0+:7] = 7'b0010011;
+							out[7+:5] = {2'b01, in[7+:3]};
+							out[12+:3] = 3'b100;
+							out[15+:5] = {2'b01, in[7+:3]};
+							out[20+:12] = 12'b111111111111;
+						end
+
+						default: begin
+							sigill = '1;
+							is_compressed = 'x;
+						end
+					endcase
 
 					default: begin
 						sigill = '1;
