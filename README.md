@@ -16,9 +16,11 @@ The assembler only supports what the emulator implements. Per the [unprivileged 
 
 - Zca 1.0.0 (compressed instructions for integer registers)
 
+- Zcb 1.0.0 (additional compressed instructions for integer registers)
+
 Further extensions are not supported, notably instructions for hardware multiplication and division (M) and hardware floats (F, D).
 
-Compressed instructions are supported in the sense that the assembler will encode regular instructions like `add` into the compressed form when compression is enabled. The mnemonics for the compressed instructions like `c.add` are not supported. C extension-only instructions like `c.lwsp` can be written as `lwsp` or `c.lwsp`.
+Compressed instructions are supported in the sense that the assembler will encode regular instructions like `add` and `lbu` into the compressed form when compression is enabled. The mnemonics for the compressed instructions like `c.add` and `c.lbu` are not supported. Instructions that only exist in compressed instruction extensions like `c.lwsp` can be written as `lwsp` or `c.lwsp`.
 
 The assembler also only partially implements the full syntax supported by GNU / LLVM (enough to make the gas tests compile), and notably does not support labels, symbolic constants or data sections. It *does* support the register mnemonics like `ra` and pseudo-instructions like `j` listed in [the ASM manual](https://github.com/riscv-non-isa/riscv-asm-manual/blob/main/riscv-asm.md) (and older versions of the ISA spec before they were [removed](https://github.com/riscv/riscv-isa-manual/issues/1470)).
 
@@ -26,7 +28,7 @@ The assembler also only partially implements the full syntax supported by GNU / 
 
 The `tc/` directory contains solutions for some of the game's architecture puzzles using the emulator.
 
-The `*.S` files contain the assembler programs. Running `cargo run -- tc/foo.S` will print the compiled program to stdout which can then be copy-pasted into the game's Program component. The component must have "Data width" set to "16 Bit". Running `cargo run -- --compressed tc/foo.S` will do the same but enable compressed instructions.
+The `*.S` files contain the assembler programs. Running `cargo run -- tc/foo.S` will print the compiled program to stdout which can then be copy-pasted into the game's Program component. The component must have "Data width" set to "16 Bit". Running `cargo run -- --compressed tc/foo.S` will do the same but enable compressed instructions. Running `cargo run -- --compressed=Zcb tc/foo.S` will also enable compressed instructions from the Zcb extension.
 
 The assembler does not consider whether the target architecture is 32-bit or 64-bit and will simply encode whatever instructions are given to it. This works fine because RV64I does not modify the behavior of RV32I instructions, except for two situations:
 
