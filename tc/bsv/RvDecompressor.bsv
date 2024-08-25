@@ -61,8 +61,25 @@ function Maybe#(Bit#(30)) decompress(Bool rv64, Bit#(32) in);
 					zeroExtend({ (rv64 ? in[13] : ~in[14]) & in[6], in[5], in[12:10], (rv64 ? ~in[13] : in[14]) & in[6], 2'b00 })
 				);
 
-			// Zcb
-			3'b100: return tagged Invalid;
+			3'b100: case (in[12:10]) matches
+				// lbu
+				3'b000: return tagged Valid
+					type_i(OpCode_Load, { 2'b01, in[4:2] }, 3'b100, { 2'b01, in[9:7] }, zeroExtend({ in[5], in[6] }));
+
+				// lhu, lh
+				3'b001: return tagged Valid
+					type_i(OpCode_Load, { 2'b01, in[4:2] }, { ~in[6], 2'b01 }, { 2'b01, in[9:7] }, zeroExtend({ in[5], 1'b0 }));
+
+				// sb
+				3'b010: return tagged Valid
+					type_s(OpCode_Store, 3'b000, { 2'b01, in[9:7] }, { 2'b01, in[4:2] }, zeroExtend({ in[5], in[6] }));
+
+				// sh
+				3'b011: return tagged Valid
+					type_s(OpCode_Store, 3'b001, { 2'b01, in[9:7] }, { 2'b01, in[4:2] }, zeroExtend({ in[5], 1'b0 }));
+
+				default: return tagged Invalid;
+			endcase
 
 			// fsd, sd, sw, fsw
 			3'b1?? &&& unpack(| in[14:13]): return tagged Valid
@@ -125,6 +142,18 @@ function Maybe#(Bit#(30)) decompress(Bool rv64, Bit#(32) in);
 							type_r(OpCode_Op32, { 2'b01, in[9:7] }, 3'b000, { 2'b01, in[9:7] }, { 2'b01, in[4:2] }, { 1'b0, ~in[5], 5'b00000 });
 					else
 						return tagged Invalid;
+
+					3'b111: case (in[4:2]) matches
+						// zext.b
+						3'b000: return tagged Valid
+							type_i(OpCode_OpImm, { 2'b01, in[9:7] }, 3'b111, { 2'b01, in[9:7] }, 12'b000011111111);
+
+						// not
+						3'b101: return tagged Valid
+							type_i(OpCode_OpImm, { 2'b01, in[9:7] }, 3'b100, { 2'b01, in[9:7] }, 12'b111111111111);
+
+						default: return tagged Invalid;
+					endcase
 
 					default: return tagged Invalid;
 				endcase

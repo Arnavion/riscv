@@ -43,6 +43,46 @@ module mkRvDecompressorPriority#(parameter Bool rv64)(RvDecompressor);
 		);
 	endrule
 
+	rule lbu(in[15:0] matches 16'b100_000_???_??_???_00);
+		out <= type_i_(
+			OpCode_Load,
+			{ 2'b01, in[4:2] },
+			3'b100,
+			{ 2'b01, in[9:7] },
+			zeroExtend({ in[5], in[6] })
+		);
+	endrule
+
+	rule lhu_lh(in[15:0] matches 16'b100_001_???_?_?_???_00);
+		out <= type_i_(
+			OpCode_Load,
+			{ 2'b01, in[4:2] },
+			{ ~in[6], 2'b01 },
+			{ 2'b01, in[9:7] },
+			zeroExtend({ in[5], 1'b0 })
+		);
+	endrule
+
+	rule sb(in[15:0] matches 16'b100_010_???_??_???_00);
+		out <= type_s_(
+			OpCode_Store,
+			3'b000,
+			{ 2'b01, in[9:7] },
+			{ 2'b01, in[4:2] },
+			zeroExtend({ in[5], in[6] })
+		);
+	endrule
+
+	rule sh(in[15:0] matches 16'b100_011_???_0_?_???_00);
+		out <= type_s_(
+			OpCode_Store,
+			3'b001,
+			{ 2'b01, in[9:7] },
+			{ 2'b01, in[4:2] },
+			zeroExtend({ in[5], 1'b0 })
+		);
+	endrule
+
 	rule fsd_sd_sw_fsw(in[15:0] matches 16'b1??_???_???_??_???_00 &&& unpack(| in[14:13]));
 		out <= type_s_(
 			opcode_store(rv64 ? ~in[14] : in[13]),
@@ -160,6 +200,26 @@ module mkRvDecompressorPriority#(parameter Bool rv64)(RvDecompressor);
 			{ 2'b01, in[9:7] },
 			{ 2'b01, in[4:2] },
 			{ 1'b0, ~in[5], 5'b00000 }
+		);
+	endrule
+
+	rule zext_b(in[15:0] matches 16'b100_111_???_11_000_01);
+		out <= type_i_(
+			OpCode_OpImm,
+			{ 2'b01, in[9:7] },
+			3'b111,
+			{ 2'b01, in[9:7] },
+			12'b000011111111
+		);
+	endrule
+
+	rule not_(in[15:0] matches 16'b100_111_???_11_101_01);
+		out <= type_i_(
+			OpCode_OpImm,
+			{ 2'b01, in[9:7] },
+			3'b100,
+			{ 2'b01, in[9:7] },
+			12'b111111111111
 		);
 	endrule
 

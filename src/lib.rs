@@ -452,6 +452,30 @@ mod tests {
 
 			("jr x3", &[(0x8182, None)]),
 
+			("lbu x8, 0(x9)", &[(0x8080, None)]),
+			("lbu x8, 1(x9)", &[(0x80c0, None)]),
+			("lbu x8, 2(x9)", &[(0x80a0, None)]),
+			("lbu x8, 3(x9)", &[(0x80e0, None)]),
+			("lbu x3, 3(x9)", &[(0xc183, Some(0x0034))]), // Incompressible register
+			("lbu x8, 3(x4)", &[(0x4403, Some(0x0032))]), // Incompressible register
+			("lbu x8, 4(x4)", &[(0x4403, Some(0x0042))]), // Offset out of range
+
+			("lh x8, 0(x9)", &[(0x84c0, None)]),
+			("lh x8, 2(x9)", &[(0x84e0, None)]),
+			("lh x3, 2(x9)", &[(0x9183, Some(0x0024))]), // Incompressible register
+			("lh x8, 2(x4)", &[(0x1403, Some(0x0022))]), // Incompressible register
+			("lh x8, 1(x4)", &[(0x1403, Some(0x0012))]), // Offset out of range
+			("lh x8, 3(x4)", &[(0x1403, Some(0x0032))]), // Offset out of range
+			("lh x8, 4(x4)", &[(0x1403, Some(0x0042))]), // Offset out of range
+
+			("lhu x8, 0(x9)", &[(0x8480, None)]),
+			("lhu x8, 2(x9)", &[(0x84a0, None)]),
+			("lhu x3, 2(x9)", &[(0xd183, Some(0x0024))]), // Incompressible register
+			("lhu x8, 2(x4)", &[(0x5403, Some(0x0022))]), // Incompressible register
+			("lhu x8, 1(x4)", &[(0x5403, Some(0x0012))]), // Offset out of range
+			("lhu x8, 3(x4)", &[(0x5403, Some(0x0032))]), // Offset out of range
+			("lhu x8, 4(x4)", &[(0x5403, Some(0x0042))]), // Offset out of range
+
 			("li x3, -11", &[(0x51d5, None)]),
 			("li x3, 11", &[(0x41ad, None)]),
 			("li x0, -11", &[(0x0013, Some(0xff50))]), // HINT
@@ -480,6 +504,9 @@ mod tests {
 
 			("nop", &[(0x0001, None)]),
 
+			("not x8, x8", &[(0x9c75, None)]),
+			("not x3, x3", &[(0xc193, Some(0xfff1))]), // Incompressible register
+
 			("ntl.all", &[(0x9016, None)]),
 			("ntl.pall", &[(0x900e, None)]),
 			("ntl.p1", &[(0x900a, None)]),
@@ -488,6 +515,22 @@ mod tests {
 			("or x8, x8, x9", &[(0x8c45, None)]),
 			("or x3, x3, x9", &[(0xe1b3, Some(0x0091))]), // Incompressible register
 			("or x8, x8, x4", &[(0x6433, Some(0x0044))]), // Incompressible register
+
+			("sb x8, 0(x9)", &[(0x8880, None)]),
+			("sb x8, 1(x9)", &[(0x88c0, None)]),
+			("sb x8, 2(x9)", &[(0x88a0, None)]),
+			("sb x8, 3(x9)", &[(0x88e0, None)]),
+			("sb x3, 3(x9)", &[(0x81a3, Some(0x0034))]), // Incompressible register
+			("sb x8, 3(x4)", &[(0x01a3, Some(0x0082))]), // Incompressible register
+			("sb x8, 4(x4)", &[(0x0223, Some(0x0082))]), // Offset out of range
+
+			("sh x8, 0(x9)", &[(0x8c80, None)]),
+			("sh x8, 2(x9)", &[(0x8ca0, None)]),
+			("sh x3, 2(x9)", &[(0x9123, Some(0x0034))]), // Incompressible register
+			("sh x8, 2(x4)", &[(0x1123, Some(0x0082))]), // Incompressible register
+			("sh x8, 1(x4)", &[(0x10a3, Some(0x0082))]), // Offset out of range
+			("sh x8, 3(x4)", &[(0x11a3, Some(0x0082))]), // Offset out of range
+			("sh x8, 4(x4)", &[(0x1223, Some(0x0082))]), // Offset out of range
 
 			("slli x3, x3, 11", &[(0x01ae, None)]),
 			("slli x3, x3, 31", &[(0x01fe, None)]),
@@ -520,9 +563,12 @@ mod tests {
 			("xor x8, x8, x9", &[(0x8c25, None)]),
 			("xor x3, x3, x9", &[(0xc1b3, Some(0x0091))]), // Incompressible register
 			("xor x8, x8, x4", &[(0x4433, Some(0x0044))]), // Incompressible register
+
+			("zext.b x8, x8", &[(0x9c61, None)]),
+			("zext.b x3, x3", &[(0xf193, Some(0x0ff1))]), // Incompressible register
 		];
 		for &(input, expected) in TESTS {
-			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV32C;
+			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV32C_ZCB;
 
 			std::eprintln!("{input}");
 
@@ -657,7 +703,7 @@ mod tests {
 			("subw x8, x8, x4", &[(0x043b, Some(0x4044))]), // Incompressible register
 		];
 		for &(input, expected) in TESTS {
-			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV64C;
+			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV64C_ZCB;
 
 			std::eprintln!("{input}");
 
@@ -1137,6 +1183,39 @@ mod tests {
 				(0x9082, None),
 			]),
 
+			// zcb.s
+			("
+				lbu x8,2(x8)
+				lbu x8,(x15)
+				lhu x8,2(x8)
+				lhu x8,(x15)
+				lh x8,2(x8)
+				lh x8,(x15)
+				sb x8,2(x8)
+				sb x8,(x15)
+				sh x8,2(x8)
+				sh x8,(x15)
+				zext.b x8,x8
+				zext.b x15,x15
+				not x8,x8
+				not x15,x15
+			", &[
+				(0x8020, None),
+				(0x8380, None),
+				(0x8420, None),
+				(0x8780, None),
+				(0x8460, None),
+				(0x87c0, None),
+				(0x8820, None),
+				(0x8b80, None),
+				(0x8c20, None),
+				(0x8f80, None),
+				(0x9c61, None),
+				(0x9fe1, None),
+				(0x9c75, None),
+				(0x9ff5, None),
+			]),
+
 			// zihintntl.s
 			//
 			// gas compresses `c.ntl.*` and `c.add x0, *` but does not compress `add x0, x0, *`.
@@ -1188,7 +1267,7 @@ mod tests {
 			]),
 		];
 		for &(input, expected) in TESTS {
-			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV32C;
+			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV32C_ZCB;
 
 			std::eprintln!("{input}");
 
@@ -1528,7 +1607,7 @@ mod tests {
 			]),
 		];
 		for &(input, expected) in TESTS {
-			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV64C;
+			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV64C_ZCB;
 
 			std::eprintln!("{input}");
 
