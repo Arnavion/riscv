@@ -42,6 +42,18 @@ function Maybe#(Bit#(30)) decompress(Bool rv64, Bit#(32) in);
 					zeroExtend({ (rv64 ? in[13] : ~in[14]) & in[6], in[5], in[12:10], (rv64 ? ~in[13] : in[14]) & in[6], 2'b00 })
 				);
 
+			3'b100: case (in[12:11]) matches
+				// lbu, lhu, lh
+				2'b00: return tagged Valid
+					type_i(OpCode_Load, { 2'b01, in[4:2] }, { ~in[10] | ~in[6], 1'b0, in[10] }, { 2'b01, in[9:7] }, zeroExtend({ in[5], ~in[10] & in[6] }));
+
+				// sb, sh
+				2'b01: return tagged Valid
+					type_s(OpCode_Store, { 2'b00, in[10] }, { 2'b01, in[9:7] }, { 2'b01, in[4:2] }, zeroExtend({ in[5], ~in[10] & in[6] }));
+
+				default: return tagged Invalid;
+			endcase
+
 			// fsd, sd, sw, fsw
 			3'b1?? &&& unpack(| in[14:13]): return tagged Valid
 				type_s(
@@ -86,14 +98,26 @@ function Maybe#(Bit#(30)) decompress(Bool rv64, Bit#(32) in);
 				2'b10: return tagged Valid
 					type_i(OpCode_OpImm, { 2'b01, in[9:7] }, 3'b111, { 2'b01, in[9:7] }, signExtend({ in[12], in[6:2] }));
 
-				2'b11: case ({ in[12], in[6] }) matches
+				2'b11: case ({ in[12], in[6:5] }) matches
 					// sub, xor, or, and
-					2'b0?: return tagged Valid
+					3'b0??: return tagged Valid
 						type_r(OpCode_Op, { 2'b01, in[9:7] }, { | in[6:5], in[6], & in[6:5] }, { 2'b01, in[9:7] }, { 2'b01, in[4:2] }, { 1'b0, ~| in[6:5], 5'b00000 });
 
 					// subw, addw
-					2'b10 &&& rv64: return tagged Valid
+					3'b10? &&& rv64: return tagged Valid
 						type_r(OpCode_Op32, { 2'b01, in[9:7] }, 3'b000, { 2'b01, in[9:7] }, { 2'b01, in[4:2] }, { 1'b0, ~in[5], 5'b00000 });
+
+					3'b111: case (in[4:2]) matches
+						// zext.b
+						3'b000: return tagged Valid
+							type_i(OpCode_OpImm, { 2'b01, in[9:7] }, 3'b111, { 2'b01, in[9:7] }, 12'b000011111111);
+
+						// not
+						3'b101: return tagged Valid
+							type_i(OpCode_OpImm, { 2'b01, in[9:7] }, 3'b100, { 2'b01, in[9:7] }, 12'b111111111111);
+
+						default: return tagged Invalid;
+					endcase
 
 					default: return tagged Invalid;
 				endcase
