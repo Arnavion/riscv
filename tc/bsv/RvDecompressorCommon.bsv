@@ -80,8 +80,8 @@ instance FShow#(RvDecompressorResponse);
 endinstance
 
 module mkTestDecompressorModule#(RvDecompressor decompressor32, RvDecompressor decompressor64)();
-	function Vector#(41, TestCase) make_test_cases32;
-		TestCase test_cases[41] = {
+	function Vector#(46, TestCase) make_test_cases32;
+		TestCase test_cases[46] = {
 			// All zeros
 			TestCase {
 				request: RvDecompressorRequest { in: 32'b0 },
@@ -107,10 +107,30 @@ module mkTestDecompressorModule#(RvDecompressor decompressor32, RvDecompressor d
 				request: RvDecompressorRequest { in: 32'b011_010_010_01_010_00 },
 				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b000001010000_01010_010_01010_00001_11 }
 			},
-			// Zcb
+			// lbu
 			TestCase {
-				request: RvDecompressorRequest { in: 32'b100_00000000000_00 },
-				expected_response: RvDecompressorResponse { inst: tagged Invalid }
+				request: RvDecompressorRequest { in: 32'b100_000_010_10_010_00 },
+				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b000000000001_01010_100_01010_00000_11 }
+			},
+			// lhu
+			TestCase {
+				request: RvDecompressorRequest { in: 32'b100_001_010_01_010_00 },
+				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b000000000010_01010_101_01010_00000_11 }
+			},
+			// lh
+			TestCase {
+				request: RvDecompressorRequest { in: 32'b100_001_010_11_010_00 },
+				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b000000000010_01010_001_01010_00000_11 }
+			},
+			// sb
+			TestCase {
+				request: RvDecompressorRequest { in: 32'b100_010_010_10_010_00 },
+				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b0000000_01010_01010_000_00001_01000_11 }
+			},
+			// sh
+			TestCase {
+				request: RvDecompressorRequest { in: 32'b100_011_010_01_010_00 },
+				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b0000000_01010_01010_001_00010_01000_11 }
 			},
 			// fsd
 			TestCase {
@@ -202,10 +222,15 @@ module mkTestDecompressorModule#(RvDecompressor decompressor32, RvDecompressor d
 				request: RvDecompressorRequest { in: 32'b100_111_010_10_010_01 },
 				expected_response: RvDecompressorResponse { inst: tagged Invalid }
 			},
-			// Reserved
+			// zext.b
 			TestCase {
-				request: RvDecompressorRequest { in: 32'b100_111_010_11_010_01 },
-				expected_response: RvDecompressorResponse { inst: tagged Invalid }
+				request: RvDecompressorRequest { in: 32'b100_111_010_11_000_01 },
+				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b000011111111_01010_111_01010_00100_11 }
+			},
+			// not
+			TestCase {
+				request: RvDecompressorRequest { in: 32'b100_111_010_11_101_01 },
+				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b111111111111_01010_100_01010_00100_11 }
 			},
 			// j
 			TestCase {
@@ -291,8 +316,8 @@ module mkTestDecompressorModule#(RvDecompressor decompressor32, RvDecompressor d
 		return arrayToVector(test_cases);
 	endfunction
 
-	function Vector#(41, TestCase) make_test_cases64;
-		TestCase test_cases[41] = {
+	function Vector#(46, TestCase) make_test_cases64;
+		TestCase test_cases[46] = {
 			// All zeros
 			TestCase {
 				request: RvDecompressorRequest { in: 32'b0 },
@@ -318,10 +343,30 @@ module mkTestDecompressorModule#(RvDecompressor decompressor32, RvDecompressor d
 				request: RvDecompressorRequest { in: 32'b011_010_010_01_010_00 },
 				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b000001010000_01010_011_01010_00000_11 }
 			},
-			// Zcb
+			// lbu
 			TestCase {
-				request: RvDecompressorRequest { in: 32'b100_00000000000_00 },
-				expected_response: RvDecompressorResponse { inst: tagged Invalid }
+				request: RvDecompressorRequest { in: 32'b100_000_010_10_010_00 },
+				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b000000000001_01010_100_01010_00000_11 }
+			},
+			// lhu
+			TestCase {
+				request: RvDecompressorRequest { in: 32'b100_001_010_01_010_00 },
+				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b000000000010_01010_101_01010_00000_11 }
+			},
+			// lh
+			TestCase {
+				request: RvDecompressorRequest { in: 32'b100_001_010_11_010_00 },
+				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b000000000010_01010_001_01010_00000_11 }
+			},
+			// sb
+			TestCase {
+				request: RvDecompressorRequest { in: 32'b100_010_010_10_010_00 },
+				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b0000000_01010_01010_000_00001_01000_11 }
+			},
+			// sh
+			TestCase {
+				request: RvDecompressorRequest { in: 32'b100_011_010_01_010_00 },
+				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b0000000_01010_01010_001_00010_01000_11 }
 			},
 			// fsd
 			TestCase {
@@ -413,10 +458,15 @@ module mkTestDecompressorModule#(RvDecompressor decompressor32, RvDecompressor d
 				request: RvDecompressorRequest { in: 32'b100_111_010_10_010_01 },
 				expected_response: RvDecompressorResponse { inst: tagged Invalid }
 			},
-			// Reserved
+			// zext.b
 			TestCase {
-				request: RvDecompressorRequest { in: 32'b100_111_010_11_010_01 },
-				expected_response: RvDecompressorResponse { inst: tagged Invalid }
+				request: RvDecompressorRequest { in: 32'b100_111_010_11_000_01 },
+				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b000011111111_01010_111_01010_00100_11 }
+			},
+			// not
+			TestCase {
+				request: RvDecompressorRequest { in: 32'b100_111_010_11_101_01 },
+				expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b111111111111_01010_100_01010_00100_11 }
 			},
 			// j
 			TestCase {
@@ -521,17 +571,17 @@ module mkTestDecompressorModule#(RvDecompressor decompressor32, RvDecompressor d
 		);
 	endseq;
 
-	Vector#(41, TestCase) test_cases32 = make_test_cases32;
-	Vector#(41, TestCase) test_cases64 = make_test_cases64;
+	Vector#(46, TestCase) test_cases32 = make_test_cases32;
+	Vector#(46, TestCase) test_cases64 = make_test_cases64;
 
 	Reg#(UInt#(32)) i <- mkReg(0);
 
 	let m <- mkTestModule(seq
-		for (i <= 0; i < 41; i <= i + 1) seq
+		for (i <= 0; i < 46; i <= i + 1) seq
 			test_case_seq(decompressor32, test_cases32[i]);
 		endseq
 
-		for (i <= 0; i < 41; i <= i + 1) seq
+		for (i <= 0; i < 46; i <= i + 1) seq
 			test_case_seq(decompressor64, test_cases64[i]);
 		endseq
 	endseq);
