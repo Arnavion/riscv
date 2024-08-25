@@ -22,7 +22,7 @@ print:
 test:
 	cargo test --workspace
 	for bitness in '--32' '--64'; do \
-		for compress in 'false' 'true'; do \
+		for compress in 'false' 'true' 'Zcb'; do \
 			for f in tc/*.S; do cargo run -- $$bitness "--compress=$$compress" "$$f" >/dev/null || exit 1; done; \
 		done; \
 	done
