@@ -115,10 +115,69 @@ module rv_decompressing_decoder #(
 						imm = {25'b0, in[5], in[10+:3], in[6], 2'b00};
 					end
 
-				5'b00100: begin
-					sigill = '1;
-					is_compressed = 'x;
-				end
+				// Zcb
+				5'b00100: unique case ({in[10+:3]})
+					// lbu
+					3'b000: begin
+						opcode = 5'b00000;
+						funct3 = 3'b100;
+						rd = {2'b01, in[2+:3]};
+						rd_decoded = rd_decoded_raw;
+						rs1 = {2'b01, in[7+:3]};
+						rs1_decoded = rs1_decoded_raw;
+						rs2_decoded = '0;
+						imm = rv64 ?
+							{62'b0, in[5], in[6]} :
+							{30'b0, in[5], in[6]};
+					end
+
+					// lhu / lh
+					3'b001: begin
+						opcode = 5'b00000;
+						funct3 = {!in[6], 2'b01};
+						rd = {2'b01, in[2+:3]};
+						rd_decoded = rd_decoded_raw;
+						rs1 = {2'b01, in[7+:3]};
+						rs1_decoded = rs1_decoded_raw;
+						rs2_decoded = '0;
+						imm = rv64 ?
+							{62'b0, in[5], 1'b0} :
+							{30'b0, in[5], 1'b0};
+					end
+
+					// sb
+					3'b010: begin
+						opcode = 5'b01000;
+						funct3 = 3'b000;
+						rd_decoded = '0;
+						rs1 = {2'b01, in[7+:3]};
+						rs1_decoded = rs1_decoded_raw;
+						rs2 = {2'b01, in[2+:3]};
+						rs2_decoded = rs2_decoded_raw;
+						imm = rv64 ?
+							{62'b0, in[5], in[6]} :
+							{30'b0, in[5], in[6]};
+					end
+
+					// sh
+					3'b011: begin
+						opcode = 5'b01000;
+						funct3 = 3'b001;
+						rd_decoded = '0;
+						rs1 = {2'b01, in[7+:3]};
+						rs1_decoded = rs1_decoded_raw;
+						rs2 = {2'b01, in[2+:3]};
+						rs2_decoded = rs2_decoded_raw;
+						imm = rv64 ?
+							{62'b0, in[5], 1'b0} :
+							{30'b0, in[5], 1'b0};
+					end
+
+					default: begin
+						sigill = '1;
+						is_compressed = 'x;
+					end
+				endcase
 
 				// fsd
 				5'b00101: begin
@@ -372,6 +431,37 @@ module rv_decompressing_decoder #(
 							rs2 = {2'b01, in[2+:3]};
 							rs2_decoded = rs2_decoded_raw;
 						end
+
+						3'b111: unique case (in[2+:3])
+							// zext.b
+							3'b000: begin
+								opcode = 5'b00100;
+								funct3 = 3'b111;
+								rd = {2'b01, in[7+:3]};
+								rd_decoded = rd_decoded_raw;
+								rs1 = {2'b01, in[7+:3]};
+								rs1_decoded = rs1_decoded_raw;
+								rs2_decoded = '0;
+								imm = rv64 ? 64'b000011111111 : 32'b000011111111;
+							end
+
+							// not
+							3'b101: begin
+								opcode = 5'b00100;
+								funct3 = 3'b100;
+								rd = {2'b01, in[7+:3]};
+								rd_decoded = rd_decoded_raw;
+								rs1 = {2'b01, in[7+:3]};
+								rs1_decoded = rs1_decoded_raw;
+								rs2_decoded = '0;
+								imm = -1;
+							end
+
+							default: begin
+								sigill = '1;
+								is_compressed = 'x;
+							end
+						endcase
 
 						default: begin
 							sigill = '1;

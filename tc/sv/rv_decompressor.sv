@@ -93,6 +93,10 @@ match [11:10] {
 		011 => c.and,
 		100 => c.subw,
 		101 => c.addw,
+		111 => match [4:2] {
+			000 => c.zext.b,
+			101 => c.not,
+		},
 	},
 }
 
@@ -137,10 +141,25 @@ module rv_decompressor #(
 						// flw
 						out = {5'b00000, in[5], in[10+:3], in[6], 4'b0001, in[7+:3], 5'b01001, in[2+:3], 7'b0000111};
 
-				5'b00100: begin
-					sigill = '1;
-					is_compressed = 'x;
-				end
+				// Zcb
+				5'b00100: unique case ({in[10+:3]})
+					// lbu
+					3'b000: out = {10'b0000000000, in[5], in[6], 2'b01, in[7+:3], 5'b10001, in[2+:3], 7'b0000011};
+
+					// lhu / lh
+					3'b001: out = {10'b0000000000, in[5], 3'b001, in[7+:3], !in[6], 4'b0101, in[2+:3], 7'b0000011};
+
+					// sb
+					3'b010: out = {9'b000000001, in[2+:3], 2'b01, in[7+:3], 6'b000000, in[5], in[6], 7'b0100011};
+
+					// sh
+					3'b011: out = {9'b000000001, in[2+:3], 2'b01, in[7+:3], 6'b001000, in[5], 8'b00100011};
+
+					default: begin
+						sigill = '1;
+						is_compressed = 'x;
+					end
+				endcase
 
 				// fsd
 				5'b00101: out = {4'b0000, in[5+:2], in[12], 2'b01, in[2+:3], 2'b01, in[7+:3], 3'b011, in[10+:2], 10'b0000100111};
@@ -210,6 +229,19 @@ module rv_decompressor #(
 
 						// addw
 						3'b101: out = {9'b000000001, in[2+:3], 2'b01, in[7+:3], 5'b00001, in[7+:3], 7'b0111011};
+
+						3'b111: unique case (in[2+:3])
+							// zext.b
+							3'b000: out = {14'b00001111111101, in[7+:3], 5'b11101, in[7+:3], 7'b0010011};
+
+							// not
+							3'b101: out = {14'b11111111111101, in[7+:3], 5'b10001, in[7+:3], 7'b0010011};
+
+							default: begin
+								sigill = '1;
+								is_compressed = 'x;
+							end
+						endcase
 
 						default: begin
 							sigill = '1;
