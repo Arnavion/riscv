@@ -1,5 +1,6 @@
-lbu a0, -8(zero) # numerator
-lbu a1, -8(zero) # denominator
+li fp, -8
+lbu a0, 0(fp) # numerator
+lbu a1, 0(fp) # denominator
 slli a1, a1, 7
 li a4, 7
 j 8 # loop2
@@ -14,5 +15,5 @@ sub a0, a0, a1
 ori a2, a2, 0b1
 bgtz a4, -16 # loop
 
-sb a2, -8(zero) # quotient
-sb a0, -8(zero) # remainder
+sb a2, 0(fp) # quotient
+sb a0, 0(fp) # remainder
