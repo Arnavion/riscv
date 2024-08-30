@@ -8,11 +8,15 @@ module rv_decompressing_decoder #(
 	output logic[4:0] rd,
 	output logic[4:0] rs1,
 	output logic[4:0] rs2,
+	output logic[11:0] csr,
+	output logic csr_load,
+	output logic csr_store,
 	output bit[4:0] opcode,
 	output bit[2:0] funct3,
 	output bit[6:0] funct7,
 	output bit[4:0] funct5,
-	output logic[31:0] imm
+	output logic[31:0] imm,
+	output logic[4:0] csrimm
 );
 	typedef enum bit[4:0] {
 		OpCode_Load = 5'b00000,
@@ -35,11 +39,15 @@ module rv_decompressing_decoder #(
 		rd = 'x;
 		rs1 = 'x;
 		rs2 = 'x;
+		csr = 'x;
+		csr_load = 'x;
+		csr_store = 'x;
 		opcode = 'x;
 		funct3 = 'x;
 		funct7 = 'x;
 		funct5 = 'x;
 		imm = 'x;
+		csrimm = 'x;
 
 		unique case (in[0+:2])
 			2'b00: unique case (in[13+:3])
@@ -54,6 +62,8 @@ module rv_decompressing_decoder #(
 					rd = {2'b01, in[2+:3]};
 					rs1 = 5'b00010;
 					rs2 = 5'b00000;
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = 1'b0;
 					imm[1+:4] = {in[11], in[5], in[6], 1'b0};
@@ -77,6 +87,8 @@ module rv_decompressing_decoder #(
 					rd = {2'b01, in[2+:3]};
 					rs1 = {2'b01, in[7+:3]};
 					rs2 = 5'b00000;
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = 1'b0;
 					imm[1+:4] = {in[10+:2], in[6], 1'b0};
@@ -94,6 +106,8 @@ module rv_decompressing_decoder #(
 					rd = {2'b01, in[2+:3]};
 					rs1 = {2'b01, in[7+:3]};
 					rs2 = 5'b00000;
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = 1'b0;
 					imm[1+:4] = {in[10+:2], 2'b00};
@@ -116,6 +130,8 @@ module rv_decompressing_decoder #(
 						rd = {2'b01, in[2+:3]};
 						rs1 = {2'b01, in[7+:3]};
 						rs2 = 5'b00000;
+						csr_load = '0;
+						csr_store = '0;
 
 						imm[0] = in[6];
 						imm[1+:4] = {3'b000, in[5]};
@@ -133,6 +149,8 @@ module rv_decompressing_decoder #(
 						rd = {2'b01, in[2+:3]};
 						rs1 = {2'b01, in[7+:3]};
 						rs2 = 5'b00000;
+						csr_load = '0;
+						csr_store = '0;
 
 						imm[0] = 1'b0;
 						imm[1+:4] = {3'b000, in[5]};
@@ -150,6 +168,8 @@ module rv_decompressing_decoder #(
 						rd = 5'b00000;
 						rs1 = {2'b01, in[7+:3]};
 						rs2 = {2'b01, in[2+:3]};
+						csr_load = '0;
+						csr_store = '0;
 
 						imm[0] = in[6];
 						imm[1+:4] = {3'b000, in[5]};
@@ -167,6 +187,8 @@ module rv_decompressing_decoder #(
 						rd = 5'b00000;
 						rs1 = {2'b01, in[7+:3]};
 						rs2 = {2'b01, in[2+:3]};
+						csr_load = '0;
+						csr_store = '0;
 
 						imm[0] = 1'b0;
 						imm[1+:4] = {3'b000, in[5]};
@@ -196,6 +218,8 @@ module rv_decompressing_decoder #(
 					rd = 5'b00000;
 					rs1 = {2'b01, in[7+:3]};
 					rs2 = {2'b01, in[2+:3]};
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = 1'b0;
 					imm[1+:4] = {in[10+:2], in[6], 1'b0};
@@ -213,6 +237,8 @@ module rv_decompressing_decoder #(
 					rd = 5'b00000;
 					rs1 = {2'b01, in[7+:3]};
 					rs2 = {2'b01, in[2+:3]};
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = 1'b0;
 					imm[1+:4] = {in[10+:2], 2'b00};
@@ -236,6 +262,8 @@ module rv_decompressing_decoder #(
 					rd = in[7+:5];
 					rs1 = in[7+:5];
 					rs2 = 5'b00000;
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = in[2];
 					imm[1+:4] = in[3+:4];
@@ -253,6 +281,8 @@ module rv_decompressing_decoder #(
 					rd = in[7+:5];
 					rs1 = in[7+:5];
 					rs2 = 5'b00000;
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = in[2];
 					imm[1+:4] = in[3+:4];
@@ -267,6 +297,8 @@ module rv_decompressing_decoder #(
 					rd = 5'b00001;
 					rs1 = 5'b00000;
 					rs2 = 5'b00000;
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = 1'b0;
 					imm[1+:4] = {in[11], in[3+:3]};
@@ -284,6 +316,8 @@ module rv_decompressing_decoder #(
 					rd = in[7+:5];
 					rs1 = 5'b00000;
 					rs2 = 5'b00000;
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = in[2];
 					imm[1+:4] = in[3+:4];
@@ -301,6 +335,8 @@ module rv_decompressing_decoder #(
 					rd = 5'b00010;
 					rs1 = 5'b00010;
 					rs2 = 5'b00000;
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = 1'b0;
 					imm[1+:4] = {in[6], 3'b000};
@@ -315,6 +351,8 @@ module rv_decompressing_decoder #(
 					rd = in[7+:5];
 					rs1 = 5'b00000;
 					rs2 = 5'b00000;
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = 1'b0;
 					imm[1+:4] = 4'b0000;
@@ -337,6 +375,8 @@ module rv_decompressing_decoder #(
 						rd = {2'b01, in[7+:3]};
 						rs1 = {2'b01, in[7+:3]};
 						rs2 = 5'b00000;
+						csr_load = '0;
+						csr_store = '0;
 
 						imm[0] = in[2];
 						imm[1+:4] = in[3+:4];
@@ -358,6 +398,8 @@ module rv_decompressing_decoder #(
 						rd = {2'b01, in[7+:3]};
 						rs1 = {2'b01, in[7+:3]};
 						rs2 = 5'b00000;
+						csr_load = '0;
+						csr_store = '0;
 
 						imm[0] = in[2];
 						imm[1+:4] = in[3+:4];
@@ -375,6 +417,8 @@ module rv_decompressing_decoder #(
 						rd = {2'b01, in[7+:3]};
 						rs1 = {2'b01, in[7+:3]};
 						rs2 = 5'b00000;
+						csr_load = '0;
+						csr_store = '0;
 
 						imm[0] = in[2];
 						imm[1+:4] = in[3+:4];
@@ -394,6 +438,8 @@ module rv_decompressing_decoder #(
 							rd = {2'b01, in[7+:3]};
 							rs1 = {2'b01, in[7+:3]};
 							rs2 = {2'b01, in[2+:3]};
+							csr_load = '0;
+							csr_store = '0;
 						end
 
 						// xor
@@ -405,6 +451,8 @@ module rv_decompressing_decoder #(
 							rd = {2'b01, in[7+:3]};
 							rs1 = {2'b01, in[7+:3]};
 							rs2 = {2'b01, in[2+:3]};
+							csr_load = '0;
+							csr_store = '0;
 						end
 
 						// or
@@ -416,6 +464,8 @@ module rv_decompressing_decoder #(
 							rd = {2'b01, in[7+:3]};
 							rs1 = {2'b01, in[7+:3]};
 							rs2 = {2'b01, in[2+:3]};
+							csr_load = '0;
+							csr_store = '0;
 						end
 
 						// and
@@ -427,6 +477,8 @@ module rv_decompressing_decoder #(
 							rd = {2'b01, in[7+:3]};
 							rs1 = {2'b01, in[7+:3]};
 							rs2 = {2'b01, in[2+:3]};
+							csr_load = '0;
+							csr_store = '0;
 						end
 
 						3'b100: if (rv64) begin
@@ -438,6 +490,8 @@ module rv_decompressing_decoder #(
 							rd = {2'b01, in[7+:3]};
 							rs1 = {2'b01, in[7+:3]};
 							rs2 = {2'b01, in[2+:3]};
+							csr_load = '0;
+							csr_store = '0;
 						end else begin
 							sigill = '1;
 							is_compressed = 'x;
@@ -452,6 +506,8 @@ module rv_decompressing_decoder #(
 							rd = {2'b01, in[7+:3]};
 							rs1 = {2'b01, in[7+:3]};
 							rs2 = {2'b01, in[2+:3]};
+							csr_load = '0;
+							csr_store = '0;
 						end else begin
 							sigill = '1;
 							is_compressed = 'x;
@@ -466,6 +522,8 @@ module rv_decompressing_decoder #(
 								rd = {2'b01, in[7+:3]};
 								rs1 = {2'b01, in[7+:3]};
 								rs2 = 5'b00000;
+								csr_load = '0;
+								csr_store = '0;
 
 								imm[0] = 1'b1;
 								imm[1+:4] = 4'b1111;
@@ -483,6 +541,8 @@ module rv_decompressing_decoder #(
 								rd = {2'b01, in[7+:3]};
 								rs1 = {2'b01, in[7+:3]};
 								rs2 = 5'b00000;
+								csr_load = '0;
+								csr_store = '0;
 
 								imm[0] = 1'b1;
 								imm[1+:4] = 4'b1111;
@@ -512,6 +572,8 @@ module rv_decompressing_decoder #(
 					rd = 5'b00000;
 					rs1 = 5'b00000;
 					rs2 = 5'b00000;
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = 1'b0;
 					imm[1+:4] = {in[11], in[3+:3]};
@@ -529,6 +591,8 @@ module rv_decompressing_decoder #(
 					rd = 5'b00000;
 					rs1 = {2'b01, in[7+:3]};
 					rs2 = 5'b00000;
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = 1'b0;
 					imm[1+:4] = {in[10+:2], in[3+:2]};
@@ -546,6 +610,8 @@ module rv_decompressing_decoder #(
 					rd = 5'b00000;
 					rs1 = {2'b01, in[7+:3]};
 					rs2 = 5'b00000;
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = 1'b0;
 					imm[1+:4] = {in[10+:2], in[3+:2]};
@@ -568,6 +634,8 @@ module rv_decompressing_decoder #(
 					rd = in[7+:5];
 					rs1 = in[7+:5];
 					rs2 = 5'b00000;
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = in[2];
 					imm[1+:4] = in[3+:4];
@@ -591,6 +659,8 @@ module rv_decompressing_decoder #(
 					rd = in[7+:5];
 					rs1 = 5'b00010;
 					rs2 = 5'b00000;
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = 1'b0;
 					imm[1+:4] = {in[4+:3], 1'b0};
@@ -608,6 +678,8 @@ module rv_decompressing_decoder #(
 					rd = in[7+:5];
 					rs1 = 5'b00010;
 					rs2 = 5'b00000;
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = 1'b0;
 					imm[1+:4] = {in[5+:2], 2'b00};
@@ -632,6 +704,8 @@ module rv_decompressing_decoder #(
 						rd = 5'b00000;
 						rs1 = 5'b00000;
 						rs2 = 5'b00000;
+						csr_load = '0;
+						csr_store = '0;
 					end else begin
 						sigill = '1;
 						is_compressed = 'x;
@@ -645,6 +719,8 @@ module rv_decompressing_decoder #(
 						rd = {4'b0000, in[12]};
 						rs1 = in[15+:5];
 						rs2 = 5'b00000;
+						csr_load = '0;
+						csr_store = '0;
 
 						imm[0] = 1'b0;
 						imm[1+:4] = 4'b0000;
@@ -663,6 +739,8 @@ module rv_decompressing_decoder #(
 						rd = in[7+:5];
 						rs1 = {5{in[12]}} & in[15+:5];
 						rs2 = in[2+:5];
+						csr_load = '0;
+						csr_store = '0;
 					end
 
 					default: begin
@@ -685,6 +763,8 @@ module rv_decompressing_decoder #(
 					rd = 5'b00000;
 					rs1 = 5'b00010;
 					rs2 = in[2+:5];
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = 1'b0;
 					imm[1+:4] = {in[9+:3], 1'b0};
@@ -702,6 +782,8 @@ module rv_decompressing_decoder #(
 					rd = 5'b00000;
 					rs1 = 5'b00010;
 					rs2 = in[2+:5];
+					csr_load = '0;
+					csr_store = '0;
 
 					imm[0] = 1'b0;
 					imm[1+:4] = {in[10+:2], 2'b00};
@@ -730,6 +812,8 @@ module rv_decompressing_decoder #(
 						rd = in[7+:5];
 						rs1 = in[15+:5];
 						rs2 = in[20+:5];
+						csr_load = '0;
+						csr_store = '0;
 					end
 
 					5'b00000, // load
@@ -743,6 +827,8 @@ module rv_decompressing_decoder #(
 						rd = in[7+:5];
 						rs1 = in[15+:5];
 						rs2 = 5'b00000;
+						csr_load = '0;
+						csr_store = '0;
 
 						imm[0] = in[20];
 						imm[1+:4] = in[21+:4];
@@ -760,12 +846,62 @@ module rv_decompressing_decoder #(
 						rd = 5'b00000;
 						rs1 = 5'b00000;
 						rs2 = 5'b00000;
+						csr_load = '0;
+						csr_store = '0;
 
 						unique case (funct3)
 							3'b000: // ebreak, ecall
 							begin
 								funct7 = in[25+:7];
 								funct5 = in[20+:5];
+							end
+
+							3'b001: // csrrw
+							begin
+								rs1 = in[15+:5];
+								csr = in[20+:12];
+								csr_load = rd != '0;
+								csr_store = '1;
+							end
+
+							3'b010: // csrrs
+							begin
+								rs1 = in[15+:5];
+								csr = in[20+:12];
+								csr_load = '1;
+								csr_store = rs1 != '0;
+							end
+
+							3'b011: // csrrc
+							begin
+								rs1 = in[15+:5];
+								csr = in[20+:12];
+								csr_load = '1;
+								csr_store = rs1 != '0;
+							end
+
+							3'b101: // csrrwi
+							begin
+								csr = in[20+:12];
+								csrimm = in[15+:5];
+								csr_load = rd != '0;
+								csr_store = '1;
+							end
+
+							3'b110: // csrrsi
+							begin
+								csr = in[20+:12];
+								csrimm = in[15+:5];
+								csr_load = '1;
+								csr_store = csrimm != '0;
+							end
+
+							3'b111: // csrrci
+							begin
+								csr = in[20+:12];
+								csrimm = in[15+:5];
+								csr_load = '1;
+								csr_store = csrimm != '0;
 							end
 
 							default: begin
@@ -778,6 +914,8 @@ module rv_decompressing_decoder #(
 								rd = 'x;
 								rs1 = 'x;
 								rs2 = 'x;
+								csr_load = 'x;
+								csr_store = 'x;
 							end
 						endcase
 					end
@@ -790,6 +928,8 @@ module rv_decompressing_decoder #(
 						rd = 5'b00000;
 						rs1 = in[15+:5];
 						rs2 = in[20+:5];
+						csr_load = '0;
+						csr_store = '0;
 
 						imm[0] = in[7];
 						imm[1+:4] = in[8+:4];
@@ -807,6 +947,8 @@ module rv_decompressing_decoder #(
 						rd = 5'b00000;
 						rs1 = in[15+:5];
 						rs2 = in[20+:5];
+						csr_load = '0;
+						csr_store = '0;
 
 						imm[0] = 1'b0;
 						imm[1+:4] = in[8+:4];
@@ -823,6 +965,8 @@ module rv_decompressing_decoder #(
 						rd = in[7+:5];
 						rs1 = 5'b00000;
 						rs2 = 5'b00000;
+						csr_load = '0;
+						csr_store = '0;
 
 						imm[0] = 1'b0;
 						imm[1+:4] = 4'b0000;
@@ -839,6 +983,8 @@ module rv_decompressing_decoder #(
 						rd = in[7+:5];
 						rs1 = 5'b00000;
 						rs2 = 5'b00000;
+						csr_load = '0;
+						csr_store = '0;
 
 						imm[0] = 1'b0;
 						imm[1+:4] = in[21+:4];
