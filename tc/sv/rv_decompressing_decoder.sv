@@ -9,11 +9,13 @@ module rv_decompressing_decoder #(
 	output logic[31:0] rd_decoded,
 	output logic[31:0] rs1_decoded,
 	output logic[31:0] rs2_decoded,
+	output logic[11:0] csr,
 	output bit[4:0] opcode,
 	output bit[2:0] funct3,
 	output bit[6:0] funct7,
 	output bit[4:0] funct5,
-	output logic[xlen - 1:0] imm
+	output logic[xlen - 1:0] imm,
+	output logic[4:0] csrimm
 );
 	logic[4:0] rd;
 	wire[31:0] rd_decoded_raw;
@@ -34,11 +36,13 @@ module rv_decompressing_decoder #(
 		rs1_decoded = 'x;
 		rs2 = 'x;
 		rs2_decoded = 'x;
+		csr = 'x;
 		opcode = 'x;
 		funct3 = 'x;
 		funct7 = 'x;
 		funct5 = 'x;
 		imm = 'x;
+		csrimm = 'x;
 
 		if (in[0+:16] == '0) begin
 			sigill = '1;
@@ -737,6 +741,8 @@ module rv_decompressing_decoder #(
 							imm = rv64 ?
 								{{52{in[31]}}, in[20+:12]} :
 								{{20{in[31]}}, in[20+:12]};
+							csr = in[20+:12];
+							csrimm = in[15+:5];
 						end
 
 						5'b01000: // store

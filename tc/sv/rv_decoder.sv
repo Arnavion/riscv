@@ -8,11 +8,13 @@ module rv_decoder #(
 	output logic[31:0] rd_decoded,
 	output logic[31:0] rs1_decoded,
 	output logic[31:0] rs2_decoded,
+	output logic[11:0] csr,
 	output logic[4:0] opcode,
 	output logic[2:0] funct3,
 	output logic[6:0] funct7,
 	output logic[4:0] funct5,
-	output logic[xlen - 1:0] imm
+	output logic[xlen - 1:0] imm,
+	output logic[4:0] csrimm
 );
 	typedef enum {
 		InstructionType_R,
@@ -157,6 +159,23 @@ module rv_decoder #(
 			InstructionType_R,
 			InstructionType_Illegal:
 				imm = 'x;
+		endcase
+
+		unique case (instruction_type)
+			InstructionType_I: begin
+				csr = in[20+:12];
+				csrimm = in[15+:5];
+			end
+
+			InstructionType_R,
+			InstructionType_S,
+			InstructionType_B,
+			InstructionType_U,
+			InstructionType_J,
+			InstructionType_Illegal: begin
+				csr = 'x;
+				csrimm = 'x;
+			end
 		endcase
 	end
 endmodule

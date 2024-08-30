@@ -18,6 +18,10 @@ The assembler only supports what the emulator implements. Per the [unprivileged 
 
 - Zcb 1.0.0 (additional compressed instructions for integer registers)
 
+- Zicntr 2.0 (cycle, time and instret CSRs)
+
+- Zicsr 2.0 (CSR instructions)
+
 Further extensions are not supported, notably instructions for hardware multiplication and division (M) and hardware floats (F, D).
 
 Compressed instructions are supported in the sense that the assembler will encode regular instructions like `add` and `lbu` into the compressed form when compression is enabled. The mnemonics for the compressed instructions like `c.add` and `c.lbu` are not supported. Instructions that only exist in compressed instruction extensions like `c.lwsp` can be written as `lwsp` or `c.lwsp`.
