@@ -26,6 +26,23 @@ module rv_cpu (
 		rs1_load_value, rs2_load_value
 	);
 
+	wire[11:0] csr;
+	wire csr_load;
+	wire csr_store;
+	wire[63:0] csr_store_value;
+	wire csrs_sigill;
+	wire[63:0] csr_load_value;
+	rv_csrs64 csrs (
+		clock, reset,
+		csr,
+		csr_load,
+		csr_store,
+		csr_store_value,
+
+		csrs_sigill,
+		csr_load_value
+	);
+
 	wire decompressor_sigill;
 	wire decompressor_is_compressed;
 	wire[31:0] decompressor_inst;
@@ -41,30 +58,34 @@ module rv_cpu (
 	wire[6:0] funct7;
 	wire[4:0] funct5;
 	wire[31:0] imm;
+	wire[4:0] csrimm;
 	rv_decoder decoder (
 		decompressor_inst,
 		decoder_sigill,
 		rd, rs1, rs2,
+		csr, csr_load, csr_store,
 		opcode, funct3, funct7, funct5,
-		imm
+		imm, csrimm
 	);
 
 	wire alu_sigill;
 	rv_alu alu (
 		opcode, funct3, funct7,
-		rs1_load_value, rs2_load_value, imm,
+		rs1_load_value, rs2_load_value, imm, csrimm,
 		pc, pc + 63'(!decompressor_is_compressed) + 63'b1,
-		ram_load_value,
+		ram_load_value, csr_load_value,
 		alu_sigill,
 		pcnext,
 		rd_store_value,
-		ram_load, ram_store, ram_funct3, ram_address
+		ram_load, ram_store, ram_funct3, ram_address,
+		csr_store_value
 	);
 
-	assign halt = decompressor_sigill | decoder_sigill | alu_sigill;
+	assign halt = csrs_sigill | decompressor_sigill | decoder_sigill | alu_sigill;
 endmodule
 
 `include "rv_alu.sv"
+`include "rv_csrs64.sv"
 `include "rv_decoder.sv"
 `include "rv_decompressor.sv"
 `include "rv_xregs.sv"
