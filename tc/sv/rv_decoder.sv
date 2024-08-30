@@ -8,11 +8,13 @@ module rv_decoder #(
 	output logic[31:0] rd_decoded,
 	output logic[31:0] rs1_decoded,
 	output logic[31:0] rs2_decoded,
+	output logic[11:0] csr,
 	output logic[4:0] opcode,
 	output logic[2:0] funct3,
 	output logic[6:0] funct7,
 	output logic[4:0] funct5,
-	output logic[xlen - 1:0] imm
+	output logic[xlen - 1:0] imm,
+	output logic[4:0] csrimm
 );
 	logic rd_enable;
 	reg_decoder rd_decoder (in[7+:5], rd_enable, rd_decoded);
@@ -32,7 +34,9 @@ module rv_decoder #(
 		rd_enable = 'x;
 		rs1_enable = 'x;
 		rs2_enable = 'x;
+		csr = 'x;
 		imm = 'x;
+		csrimm = 'x;
 
 		if (in[0+:2] == 2'b11) begin
 			unique casez (in[2+:5])
@@ -67,6 +71,8 @@ module rv_decoder #(
 						rs1_enable = '1;
 						rs2_enable = '0;
 
+						csr = in[20+:12];
+
 						imm[0] = in[20];
 						imm[1+:4] = in[21+:4];
 						imm[5+:6] = in[25+:6];
@@ -74,6 +80,8 @@ module rv_decoder #(
 						imm[12+:8] = {8{in[31]}};
 						imm[20+:11] = {11{in[31]}};
 						imm[31+:xlen - 31] = {(xlen - 31){in[31]}};
+
+						csrimm = in[15+:5];
 					end
 
 				5'b01000: // store

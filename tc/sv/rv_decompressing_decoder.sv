@@ -9,11 +9,13 @@ module rv_decompressing_decoder #(
 	output logic[31:0] rd_decoded,
 	output logic[31:0] rs1_decoded,
 	output logic[31:0] rs2_decoded,
+	output logic[11:0] csr,
 	output bit[4:0] opcode,
 	output bit[2:0] funct3,
 	output bit[6:0] funct7,
 	output bit[4:0] funct5,
-	output logic[xlen - 1:0] imm
+	output logic[xlen - 1:0] imm,
+	output logic[4:0] csrimm
 );
 	logic[4:0] rd;
 	logic rd_enable;
@@ -37,11 +39,13 @@ module rv_decompressing_decoder #(
 		rs1_enable = 'x;
 		rs2 = 'x;
 		rs2_enable = 'x;
+		csr = 'x;
 		opcode = 'x;
 		funct3 = 'x;
 		funct7 = 'x;
 		funct5 = 'x;
 		imm = 'x;
+		csrimm = 'x;
 
 		unique casez ({in[0+:2], in[13+:3]})
 			// addi4spn
@@ -837,6 +841,8 @@ module rv_decompressing_decoder #(
 						rs1_enable = '1;
 						rs2_enable = '0;
 
+						csr = in[20+:12];
+
 						imm[0] = in[20];
 						imm[1+:4] = in[21+:4];
 						imm[5+:6] = in[25+:6];
@@ -844,6 +850,8 @@ module rv_decompressing_decoder #(
 						imm[12+:8] = {8{in[31]}};
 						imm[20+:11] = {11{in[31]}};
 						imm[31+:xlen - 31] = {(xlen - 31){in[31]}};
+
+						csrimm = in[15+:5];
 					end
 
 					5'b01000: // store

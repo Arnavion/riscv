@@ -268,9 +268,13 @@ module rv_alu (
 	input logic[63:0] rs1,
 	input logic[63:0] rs2,
 	input logic[63:0] imm,
+	input logic[63:0] csrimm,
 	input bit[63:0] pc,
 	input bit[63:0] pcnext_in,
 	input logic[63:0] ram_load_value,
+	input logic[63:0] csr_load_value,
+	input logic rd_is_x0,
+	input logic rs1_is_x0,
 
 	output bit sigill,
 	output bit[63:0] pcnext_out,
@@ -278,7 +282,10 @@ module rv_alu (
 	output bit ram_load,
 	output bit ram_store,
 	output logic[2:0] ram_funct3,
-	output logic[63:0] ram_address
+	output logic[63:0] ram_address,
+	output bit csr_load,
+	output bit csr_store,
+	output logic[63:0] csr_store_value
 );
 	wire[63:0] rs1uw = {32'b0, rs1[0+:32]};
 
@@ -323,6 +330,10 @@ module rv_alu (
 		ram_store = '0;
 		ram_address = 'x;
 		ram_funct3 = 'x;
+
+		csr_load = '0;
+		csr_store = '0;
+		csr_store_value = 'x;
 
 		in1 = 'x;
 		in2 = 'x;
@@ -654,6 +665,65 @@ module rv_alu (
 				ram_store = '1;
 				ram_address = adder_add;
 				ram_funct3 = funct3;
+			end
+
+
+			// Zicsr
+
+			// csrrw
+			{15'b11100_001_???????}: begin
+				rd = csr_load_value;
+				csr_load = ~rd_is_x0;
+				csr_store = '1;
+				csr_store_value = rs1;
+			end
+
+			// csrrs
+			{15'b11100_010_???????}: begin
+				in3 = csr_load_value;
+				in4 = rs1;
+				rd = csr_load_value;
+				csr_load = '1;
+				csr_store = ~rs1_is_x0;
+				csr_store_value = logical_or;
+			end
+
+			// csrrc
+			{15'b11100_011_???????}: begin
+				in3 = csr_load_value;
+				in4 = ~rs1;
+				rd = csr_load_value;
+				csr_load = '1;
+				csr_store = ~rs1_is_x0;
+				csr_store_value = logical_and;
+			end
+
+			// csrrwi
+			{15'b11100_101_???????}: begin
+				rd = csr_load_value;
+				csr_load = ~rd_is_x0;
+				csr_store = '1;
+				csr_store_value = csrimm;
+			end
+
+			// csrrsi
+			{15'b11100_110_???????}: begin
+				in3 = csr_load_value;
+				in4 = csrimm;
+				rd = csr_load_value;
+				csr_load = '1;
+				csr_store = (csrimm != '0);
+				csr_store_value = logical_or;
+			end
+
+			// csrrci
+			{15'b11100_111_???????}: begin
+				in3 = csr_load_value;
+				in4 = ~csrimm;
+				rd = csr_load_value;
+				csr_load = '1;
+				csr_store = (csrimm != '0);
+				csr_store_value = logical_and;
 			end
 
 
