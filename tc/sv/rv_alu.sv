@@ -268,9 +268,11 @@ module rv_alu (
 	input logic[63:0] rs1,
 	input logic[63:0] rs2,
 	input logic[31:0] immw,
+	input logic[4:0] csrimm_,
 	input bit[63:1] pc,
 	input bit[63:1] pcnext_in,
 	input logic[63:0] ram_load_value,
+	input logic[63:0] csr_load_value,
 
 	output bit sigill,
 	output bit[63:1] pcnext_out,
@@ -279,7 +281,8 @@ module rv_alu (
 	output bit ram_store,
 	output logic[2:0] ram_funct3,
 	output logic[63:0] ram_address,
-	output logic[63:0] ram_store_value
+	output logic[63:0] ram_store_value,
+	output logic[63:0] csr_store_value
 );
 	typedef enum bit[4:0] {
 		OpCode_Load = 5'b00000,
@@ -292,7 +295,8 @@ module rv_alu (
 		OpCode_Op32 = 5'b01110,
 		OpCode_Branch = 5'b11000,
 		OpCode_Jalr = 5'b11001,
-		OpCode_Jal = 5'b11011
+		OpCode_Jal = 5'b11011,
+		OpCode_System = 5'b11100
 	} OpCode;
 
 	wire[63:0] rs1uw = 64'(rs1[0+:32]);
@@ -300,6 +304,8 @@ module rv_alu (
 	wire[63:0] rs1w = unsigned'(64'(signed'(rs1[0+:32])));
 
 	wire[63:0] imm = unsigned'(64'(signed'(immw)));
+
+	wire[63:0] csrimm = 64'(csrimm_);
 
 	logic[63:0] in1;
 	logic[63:0] in2;
@@ -353,6 +359,8 @@ module rv_alu (
 		ram_funct3 = 'x;
 		ram_address = 'x;
 		ram_store_value = 'x;
+
+		csr_store_value = 'x;
 
 		in1 = 'x;
 		in2 = 'x;
@@ -632,6 +640,54 @@ module rv_alu (
 				rd = {pcnext_in, 1'b0};
 				jump = '1;
 			end
+
+			OpCode_System: unique case (funct3)
+				// csrrw
+				3'b001: begin
+					rd = csr_load_value;
+					csr_store_value = rs1;
+				end
+
+				// csrrs
+				3'b010: begin
+					in3 = csr_load_value;
+					in4 = rs1;
+					rd = csr_load_value;
+					csr_store_value = logical_or;
+				end
+
+				// csrrc
+				3'b011: begin
+					in3 = csr_load_value;
+					in4 = ~rs1;
+					rd = csr_load_value;
+					csr_store_value = logical_and;
+				end
+
+				// csrrwi
+				3'b101: begin
+					rd = csr_load_value;
+					csr_store_value = csrimm;
+				end
+
+				// csrrsi
+				3'b110: begin
+					in3 = csr_load_value;
+					in4 = csrimm;
+					rd = csr_load_value;
+					csr_store_value = logical_or;
+				end
+
+				// csrrci
+				3'b111: begin
+					in3 = csr_load_value;
+					in4 = ~csrimm;
+					rd = csr_load_value;
+					csr_store_value = logical_and;
+				end
+
+				default: sigill = '1;
+			endcase
 
 			default: sigill = '1;
 		endcase

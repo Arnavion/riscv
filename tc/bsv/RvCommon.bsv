@@ -1,5 +1,7 @@
 typedef Bit#(5) XReg;
 
+typedef Bit#(12) Csr;
+
 typedef enum {
 	OpCode_Load = 5'b00000,
 	OpCode_LoadFp = 5'b00001,
@@ -31,6 +33,8 @@ typedef union tagged {
 
 	struct { BranchOp op; rs1_src rs1; rs2_src rs2; Int#(32) offset; } Branch;
 
+	struct { CsrOp op; XReg rd; Csr csrd; csr_src csrs; rs2_src rs2; } Csr;
+
 	void Ebreak;
 
 	void Fence;
@@ -42,7 +46,7 @@ typedef union tagged {
 	struct { LoadOp op; XReg rd; rs1_src base; Int#(32) offset; } Load;
 
 	struct { StoreOp op; rs1_src base; rs2_src value; Int#(32) offset; } Store;
-} Instruction#(type rs1_src, type rs2_src);
+} Instruction#(type rs1_src, type rs2_src, type csr_src);
 
 typedef enum {
 	Add,
@@ -71,6 +75,12 @@ typedef enum {
 	GreaterThanOrEqualUnsigned
 } BranchOp deriving(Bits);
 
+typedef enum {
+	Csrrw,
+	Csrrs,
+	Csrrc
+} CsrOp deriving(Bits);
+
 typedef union tagged {
 	void Pc;
 	rs1_src XReg;
@@ -97,15 +107,16 @@ typedef enum {
 typedef struct {
 	RawOp op;
 	XReg rd;
-	Bit#(SizeOf#(rs1_src)) rs1;
+	Bit#(TMax#(SizeOf#(rs1_src), SizeOf#(csr_src))) rs1;
 	Bit#(SizeOf#(rs2_src)) rs2;
 	Int#(32) imm;
-} RawInstruction#(type rs1_src, type rs2_src) deriving(Bits);
+} RawInstruction#(type rs1_src, type rs2_src, type csr_src) deriving(Bits);
 
 typedef union tagged {
 	void Auipc;
 	BinaryOp Binary;
 	BranchOp Branch;
+	CsrOp Csr;
 	void Ebreak;
 	void Fence;
 	void Jal;
@@ -115,14 +126,15 @@ typedef union tagged {
 	StoreOp Store;
 } RawOp deriving(Bits);
 
-instance Bits#(Instruction#(rs1_src, rs2_src), inst_len)
+instance Bits#(Instruction#(rs1_src, rs2_src, csr_src), inst_len)
 provisos (
 	Bits#(rs1_src, rs1_src_len),
 	Bits#(rs2_src, rs2_src_len),
-	Bits#(RawInstruction#(rs1_src, rs2_src), inst_len)
+	Bits#(csr_src, csr_src_len),
+	Bits#(RawInstruction#(rs1_src, rs2_src, csr_src), inst_len)
 );
-	function Bit#(inst_len) pack(Instruction#(rs1_src, rs2_src) inst);
-		RawInstruction#(rs1_src, rs2_src) result = RawInstruction {
+	function Bit#(inst_len) pack(Instruction#(rs1_src, rs2_src, csr_src) inst);
+		RawInstruction#(rs1_src, rs2_src, csr_src) result = RawInstruction {
 			op: ?,
 			rd: ?,
 			rs1: ?,
@@ -149,6 +161,14 @@ provisos (
 				result.rs1 = { ?, pack(rs1) };
 				result.rs2 = pack(rs2);
 				result.imm = offset;
+			end
+
+			tagged Csr { op: .op, rd: .rd, csrd: .csrd, csrs: .csrs, rs2: .rs2 }: begin
+				result.op = tagged Csr op;
+				result.rd = rd;
+				result.rs1 = { ?, pack(csrs) };
+				result.rs2 = pack(rs2);
+				result.imm = unpack({ ?, csrd });
 			end
 
 			tagged Ebreak: begin
@@ -198,10 +218,11 @@ provisos (
 		return pack(result);
 	endfunction
 
-	function Instruction#(rs1_src, rs2_src) unpack(Bit#(inst_len) bits);
-		RawInstruction#(rs1_src, rs2_src) inst = unpack(bits);
+	function Instruction#(rs1_src, rs2_src, csr_src) unpack(Bit#(inst_len) bits);
+		RawInstruction#(rs1_src, rs2_src, csr_src) inst = unpack(bits);
 
-		rs1_src rs1 = unpack(inst.rs1);
+		rs1_src rs1 = unpack(truncate(inst.rs1));
+		csr_src csrs = unpack(truncate(inst.rs1));
 		rs2_src rs2 = unpack(inst.rs2);
 
 		case (inst.op) matches
@@ -222,6 +243,14 @@ provisos (
 				rs1: rs1,
 				rs2: rs2,
 				offset: inst.imm
+			};
+
+			tagged Csr .op: return tagged Csr {
+				op: op,
+				rd: inst.rd,
+				csrd: truncate(pack(inst.imm)),
+				csrs: csrs,
+				rs2: rs2
 			};
 
 			tagged Ebreak: return tagged Ebreak;

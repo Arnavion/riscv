@@ -14,6 +14,7 @@ import RvRegisters::*;
 typedef Server#(RvCpuRequest, RvCpuResponse) RvCpu;
 
 typedef struct {
+	Int#(64) csr_time;
 	Bit#(32) in;
 } RvCpuRequest deriving(Bits);
 
@@ -72,7 +73,7 @@ module mkRvCpu(RvCpu);
 			tagged Invalid: decoder_state <= tagged Sigill;
 
 			tagged Valid .inst: begin
-				let ready_inst = registers.load(inst);
+				let ready_inst = registers.load(inst, args.first.csr_time);
 
 				let next_pc = case (inst_len) matches
 					tagged Two: return (zeroExtend(pc_hi) * 2) + 2;
@@ -98,14 +99,22 @@ module mkRvCpu(RvCpu);
 			tagged Ok (AluResponseOk {
 				x_regs_rd: .x_regs_rd,
 				x_regs_rd_value: .x_regs_rd_value,
+				csrd: .csrd,
 				next_pc: .next_pc
 			}): begin
-				registers.store(x_regs_rd, x_regs_rd_value);
+				State next_execute_state = execute_state;
 
-				if (next_pc % 2 == 0)
+				let faulted <- registers.store(x_regs_rd, x_regs_rd_value, csrd);
+				if (faulted)
+					next_execute_state = tagged Efault;
+
+				if (next_pc % 2 != 0)
+					next_execute_state = tagged Efault;
+
+				if (next_execute_state matches tagged Running)
 					pc_hi <= truncate(next_pc / 2);
-				else
-					execute_state <= tagged Efault;
+
+				execute_state <= next_execute_state;
 			end
 		endcase
 	endrule
@@ -129,6 +138,7 @@ module mkRvCpu(RvCpu);
 			decompressor.response.deq;
 			decoder.response.deq;
 			alu.response.deq;
+			registers.retire(1);
 		endmethod
 	endinterface
 endmodule

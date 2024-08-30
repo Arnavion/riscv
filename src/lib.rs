@@ -6,7 +6,7 @@ pub use instruction::{FenceSet, Instruction};
 mod pseudo_instruction;
 
 mod register;
-pub use register::Register;
+pub use register::{Csr, Register};
 
 mod supported_extensions;
 pub use supported_extensions::SupportedExtensions;
@@ -62,6 +62,7 @@ pub enum ParseError<'a> {
 	MalformedFenceSet { token: &'a [u8] },
 	MalformedImmediate { token: &'a [u8] },
 	MalformedInstruction { line: &'a str },
+	MalformedIntegerCsr { token: &'a [u8] },
 	MalformedRegister { token: &'a str },
 	SpInstructionRegIsNotX2 { pos: &'static str, line: &'a str },
 	TrailingGarbage { line: &'a str },
@@ -79,6 +80,7 @@ impl core::fmt::Display for ParseError<'_> {
 			Self::MalformedFenceSet { token } => write!(f, "malformed fence set {token:?}"),
 			Self::MalformedImmediate { token } => write!(f, "malformed immediate {token:?}"),
 			Self::MalformedInstruction { line } => write!(f, "malformed instruction {line:?}"),
+			Self::MalformedIntegerCsr { token } => write!(f, "malformed integer CSR {token:?}"),
 			Self::MalformedRegister { token } => write!(f, "malformed register {token:?}"),
 			Self::SpInstructionRegIsNotX2 { pos, line } => write!(f, "{pos} register must be x2 {line:?}"),
 			Self::TrailingGarbage { line } => write!(f, "trailing garbage {line:?}"),
@@ -749,6 +751,75 @@ mod tests {
 				(0x7ae3, 0xfeb6),
 			]),
 
+			// csr.s
+			("
+				# User Counter/Timers
+				csrr a0, cycle
+				csrw cycle, a1
+				csrr a0, time
+				csrw time, a1
+				csrr a0, instret
+				csrw instret, a1
+				csrr a0, cycleh
+				csrw cycleh, a1
+				csrr a0, timeh
+				csrw timeh, a1
+				csrr a0, instreth
+				csrw instreth, a1
+				csrr a0, misa
+				csrw misa, a1
+			", &[
+				(0x2573, 0xc000),
+				(0x9073, 0xc005),
+				(0x2573, 0xc010),
+				(0x9073, 0xc015),
+				(0x2573, 0xc020),
+				(0x9073, 0xc025),
+				(0x2573, 0xc800),
+				(0x9073, 0xc805),
+				(0x2573, 0xc810),
+				(0x9073, 0xc815),
+				(0x2573, 0xc820),
+				(0x9073, 0xc825),
+				(0x2573, 0x3010),
+				(0x9073, 0x3015),
+			]),
+
+			// csr-insns-pseudo.s
+			("
+				# i-ext
+				csrr t0, 0x0
+				csrw 0x0, t0
+				csrs 0x0, t0
+				csrc 0x0, t0
+				csrwi 0x0, 31
+				csrsi 0x0, 31
+				csrci 0x0, 31
+
+				rdcycle t0
+				rdtime t0
+				rdinstret t0
+
+				# rv32i-ext
+				rdcycleh t0
+				rdtimeh t0
+				rdinstreth t0
+			", &[
+				(0x22f3, 0x0000),
+				(0x9073, 0x0002),
+				(0xa073, 0x0002),
+				(0xb073, 0x0002),
+				(0xd073, 0x000f),
+				(0xe073, 0x000f),
+				(0xf073, 0x000f),
+				(0x22f3, 0xc000),
+				(0x22f3, 0xc010),
+				(0x22f3, 0xc020),
+				(0x22f3, 0xc800),
+				(0x22f3, 0xc810),
+				(0x22f3, 0xc820),
+			]),
+
 			// dis-addr-overflow.s
 			("
 				## Use hi_addr
@@ -1287,6 +1358,55 @@ mod tests {
 	#[test]
 	fn gas_uncompressed64() {
 		static TESTS: &[(&str, &[(u16, u16)])] = &[
+			// csr.s
+			("
+				# User Counter/Timers
+				csrr a0, cycle
+				csrw cycle, a1
+				csrr a0, time
+				csrw time, a1
+				csrr a0, instret
+				csrw instret, a1
+				csrr a0, misa
+				csrw misa, a1
+			", &[
+				(0x2573, 0xc000),
+				(0x9073, 0xc005),
+				(0x2573, 0xc010),
+				(0x9073, 0xc015),
+				(0x2573, 0xc020),
+				(0x9073, 0xc025),
+				(0x2573, 0x3010),
+				(0x9073, 0x3015),
+			]),
+
+			// csr-insns-pseudo.s
+			("
+				# i-ext
+				csrr t0, 0x0
+				csrw 0x0, t0
+				csrs 0x0, t0
+				csrc 0x0, t0
+				csrwi 0x0, 31
+				csrsi 0x0, 31
+				csrci 0x0, 31
+
+				rdcycle t0
+				rdtime t0
+				rdinstret t0
+			", &[
+				(0x22f3, 0x0000),
+				(0x9073, 0x0002),
+				(0xa073, 0x0002),
+				(0xb073, 0x0002),
+				(0xd073, 0x000f),
+				(0xe073, 0x000f),
+				(0xf073, 0x000f),
+				(0x22f3, 0xc000),
+				(0x22f3, 0xc010),
+				(0x22f3, 0xc020),
+			]),
+
 			// dis-addr-overflow.s
 			("
 				## Use hi_addr

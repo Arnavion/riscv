@@ -1,4 +1,4 @@
-use crate::{EncodeError, ParseError};
+use crate::{EncodeError, instruction::Imm, ParseError};
 
 macro_rules! registers {
 	(
@@ -153,5 +153,72 @@ impl Register {
 			Self::X15 => 0b111,
 			_ => return Err(EncodeError::IncompressibleRegister),
 		})
+	}
+}
+
+macro_rules! csr {
+	(
+		$vis:vis enum $ty:ident {
+			$($variant:ident = $asm:literal => $encoded:literal ,)*
+		}
+	) => {
+		#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+		$vis enum $ty {
+			$($variant ,)*
+
+			Other(u16),
+		}
+
+		impl $ty {
+			$vis fn encode_12b(self) -> u32 {
+				match self {
+					$(Self::$variant => $encoded << 20,)*
+
+					Self::Other(encoded) => u32::from(encoded) << 20,
+				}
+			}
+		}
+
+		impl core::fmt::Display for $ty {
+			fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+				match self {
+					$(Self::$variant => f.write_str($asm),)*
+
+					Self::Other(encoded) => write!(f, "{encoded}"),
+				}
+			}
+		}
+
+		impl<'a> TryFrom<&'a [u8]> for $ty {
+			type Error = ParseError<'a>;
+
+			fn try_from(token: &'a [u8]) -> Result<Self, Self::Error> {
+				if let Ok(Imm(encoded)) = token.try_into() {
+					let encoded = encoded.try_into().map_err(|_| crate::ParseError::MalformedIntegerCsr { token })?;
+					Ok(Self::Other(encoded))
+				}
+				else {
+					let token = core::str::from_utf8(token).map_err(|_| crate::ParseError::InvalidUtf8 { token })?;
+
+					Ok(match token {
+						$($asm => Self::$variant,)*
+
+						_ => return Err(crate::ParseError::MalformedRegister { token }),
+					})
+				}
+			}
+		}
+	};
+}
+
+csr! {
+	pub enum Csr {
+		Cycle = "cycle" => 0xc00,
+		CycleH = "cycleh" => 0xc80,
+		InstRet = "instret" => 0xc02,
+		InstRetH = "instreth" => 0xc82,
+		Misa = "misa" => 0x301,
+		Time = "time" => 0xc01,
+		TimeH = "timeh" => 0xc81,
 	}
 }
