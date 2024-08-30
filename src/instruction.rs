@@ -1,6 +1,6 @@
 #![allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 
-use crate::{EncodeError, ParseError, Register, SupportedExtensions};
+use crate::{Csr, EncodeError, ParseError, Register, SupportedExtensions};
 
 macro_rules! instructions {
 	(
@@ -344,6 +344,126 @@ macro_rules! instructions {
 				$f
 				$($display_arms)*
 				Self::$variant { dest, base, offset } => write!($f, concat!($asm, " {}, {}({})"), dest, offset, base),
+			}
+			{ $($rest)* }
+		}
+	};
+
+	(
+		@inner
+		$vis:vis
+		$ty:ident
+		{ $($variants:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
+		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
+		{ $f:ident $($display_arms:tt)* }
+		{ #[i( $asm:tt , $opcode:tt )] $variant:tt { dest: Register, csr: Csr, src: Register }, $($rest:tt)* }
+	) => {
+		instructions! {
+			@inner
+			$vis
+			$ty
+			{
+				$($variants)*
+				$variant { dest: Register, csr: Csr, src: Register },
+			}
+			{
+				$self
+				$supported_extensions
+				$($encode_arms)*
+				Self::$variant { dest, csr, src } => RawInstruction::CsrI {
+					opcode: OpCode::$opcode,
+					rd: dest,
+					funct3: Funct3::$variant,
+					src: src.encode_5b(),
+					csr,
+				},
+			}
+			{
+				$parse_line
+				$parse_tokens
+				$($parse_arms)*
+				$asm => {
+					let dest = $parse_tokens.next().ok_or(ParseError::TruncatedInstruction { line: $parse_line })?;
+					let dest = dest.try_into()?;
+
+					let csr = $parse_tokens.next().ok_or(ParseError::TruncatedInstruction { line: $parse_line })?;
+					let csr = csr.try_into()?;
+
+					let src = $parse_tokens.next().ok_or(ParseError::TruncatedInstruction { line: $parse_line })?;
+					let src = src.try_into()?;
+
+					if $parse_tokens.next().is_some() {
+						return Err(ParseError::TrailingGarbage { line: $parse_line });
+					}
+
+					Self::$variant { dest, csr, src }
+				},
+			}
+			{
+				$f
+				$($display_arms)*
+				Self::$variant { dest, csr, src } => write!($f, concat!($asm, " {}, {}, {}"), dest, csr, src),
+			}
+			{ $($rest)* }
+		}
+	};
+
+	(
+		@inner
+		$vis:vis
+		$ty:ident
+		{ $($variants:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
+		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
+		{ $f:ident $($display_arms:tt)* }
+		{ #[i( $asm:tt , $opcode:tt )] $variant:tt { dest: Register, csr: Csr, imm: i32 }, $($rest:tt)* }
+	) => {
+		instructions! {
+			@inner
+			$vis
+			$ty
+			{
+				$($variants)*
+				$variant { dest: Register, csr: Csr, imm: i32 },
+			}
+			{
+				$self
+				$supported_extensions
+				$($encode_arms)*
+				Self::$variant { dest, csr, imm } => RawInstruction::CsrI {
+					opcode: OpCode::$opcode,
+					rd: dest,
+					funct3: Funct3::$variant,
+					src: imm as u32,
+					csr,
+				},
+			}
+			{
+				$parse_line
+				$parse_tokens
+				$($parse_arms)*
+				$asm => {
+					let dest = $parse_tokens.next().ok_or(ParseError::TruncatedInstruction { line: $parse_line })?;
+					let dest = dest.try_into()?;
+
+					let csr = $parse_tokens.next().ok_or(ParseError::TruncatedInstruction { line: $parse_line })?;
+					let csr = csr.try_into()?;
+
+					let imm = $parse_tokens.next().ok_or(ParseError::TruncatedInstruction { line: $parse_line })?;
+					let Imm(imm) = imm.try_into()?;
+
+					if $parse_tokens.next().is_some() {
+						return Err(ParseError::TrailingGarbage { line: $parse_line });
+					}
+
+					Self::$variant { dest, csr, imm }
+				},
+			}
+			{
+				$f
+				$($display_arms)*
+				Self::$variant { dest, csr, imm } => write!($f, concat!($asm, " {}, {}, {}"), dest, csr, imm),
 			}
 			{ $($rest)* }
 		}
@@ -747,6 +867,24 @@ instructions! {
 
 		#[b("bne", Branch)]
 		Bne { src1: Register, src2: Register, offset: i32 },
+
+		#[i("csrrc", System)]
+		Csrrc { dest: Register, csr: Csr, src: Register },
+
+		#[i("csrrci", System)]
+		Csrrci { dest: Register, csr: Csr, imm: i32 },
+
+		#[i("csrrs", System)]
+		Csrrs { dest: Register, csr: Csr, src: Register },
+
+		#[i("csrrsi", System)]
+		Csrrsi { dest: Register, csr: Csr, imm: i32 },
+
+		#[i("csrrw", System)]
+		Csrrw { dest: Register, csr: Csr, src: Register },
+
+		#[i("csrrwi", System)]
+		Csrrwi { dest: Register, csr: Csr, imm: i32 },
 
 		#[i("ebreak", System)]
 		EBreak,
@@ -1665,6 +1803,14 @@ enum RawInstruction {
 		successor_set: FenceSet,
 	},
 
+	CsrI {
+		opcode: OpCode,
+		rd: Register,
+		funct3: Funct3,
+		src: u32,
+		csr: Csr,
+	},
+
 	Cr {
 		opcode: OpCodeC,
 		rd_rs1: Register,
@@ -1857,6 +2003,20 @@ impl RawInstruction {
 					(successor_set.encode() << 20)
 				),
 
+			Self::CsrI { opcode, rd, funct3, src, csr } => {
+				if src & ((1 << 5) - 1) != src {
+					return Err(EncodeError::ImmediateOverflow);
+				}
+
+				Encoded::Full(
+					opcode.encode() |
+					rd.encode_rd_5b() |
+					(funct3.encode() << 12) |
+					(src << 15) |
+					csr.encode_12b()
+				)
+			},
+
 			Self::Cr { opcode, rd_rs1, rs2 } => Encoded::Compressed(
 				opcode.encode() |
 				(rs2.encode_5b() << 2) |
@@ -2020,6 +2180,12 @@ funct! {
 		Blt = 0b100,
 		Bltu = 0b110,
 		Bne = 0b001,
+		Csrrc = 0b011,
+		Csrrci = 0b111,
+		Csrrs = 0b010,
+		Csrrsi = 0b110,
+		Csrrw = 0b001,
+		Csrrwi = 0b101,
 		EBreak = 0b000,
 		ECall = 0b000,
 		Jalr = 0b000,

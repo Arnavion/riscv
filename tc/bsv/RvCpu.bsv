@@ -6,7 +6,7 @@ import RvDecoder::*;
 import RvDecompressor::*;
 
 interface RvCpu;
-	method Action feed(Bit#(32) in);
+	method Action feed(Int#(64) csr_time, Bit#(32) in);
 	method InspectResult inspect;
 endinterface
 
@@ -14,6 +14,8 @@ typedef struct {
 	State state;
 	Int#(64) pc;
 	Vector#(32, Int#(64)) x_regs;
+	Int#(64) csr_cycle;
+	Int#(64) csr_instret;
 } InspectResult deriving(Bits);
 
 typedef union tagged {
@@ -28,18 +30,21 @@ module mkRvCpu(RvCpu);
 	Reg#(Int#(64)) pc <- mkReg(0);
 	Vector#(32, Reg#(Int#(64))) x_regs <- replicateM(mkReg(0));
 
+	Reg#(Int#(64)) csr_cycle <- mkReg(0);
+	Reg#(Int#(64)) csr_instret <- mkReg(0);
+
 	RvAlu alu <- mkRvAlu;
 	RvDecoder decoder <- mkRvDecoder;
 	RvDecompressor decompressor <- mkRvDecompressor(True);
 
-	method Action feed(Bit#(32) in) if (state matches Running);
+	method Action feed(Int#(64) csr_time, Bit#(32) in) if (state matches Running);
 		case (decode(decompressor, decoder, in)) matches
 			tagged Invalid: state <= tagged Sigill;
 
 			tagged Valid { .inst, .inst_len }: begin
 				let x_regs_ = readVReg(x_regs);
 
-				Instruction#(Int#(64)) ready_inst = case (inst) matches
+				Instruction#(Int#(64), Csr, Int#(64)) ready_inst = case (inst) matches
 					tagged Auipc { rd: .rd, imm: .imm }: return tagged Auipc {
 						rd: rd,
 						imm: imm
@@ -57,6 +62,33 @@ module mkRvCpu(RvCpu);
 						rs1: fetch_x_reg(x_regs_, rs1),
 						rs2: fetch_x_reg(x_regs_, rs2),
 						imm: imm
+					};
+
+					tagged Csr (tagged Csrr { rd: .rd, csrs: .csrs }): return tagged Csr tagged Csrr {
+						rd: rd,
+						csrs: fetch_csr(csr_cycle, csr_instret, csr_time, csrs)
+					};
+					tagged Csr (tagged Csrs { rs1: .rs1, csrd: .csrd }): return tagged Csr tagged Csrs {
+						rs1: fetch_x_reg(x_regs_, rs1),
+						csrd: csrd
+					};
+					tagged Csr (tagged Csrrw { rd: .rd, rs1: .rs1, csrd: .csrd, csrs: .csrs }): return tagged Csr tagged Csrrw {
+						rd: rd,
+						rs1: fetch_x_reg(x_regs_, rs1),
+						csrd: csrd,
+						csrs: fetch_csr(csr_cycle, csr_instret, csr_time, csrs)
+					};
+					tagged Csr (tagged Csrrs { rd: .rd, rs1: .rs1, csrd: .csrd, csrs: .csrs }): return tagged Csr tagged Csrrs {
+						rd: rd,
+						rs1: fetch_x_reg(x_regs_, rs1),
+						csrd: csrd,
+						csrs: fetch_csr(csr_cycle, csr_instret, csr_time, csrs)
+					};
+					tagged Csr (tagged Csrrc { rd: .rd, rs1: .rs1, csrd: .csrd, csrs: .csrs }): return tagged Csr tagged Csrrc {
+						rd: rd,
+						rs1: fetch_x_reg(x_regs_, rs1),
+						csrd: csrd,
+						csrs: fetch_csr(csr_cycle, csr_instret, csr_time, csrs)
 					};
 
 					tagged Ebreak: return tagged Ebreak;
@@ -106,10 +138,17 @@ module mkRvCpu(RvCpu);
 					tagged Ok (ExecuteResultOk {
 						x_regs_rd: .x_regs_rd,
 						x_regs_rd_value: .x_regs_rd_value,
+						csrd: .csrd,
 						jump_pc: .jump_pc
 					}): begin
 						if (x_regs_rd != 0)
 							x_regs[x_regs_rd] <= x_regs_rd_value;
+
+						if (csrd matches tagged Valid { .csrd, .csrd_value }) begin
+							case (csrd) matches
+								default: state <= tagged Efault;
+							endcase
+						end
 
 						case (jump_pc) matches
 							tagged Invalid: pc <= next_pc;
@@ -117,6 +156,9 @@ module mkRvCpu(RvCpu);
 						endcase
 					end
 				endcase
+
+				csr_cycle <= csr_cycle + 1;
+				csr_instret <= csr_instret + 1;
 			end
 		endcase
 	endmethod
@@ -125,7 +167,9 @@ module mkRvCpu(RvCpu);
 		return InspectResult {
 			state: state,
 			pc: pc,
-			x_regs: readVReg(x_regs)
+			x_regs: readVReg(x_regs),
+			csr_cycle: csr_cycle,
+			csr_instret: csr_instret
 		};
 	endmethod
 endmodule
@@ -135,7 +179,7 @@ typedef enum {
 	Four
 } InstructionLength deriving(Bits);
 
-function Maybe#(Tuple2#(Instruction#(Either#(XReg, Int#(64))), InstructionLength)) decode(RvDecompressor decompressor, RvDecoder decoder, Bit#(32) in);
+function Maybe#(Tuple2#(Instruction#(Either#(XReg, Int#(64)), Csr, Csr), InstructionLength)) decode(RvDecompressor decompressor, RvDecoder decoder, Bit#(32) in);
 	let inst_decompressed = decompressor.decompress(in);
 
 	case (inst_decompressed) matches
@@ -160,5 +204,14 @@ function Int#(64) fetch_x_reg(Vector#(32, Int#(64)) x_regs, Either#(XReg, Int#(6
 	case (rs) matches
 		tagged Left .rs: return x_regs[rs];
 		tagged Right .rs: return rs;
+	endcase
+endfunction
+
+function Int#(64) fetch_csr(Reg#(Int#(64)) csr_cycle, Reg#(Int#(64)) csr_instret, Int#(64) csr_time, Csr csrs);
+	case (csrs) matches
+		12'hc00: return csr_cycle;
+		12'hc01: return csr_time;
+		12'hc02: return csr_instret;
+		default: return 0;
 	endcase
 endfunction

@@ -5,6 +5,8 @@ typedef union tagged {
 
 typedef Bit#(5) XReg;
 
+typedef Bit#(12) Csr;
+
 typedef enum {
 	OpCode_Load = 5'b00000,
 	OpCode_LoadFp = 5'b00001,
@@ -30,6 +32,8 @@ typedef union tagged {
 
 	struct { BranchOp op; x_reg_src rs1; x_reg_src rs2; Int#(12) imm; } Branch;
 
+	CsrOp#(x_reg_src, csr_dest, csr_src) Csr;
+
 	void Ebreak;
 
 	void Fence;
@@ -41,7 +45,7 @@ typedef union tagged {
 	struct { XReg rd; Int#(20) imm; } Lui;
 
 	struct { StoreOp op; x_reg_src base; x_reg_src value; Int#(12) offset; } Store;
-} Instruction#(type x_reg_src) deriving(Bits);
+} Instruction#(type x_reg_src, type csr_dest, type csr_src) deriving(Bits);
 
 typedef enum {
 	Add,
@@ -69,6 +73,14 @@ typedef enum {
 	LessThanUnsigned,
 	GreaterThanOrEqualUnsigned
 } BranchOp deriving(Bits);
+
+typedef union tagged {
+	struct { XReg rd; csr_src csrs; } Csrr;
+	struct { x_reg_src rs1; csr_dest csrd; } Csrs;
+	struct { XReg rd; x_reg_src rs1; csr_dest csrd; csr_src csrs; } Csrrw;
+	struct { XReg rd; x_reg_src rs1; csr_dest csrd; csr_src csrs; } Csrrs;
+	struct { XReg rd; x_reg_src rs1; csr_dest csrd; csr_src csrs; } Csrrc;
+} CsrOp#(type x_reg_src, type csr_dest, type csr_src) deriving(Bits);
 
 typedef union tagged {
 	struct { Int#(20) offset; } Pc;

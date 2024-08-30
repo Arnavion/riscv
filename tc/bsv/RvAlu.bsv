@@ -7,7 +7,7 @@ interface RvAlu;
 	method ExecuteResult execute(
 		Int#(64) pc,
 		Int#(64) next_pc,
-		Instruction#(Int#(64)) inst
+		Instruction#(Int#(64), Csr, Int#(64)) inst
 	);
 endinterface
 
@@ -20,6 +20,7 @@ typedef union tagged {
 typedef struct {
 	XReg x_regs_rd;
 	Int#(64) x_regs_rd_value;
+	Maybe#(Tuple2#(Csr, Int#(64))) csrd;
 	Maybe#(Int#(64)) jump_pc;
 } ExecuteResultOk deriving(Bits);
 
@@ -33,7 +34,7 @@ module mkRvAlu(RvAlu);
 	method ExecuteResult execute(
 		Int#(64) pc,
 		Int#(64) next_pc,
-		Instruction#(Int#(64)) inst
+		Instruction#(Int#(64), Csr, Int#(64)) inst
 	);
 		match { .adder_a, .adder_b, .adder_cin } = case (inst) matches
 			tagged Auipc { imm: .imm }:
@@ -92,6 +93,13 @@ module mkRvAlu(RvAlu);
 					default: return ?;
 				endcase
 
+			tagged Csr .op:
+				case (op) matches
+					tagged Csrrs { rs1: .rs1, csrs: .csrs }: return tuple2(csrs, rs1);
+					tagged Csrrc { rs1: .rs1, csrs: .csrs }: return tuple2(csrs, ~rs1);
+					default: return ?;
+				endcase
+
 			default: return ?;
 		endcase;
 		let logical_result = logical.run(logical_arg1, logical_arg2);
@@ -117,6 +125,7 @@ module mkRvAlu(RvAlu);
 				return tagged Ok ExecuteResultOk {
 					x_regs_rd: rd,
 					x_regs_rd_value: add_result.add,
+					csrd: tagged Invalid,
 					jump_pc: tagged Invalid
 				};
 
@@ -140,6 +149,7 @@ module mkRvAlu(RvAlu);
 						tagged Subw: return add_result.addw;
 						tagged Xor: return logical_result.xor_;
 					endcase,
+					csrd: tagged Invalid,
 					jump_pc: tagged Invalid
 				};
 
@@ -155,7 +165,53 @@ module mkRvAlu(RvAlu);
 				return tagged Ok ExecuteResultOk {
 					x_regs_rd: 0,
 					x_regs_rd_value: ?,
+					csrd: tagged Invalid,
 					jump_pc: jump ? tagged Valid add_result.add : tagged Invalid
+				};
+			end
+
+			tagged Csr (tagged Csrr { rd: .rd, csrs: .csrs }): begin
+				return tagged Ok ExecuteResultOk {
+					x_regs_rd: rd,
+					x_regs_rd_value: csrs,
+					csrd: tagged Invalid,
+					jump_pc: tagged Valid add_result.add
+				};
+			end
+
+			tagged Csr (tagged Csrs { rs1: .rs1, csrd: .csrd }): begin
+				return tagged Ok ExecuteResultOk {
+					x_regs_rd: 0,
+					x_regs_rd_value: ?,
+					csrd: tagged Valid tuple2(csrd, rs1),
+					jump_pc: tagged Valid add_result.add
+				};
+			end
+
+			tagged Csr (tagged Csrrw { rd: .rd, rs1: .rs1, csrd: .csrd, csrs: .csrs }): begin
+				return tagged Ok ExecuteResultOk {
+					x_regs_rd: rd,
+					x_regs_rd_value: csrs,
+					csrd: tagged Valid tuple2(csrd, rs1),
+					jump_pc: tagged Valid add_result.add
+				};
+			end
+
+			tagged Csr (tagged Csrrs { rd: .rd, rs1: .rs1, csrd: .csrd, csrs: .csrs }): begin
+				return tagged Ok ExecuteResultOk {
+					x_regs_rd: rd,
+					x_regs_rd_value: csrs,
+					csrd: tagged Valid tuple2(csrd, logical_result.or_),
+					jump_pc: tagged Valid add_result.add
+				};
+			end
+
+			tagged Csr (tagged Csrrc { rd: .rd, rs1: .rs1, csrd: .csrd, csrs: .csrs }): begin
+				return tagged Ok ExecuteResultOk {
+					x_regs_rd: rd,
+					x_regs_rd_value: csrs,
+					csrd: tagged Valid tuple2(csrd, logical_result.and_),
+					jump_pc: tagged Valid add_result.add
 				};
 			end
 
@@ -163,6 +219,7 @@ module mkRvAlu(RvAlu);
 				return tagged Ok ExecuteResultOk {
 					x_regs_rd: rd,
 					x_regs_rd_value: next_pc,
+					csrd: tagged Invalid,
 					jump_pc: tagged Valid add_result.add
 				};
 
@@ -170,6 +227,7 @@ module mkRvAlu(RvAlu);
 				return tagged Ok ExecuteResultOk {
 					x_regs_rd: rd,
 					x_regs_rd_value: extend(imm) << 12,
+					csrd: tagged Invalid,
 					jump_pc: tagged Invalid
 				};
 

@@ -1,12 +1,12 @@
 import RvCommon::*;
 
 interface RvDecoder;
-	method Maybe#(Instruction#(Either#(XReg, Int#(64)))) decode(Bit#(32) in);
+	method Maybe#(Instruction#(Either#(XReg, Int#(64)), Csr, Csr)) decode(Bit#(32) in);
 endinterface
 
 (* synthesize *)
 module mkRvDecoder(RvDecoder);
-	method Maybe#(Instruction#(Either#(XReg, Int#(64)))) decode(Bit#(32) in);
+	method Maybe#(Instruction#(Either#(XReg, Int#(64)), Csr, Csr)) decode(Bit#(32) in);
 		if (unpack(~& in[1:0]))
 			return tagged Invalid;
 
@@ -116,6 +116,42 @@ module mkRvDecoder(RvDecoder);
 
 				OpCode_System: case (funct3) matches
 					3'b000: return tagged Valid tagged Ebreak;
+
+					3'b001:
+						if (rd == 0)
+							return tagged Valid tagged Csr tagged Csrs { rs1: tagged Left rs1, csrd: csr };
+						else
+							return tagged Valid tagged Csr tagged Csrrw { rd: rd, rs1: tagged Left rs1, csrd: csr, csrs: csr };
+
+					3'b010:
+						if (rs1 == 0)
+							return tagged Valid tagged Csr tagged Csrr { rd: rd, csrs: csr };
+						else
+							return tagged Valid tagged Csr tagged Csrrs { rd: rd, rs1: tagged Left rs1, csrd: csr, csrs: csr };
+
+					3'b011:
+						if (rs1 == 0)
+							return tagged Valid tagged Csr tagged Csrr { rd: rd, csrs: csr };
+						else
+							return tagged Valid tagged Csr tagged Csrrc { rd: rd, rs1: tagged Left rs1, csrd: csr, csrs: csr };
+
+					3'b101:
+						if (rd == 0)
+							return tagged Valid tagged Csr tagged Csrs { rs1: tagged Right unpack(pack(extend(csrimm))), csrd: csr };
+						else
+							return tagged Valid tagged Csr tagged Csrrw { rd: rd, rs1: tagged Right unpack(pack(extend(csrimm))), csrd: csr, csrs: csr };
+
+					3'b110:
+						if (csrimm == 0)
+							return tagged Valid tagged Csr tagged Csrr { rd: rd, csrs: csr };
+						else
+							return tagged Valid tagged Csr tagged Csrrs { rd: rd, rs1: tagged Right unpack(pack(extend(csrimm))), csrd: csr, csrs: csr };
+
+					3'b111:
+						if (csrimm == 0)
+							return tagged Valid tagged Csr tagged Csrr { rd: rd, csrs: csr };
+						else
+							return tagged Valid tagged Csr tagged Csrrc { rd: rd, rs1: tagged Right unpack(pack(extend(csrimm))), csrd: csr, csrs: csr };
 
 					default: return tagged Invalid;
 				endcase
