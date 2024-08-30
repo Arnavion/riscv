@@ -1,4 +1,5 @@
 use crate::{
+	Csr,
 	FenceSet,
 	Instruction,
 	instruction::{Imm, bit_slice, can_truncate_high, can_truncate_low, parse_base_and_offset, tokens},
@@ -231,6 +232,104 @@ pub(crate) fn parse(
 				Instruction::Auipc { dest, imm: offset1 },
 				Instruction::Jalr { dest, base: dest, offset: offset2 },
 			)
+		},
+
+		"csrc" => {
+			let csr = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let csr = csr.try_into()?;
+
+			let src = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let src = src.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Csrrc { dest: Register::X0, csr, src })
+		},
+
+		"csrci" => {
+			let csr = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let csr = csr.try_into()?;
+
+			let imm = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let Imm(imm) = imm.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Csrrci { dest: Register::X0, csr, imm })
+		},
+
+		"csrr" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest = dest.try_into()?;
+
+			let csr = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let csr = csr.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Csrrs { dest, csr, src: Register::X0 })
+		},
+
+		"csrs" => {
+			let csr = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let csr = csr.try_into()?;
+
+			let src = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let src = src.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Csrrs { dest: Register::X0, csr, src })
+		},
+
+		"csrsi" => {
+			let csr = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let csr = csr.try_into()?;
+
+			let imm = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let Imm(imm) = imm.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Csrrsi { dest: Register::X0, csr, imm })
+		},
+
+		"csrw" => {
+			let csr = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let csr = csr.try_into()?;
+
+			let src = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let src = src.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Csrrw { dest: Register::X0, csr, src })
+		},
+
+		"csrwi" => {
+			let csr = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let csr = csr.try_into()?;
+
+			let imm = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let Imm(imm) = imm.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Csrrwi { dest: Register::X0, csr, imm })
 		},
 
 		"j" => {
@@ -656,6 +755,72 @@ pub(crate) fn parse(
 			})
 		},
 
+		"rdcycle" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest = dest.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Csrrs { dest, csr: Csr::Cycle, src: Register::X0 })
+		},
+
+		"rdcycleh" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest = dest.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Csrrs { dest, csr: Csr::CycleH, src: Register::X0 })
+		},
+
+		"rdinstret" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest = dest.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Csrrs { dest, csr: Csr::InstRet, src: Register::X0 })
+		},
+
+		"rdinstreth" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest = dest.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Csrrs { dest, csr: Csr::InstRetH, src: Register::X0 })
+		},
+
+		"rdtime" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest = dest.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Csrrs { dest, csr: Csr::Time, src: Register::X0 })
+		},
+
+		"rdtimeh" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest = dest.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Csrrs { dest, csr: Csr::TimeH, src: Register::X0 })
+		},
+
 		"ret" => {
 			if tokens.next().is_some() {
 				return Err(ParseError::TrailingGarbage { line });
@@ -822,6 +987,14 @@ pub(crate) fn parse(
 				Instruction::Auipc { dest: Register::X6, imm: offset1 },
 				Instruction::Jalr { dest: Register::X0, base: Register::X6, offset: offset2 },
 			)
+		},
+
+		"unimp" => {
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Csrrw { dest: Register::X0, csr: Csr::Cycle, src: Register::X0 })
 		},
 
 		"zext.b" => {

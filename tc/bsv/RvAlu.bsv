@@ -8,7 +8,7 @@ typedef Server#(AluRequest, AluResponse) RvAlu;
 typedef struct {
 	Int#(64) pc;
 	Int#(64) next_pc;
-	Instruction#(Int#(64), Int#(64)) inst;
+	Instruction#(Int#(64), Int#(64), Int#(64)) inst;
 } AluRequest deriving(Bits);
 
 typedef union tagged {
@@ -20,6 +20,7 @@ typedef union tagged {
 typedef struct {
 	XReg x_regs_rd;
 	Int#(64) x_regs_rd_value;
+	Maybe#(Tuple2#(Csr, Int#(64))) csrd;
 	Int#(64) next_pc;
 } AluResponseOk deriving(Bits);
 
@@ -32,7 +33,7 @@ module mkRvAlu(RvAlu);
 
 	Wire#(Int#(64)) pc <- mkWire;
 	Wire#(Int#(64)) next_pc <- mkWire;
-	Wire#(Instruction#(Int#(64), Int#(64))) inst <- mkWire;
+	Wire#(Instruction#(Int#(64), Int#(64), Int#(64))) inst <- mkWire;
 
 	RWire#(AluResponse) result <- mkRWire;
 
@@ -50,6 +51,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: adder_response.add,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -68,6 +70,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: adder_response.addw,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -85,6 +88,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: logical_response.and_,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -103,6 +107,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: adder_response.add,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -177,7 +182,72 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: 0,
 			x_regs_rd_value: ?,
+			csrd: tagged Invalid,
 			next_pc: jump ? adder_response.add : next_pc
+		});
+	endrule
+
+	// csrrw
+	rule csrrw_end(inst matches tagged Csr { op: Csrrw, rd: .rd, csrd: .csrd, csrs: .csrs, rs2: .rs2 });
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: csrs,
+			csrd: tagged Valid tuple2(csrd, rs2),
+			next_pc: next_pc
+		});
+	endrule
+
+	// csrrs
+	rule csrrs_1(inst matches tagged Csr { op: Csrrs, csrd: .csrd, csrs: .csrs, rs2: .rs2 } &&& csrd != 0);
+		logical.request.put(LogicalRequest {
+			arg1: csrs,
+			arg2: rs2
+		});
+	endrule
+
+	rule csrr_end1(inst matches tagged Csr { op: Csrrs, rd: .rd, csrd: 0, csrs: .csrs });
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: csrs,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	rule csrrs_end(inst matches tagged Csr { op: Csrrs, rd: .rd, csrd: .csrd, csrs: .csrs } &&& csrd != 0);
+		let logical_response <- logical.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: csrs,
+			csrd: csrd == 0 ? tagged Invalid : tagged Valid tuple2(csrd, logical_response.or_),
+			next_pc: next_pc
+		});
+	endrule
+
+	// csrrc
+	rule csrrc_1(inst matches tagged Csr { op: Csrrc, csrd: .csrd, csrs: .csrs, rs2: .rs2 } &&& csrd != 0);
+		logical.request.put(LogicalRequest {
+			arg1: csrs,
+			arg2: ~rs2
+		});
+	endrule
+
+	rule csrr_end2(inst matches tagged Csr { op: Csrrc, rd: .rd, csrd: 0, csrs: .csrs });
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: csrs,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	rule csrrc_end(inst matches tagged Csr { op: Csrrc, rd: .rd, csrd: .csrd, csrs: .csrs } &&& csrd != 0);
+		let logical_response <- logical.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: csrs,
+			csrd: csrd == 0 ? tagged Invalid : tagged Valid tuple2(csrd, logical_response.and_),
+			next_pc: next_pc
 		});
 	endrule
 
@@ -203,6 +273,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: next_pc,
+			csrd: tagged Invalid,
 			next_pc: adder_response.add
 		});
 	endrule
@@ -212,6 +283,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: extend(imm),
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -229,6 +301,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: logical_response.or_,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -247,6 +320,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: shift_response.sll,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -265,6 +339,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: shift_response.sllw,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -283,6 +358,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: shift_response.sr,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -301,6 +377,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: shift_response.srw,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -319,6 +396,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: shift_response.sr,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -337,6 +415,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: shift_response.srw,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -355,6 +434,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: cmp_response.lt ? 1 : 0,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -373,6 +453,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: cmp_response.lt ? 1 : 0,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -391,6 +472,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: adder_response.add,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -409,6 +491,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: adder_response.addw,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -426,6 +509,7 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: logical_response.xor_,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
