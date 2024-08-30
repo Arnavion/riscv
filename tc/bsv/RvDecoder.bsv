@@ -12,7 +12,7 @@ typedef struct {
 } RvDecoderRequest deriving(Bits);
 
 typedef struct {
-	Maybe#(Instruction#(XReg, Either#(XReg, Int#(12)))) inst;
+	Maybe#(Instruction#(XReg, Either#(XReg, Int#(12)), Csr)) inst;
 } RvDecoderResponse deriving(Bits);
 
 (* synthesize *)
@@ -30,7 +30,7 @@ module mkRvDecoder(RvDecoder);
 	interface response = toGetS(args_, result_);
 endmodule
 
-function Maybe#(Instruction#(XReg, Either#(XReg, Int#(12)))) decode(Bit#(32) in);
+function Maybe#(Instruction#(XReg, Either#(XReg, Int#(12)), Csr)) decode(Bit#(32) in);
 	if (unpack(~& in[1:0]))
 		return tagged Invalid;
 
@@ -140,6 +140,36 @@ function Maybe#(Instruction#(XReg, Either#(XReg, Int#(12)))) decode(Bit#(32) in)
 
 			OpCode_System: case (funct3) matches
 				3'b000: return tagged Valid tagged Ebreak;
+
+				3'b001:
+					return tagged Valid tagged Csr { op: Csrrw, rd: rd, csrd: csr, csrs: csr, rs2: tagged Left rs1 };
+
+				3'b010:
+					if (rs1 == 0)
+						return tagged Valid tagged Csr { op: Csrrs, rd: rd, csrd: 0, csrs: csr, rs2: tagged Left rs1 };
+					else
+						return tagged Valid tagged Csr { op: Csrrs, rd: rd, csrd: csr, csrs: csr, rs2: tagged Left rs1 };
+
+				3'b011:
+					if (rs1 == 0)
+						return tagged Valid tagged Csr { op: Csrrc, rd: rd, csrd: 0, csrs: csr, rs2: tagged Left rs1 };
+					else
+						return tagged Valid tagged Csr { op: Csrrc, rd: rd, csrd: csr, csrs: csr, rs2: tagged Left rs1 };
+
+				3'b101:
+					return tagged Valid tagged Csr { op: Csrrw, rd: rd, csrd: csr, csrs: csr, rs2: tagged Right unpack(pack(extend(csrimm))) };
+
+				3'b110:
+					if (csrimm == 0)
+						return tagged Valid tagged Csr { op: Csrrs, rd: rd, csrd: 0, csrs: csr, rs2: tagged Right unpack(pack(extend(csrimm))) };
+					else
+						return tagged Valid tagged Csr { op: Csrrs, rd: rd, csrd: csr, csrs: csr, rs2: tagged Right unpack(pack(extend(csrimm))) };
+
+				3'b111:
+					if (csrimm == 0)
+						return tagged Valid tagged Csr { op: Csrrc, rd: rd, csrd: 0, csrs: csr, rs2: tagged Right unpack(pack(extend(csrimm))) };
+					else
+						return tagged Valid tagged Csr { op: Csrrc, rd: rd, csrd: csr, csrs: csr, rs2: tagged Right unpack(pack(extend(csrimm))) };
 
 				default: return tagged Invalid;
 			endcase
