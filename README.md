@@ -14,6 +14,10 @@ The assembler only supports what the emulator implements. Per the [unprivileged 
 
 - RV64I 2.1 (64-bit integer register instructions)
 
+- Zicsr 2.0 (CSR instructions)
+
+- Zicntr 2.0 (cycle, time and instret CSRs)
+
 - Zca 1.0.0 (compressed instructions for integer registers)
 
 - Zcb 1.0.0 (additional compressed instructions for integer registers)
