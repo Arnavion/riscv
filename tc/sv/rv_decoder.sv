@@ -5,11 +5,15 @@ module rv_decoder (
 	output logic[4:0] rd,
 	output logic[4:0] rs1,
 	output logic[4:0] rs2,
+	output logic[11:0] csr,
+	output logic csr_load,
+	output logic csr_store,
 	output logic[4:0] opcode,
 	output logic[2:0] funct3,
 	output logic[6:0] funct7,
 	output logic[4:0] funct5,
-	output logic[31:0] imm
+	output logic[31:0] imm,
+	output logic[4:0] csrimm
 );
 	bit[11:0] imm_31_20;
 	bit[7:0] imm_19_12;
@@ -31,7 +35,11 @@ module rv_decoder (
 		rd = 'x;
 		rs1 = 'x;
 		rs2 = 'x;
+		csr = 'x;
+		csr_load = 'x;
+		csr_store = 'x;
 		`imm = 'x;
+		csrimm = 'x;
 
 		if (in[0+:2] == 2'b11) begin
 			unique casez (in[2+:5])
@@ -47,6 +55,8 @@ module rv_decoder (
 					rd = in[7+:5];
 					rs1 = in[15+:5];
 					rs2 = in[20+:5];
+					csr_load = '0;
+					csr_store = '0;
 				end
 
 				// load
@@ -65,6 +75,8 @@ module rv_decoder (
 					rd = in[7+:5];
 					rs1 = in[15+:5];
 					rs2 = '0;
+					csr_load = '0;
+					csr_store = '0;
 
 					`imm = unsigned'(32'(signed'(in[20+:12])));
 				end
@@ -79,12 +91,68 @@ module rv_decoder (
 					rd = '0;
 					rs1 = '0;
 					rs2 = '0;
+					csr_load = '0;
+					csr_store = '0;
 
 					unique case (funct3)
 						// ebreak, ecall
 						3'b000: begin
 							funct7 = in[25+:7];
 							funct5 = in[20+:5];
+						end
+
+						// csrrw
+						3'b001: begin
+							rd = in[7+:5];
+							rs1 = in[15+:5];
+							csr = in[20+:12];
+							csr_load = in[7+:5] != '0;
+							csr_store = '1;
+						end
+
+						// csrrs
+						3'b010: begin
+							rd = in[7+:5];
+							rs1 = in[15+:5];
+							csr = in[20+:12];
+							csr_load = '1;
+							csr_store = in[15+:5] != '0;
+						end
+
+						// csrrc
+						3'b011: begin
+							rd = in[7+:5];
+							rs1 = in[15+:5];
+							csr = in[20+:12];
+							csr_load = '1;
+							csr_store = in[15+:5] != '0;
+						end
+
+						// csrrwi
+						3'b101: begin
+							rd = in[7+:5];
+							csr = in[20+:12];
+							csrimm = in[15+:5];
+							csr_load = in[7+:5] != '0;
+							csr_store = '1;
+						end
+
+						// csrrsi
+						3'b110: begin
+							rd = in[7+:5];
+							csr = in[20+:12];
+							csrimm = in[15+:5];
+							csr_load = '1;
+							csr_store = in[15+:5] != '0;
+						end
+
+						// csrrci
+						3'b111: begin
+							rd = in[7+:5];
+							csr = in[20+:12];
+							csrimm = in[15+:5];
+							csr_load = '1;
+							csr_store = in[15+:5] != '0;
 						end
 
 						default: begin
@@ -96,6 +164,8 @@ module rv_decoder (
 							rd = 'x;
 							rs1 = 'x;
 							rs2 = 'x;
+							csr_load = 'x;
+							csr_store = 'x;
 						end
 					endcase
 				end
@@ -112,6 +182,8 @@ module rv_decoder (
 					rd = '0;
 					rs1 = in[15+:5];
 					rs2 = in[20+:5];
+					csr_load = '0;
+					csr_store = '0;
 
 					`imm = unsigned'(32'(signed'({in[25+:7], in[7+:5]})));
 				end
@@ -128,6 +200,8 @@ module rv_decoder (
 					rd = '0;
 					rs1 = in[15+:5];
 					rs2 = in[20+:5];
+					csr_load = '0;
+					csr_store = '0;
 
 					`imm = unsigned'(32'(signed'({in[31], in[7], in[25+:6], in[8+:4], 1'b0})));
 				end
@@ -144,6 +218,8 @@ module rv_decoder (
 					rd = in[7+:5];
 					rs1 = '0;
 					rs2 = '0;
+					csr_load = '0;
+					csr_store = '0;
 
 					`imm = {in[12+:20], 12'b0};
 				end
@@ -160,6 +236,8 @@ module rv_decoder (
 					rd = in[7+:5];
 					rs1 = '0;
 					rs2 = '0;
+					csr_load = '0;
+					csr_store = '0;
 
 					`imm = unsigned'(32'(signed'({in[31], in[12+:8], in[20], in[21+:10], 1'b0})));
 				end
