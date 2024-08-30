@@ -8,11 +8,15 @@ module rv_decompressing_decoder_priority #(
 	output logic[4:0] rd,
 	output logic[4:0] rs1,
 	output logic[4:0] rs2,
+	output logic[11:0] csr,
+	output logic csr_load,
+	output logic csr_store,
 	output bit[4:0] opcode,
 	output bit[2:0] funct3,
 	output bit[6:0] funct7,
 	output bit[4:0] funct5,
-	output logic[31:0] imm
+	output logic[31:0] imm,
+	output logic[4:0] csrimm
 );
 	typedef enum bit[4:0] {
 		OpCode_Load = 5'b00000,
@@ -77,11 +81,15 @@ module rv_decompressing_decoder_priority #(
 		rd_('x);
 		rs1_('x);
 		rs2_('x);
+		csr = 'x;
+		csr_load = 'x;
+		csr_store = 'x;
 		opcode = 'x;
 		funct3 = 'x;
 		funct7 = 'x;
 		funct5 = 'x;
 		imm_('x);
+		csrimm = 'x;
 
 		priority casez (in[0+:16])
 			16'b0000000000000000: begin
@@ -97,6 +105,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[2+:3]});
 				rs1_(5'b00010);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[7+:4], in[11+:2], in[5], in[6], 2'b0}));
 			end
@@ -115,6 +125,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[2+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[5], in[10+:3], in[6], 2'b0}));
 			end
@@ -127,6 +139,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[2+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[5+:2], in[10+:3], 3'b0}));
 			end else begin
@@ -143,6 +157,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[2+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[5], in[6]}));
 			end
@@ -155,6 +171,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[2+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[5], 1'b0}));
 			end
@@ -167,6 +185,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(5'b00000);
 				rs1_({2'b01, in[7+:3]});
 				rs2_({2'b01, in[2+:3]});
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[5], in[6]}));
 			end
@@ -179,6 +199,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(5'b00000);
 				rs1_({2'b01, in[7+:3]});
 				rs2_({2'b01, in[2+:3]});
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[5], 1'b0}));
 			end
@@ -202,6 +224,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(5'b00000);
 				rs1_({2'b01, in[7+:3]});
 				rs2_({2'b01, in[2+:3]});
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[5], in[10+:3], in[6], 2'b0}));
 			end
@@ -214,6 +238,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(5'b00000);
 				rs1_({2'b01, in[7+:3]});
 				rs2_({2'b01, in[2+:3]});
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[5+:2], in[10+:3], 3'b0}));
 			end else begin
@@ -230,6 +256,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(in[7+:5]);
 				rs1_(in[7+:5]);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(unsigned'(32'(signed'({in[12], in[2+:5]}))));
 			end
@@ -242,6 +270,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(in[7+:5]);
 				rs1_(in[7+:5]);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(unsigned'(32'(signed'({in[12], in[2+:5]}))));
 			end else begin
@@ -251,6 +281,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(5'b00001);
 				rs1_(5'b00000);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(unsigned'(32'(signed'({in[12], in[8], in[9+:2], in[6], in[7], in[2], in[11], in[3+:3], 1'b0}))));
 			end
@@ -263,6 +295,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(in[7+:5]);
 				rs1_(5'b00000);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(unsigned'(32'(signed'({in[12], in[2+:5]}))));
 			end
@@ -275,6 +309,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(5'b00010);
 				rs1_(5'b00010);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(unsigned'(32'(signed'({in[12], in[3+:2], in[5], in[2], in[6], 4'b0}))));
 			end
@@ -286,6 +322,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(in[7+:5]);
 				rs1_(5'b00000);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(unsigned'(32'(signed'({in[12], in[2+:5], 12'b0}))));
 			end
@@ -299,6 +337,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[7+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[12], in[2+:5]}));
 			end
@@ -312,6 +352,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[7+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[12], in[2+:5]}));
 			end else begin
@@ -328,6 +370,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[7+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({5'b10000, in[12], in[2+:5]}));
 			end
@@ -341,6 +385,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[7+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({5'b10000, in[12], in[2+:5]}));
 			end else begin
@@ -356,6 +402,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[7+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(unsigned'(32'(signed'({in[12], in[2+:5]}))));
 			end
@@ -369,6 +417,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[7+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_({2'b01, in[2+:3]});
+				csr_load = '0;
+				csr_store = '0;
 			end
 
 			// xor
@@ -380,6 +430,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[7+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_({2'b01, in[2+:3]});
+				csr_load = '0;
+				csr_store = '0;
 			end
 
 			// or
@@ -391,6 +443,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[7+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_({2'b01, in[2+:3]});
+				csr_load = '0;
+				csr_store = '0;
 			end
 
 			// and
@@ -402,6 +456,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[7+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_({2'b01, in[2+:3]});
+				csr_load = '0;
+				csr_store = '0;
 			end
 
 			16'b100_1_11_???_00_???_01: if (rv64) begin
@@ -413,6 +469,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[7+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_({2'b01, in[2+:3]});
+				csr_load = '0;
+				csr_store = '0;
 			end else begin
 				sigill = '1;
 				is_compressed = 'x;
@@ -427,6 +485,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[7+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_({2'b01, in[2+:3]});
+				csr_load = '0;
+				csr_store = '0;
 			end else begin
 				sigill = '1;
 				is_compressed = 'x;
@@ -440,6 +500,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[7+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({8{1'b1}}));
 			end
@@ -452,6 +514,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({2'b01, in[7+:3]});
 				rs1_({2'b01, in[7+:3]});
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_({32{1'b1}});
 			end
@@ -468,6 +532,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(5'b00000);
 				rs1_(5'b00000);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(unsigned'(32'(signed'({in[12], in[8], in[9+:2], in[6], in[7], in[2], in[11], in[3+:3], 1'b0}))));
 			end
@@ -480,6 +546,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(5'b00000);
 				rs1_({2'b01, in[7+:3]});
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(unsigned'(32'(signed'({in[12], in[5+:2], in[2], in[10+:2], in[3+:2], 1'b0}))));
 			end
@@ -492,6 +560,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(5'b00000);
 				rs1_({2'b01, in[7+:3]});
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(unsigned'(32'(signed'({in[12], in[5+:2], in[2], in[10+:2], in[3+:2], 1'b0}))));
 			end
@@ -504,6 +574,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(in[7+:5]);
 				rs1_(in[7+:5]);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[12], in[2+:5]}));
 			end
@@ -516,6 +588,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(in[7+:5]);
 				rs1_(in[7+:5]);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[12], in[2+:5]}));
 			end else begin
@@ -537,6 +611,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(in[7+:5]);
 				rs1_(5'b00010);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[2+:2], in[12], in[4+:3], 2'b0}));
 			end
@@ -549,6 +625,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(in[7+:5]);
 				rs1_(5'b00010);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[2+:3], in[12], in[5+:2], 3'b0}));
 			end else begin
@@ -567,6 +645,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(5'b00000);
 				rs1_(5'b00000);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 			end
 
 			16'b100_?_00000_?????_10: begin
@@ -582,6 +662,8 @@ module rv_decompressing_decoder_priority #(
 				rd_({4'b0000, in[12]});
 				rs1_(in[15+:5]);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_('0);
 			end
@@ -595,6 +677,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(in[7+:5]);
 				rs1_({5{in[12]}} & in[15+:5]);
 				rs2_(in[2+:5]);
+				csr_load = '0;
+				csr_store = '0;
 			end
 
 			// fsdsp
@@ -611,6 +695,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(5'b00000);
 				rs1_(5'b00010);
 				rs2_(in[2+:5]);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[7+:2], in[9+:4], 2'b0}));
 			end
@@ -623,6 +709,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(5'b00000);
 				rs1_(5'b00010);
 				rs2_(in[2+:5]);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(32'({in[7+:3], in[10+:3], 3'b0}));
 			end else begin
@@ -641,6 +729,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(in[7+:5]);
 				rs1_(in[15+:5]);
 				rs2_(in[20+:5]);
+				csr_load = '0;
+				csr_store = '0;
 			end
 
 			// load
@@ -657,6 +747,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(in[7+:5]);
 				rs1_(in[15+:5]);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(unsigned'(32'(signed'(in[20+:12]))));
 			end
@@ -671,6 +763,71 @@ module rv_decompressing_decoder_priority #(
 				rd_(5'b00000);
 				rs1_(5'b00000);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
+			end
+
+			// csrrw
+			16'b?_001_?????_11100_11: begin
+				rd_(in[7+:5]);
+				rs1_(in[15+:5]);
+				rs2_(5'b00000);
+				csr = in[20+:12];
+				csr_load = in[7+:5] != '0;
+				csr_store = '1;
+			end
+
+			// csrrs
+			16'b?_010_?????_11100_11: begin
+				rd_(in[7+:5]);
+				rs1_(in[15+:5]);
+				rs2_(5'b00000);
+				csr = in[20+:12];
+				csr_load = '1;
+				csr_store = in[15+:5] != '0;
+			end
+
+			// csrrc
+			16'b?_011_?????_11100_11: begin
+				rd_(in[7+:5]);
+				rs1_(in[15+:5]);
+				rs2_(5'b00000);
+				csr = in[20+:12];
+				csr_load = '1;
+				csr_store = in[15+:5] != '0;
+			end
+
+			// csrrwi
+			16'b?_101_?????_11100_11: begin
+				rd_(in[7+:5]);
+				rs1_(5'b00000);
+				rs2_(5'b00000);
+				csr = in[20+:12];
+				csrimm = in[15+:5];
+				csr_load = in[7+:5] != '0;
+				csr_store = '1;
+			end
+
+			// csrrsi
+			16'b?_110_?????_11100_11: begin
+				rd_(in[7+:5]);
+				rs1_(5'b00000);
+				rs2_(5'b00000);
+				csr = in[20+:12];
+				csrimm = in[15+:5];
+				csr_load = '1;
+				csr_store = in[15+:5] != '0;
+			end
+
+			// csrrci
+			16'b?_111_?????_11100_11: begin
+				rd_(in[7+:5]);
+				rs1_(5'b00000);
+				rs2_(5'b00000);
+				csr = in[20+:12];
+				csrimm = in[15+:5];
+				csr_load = '1;
+				csr_store = in[15+:5] != '0;
 			end
 
 			// store
@@ -681,6 +838,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(5'b00000);
 				rs1_(in[15+:5]);
 				rs2_(in[20+:5]);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(unsigned'(32'(signed'({in[25+:7], in[7+:5]}))));
 			end
@@ -693,6 +852,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(5'b00000);
 				rs1_(in[15+:5]);
 				rs2_(in[20+:5]);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(unsigned'(32'(signed'({in[31], in[7], in[25+:6], in[8+:4], 1'b0}))));
 			end
@@ -704,6 +865,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(in[7+:5]);
 				rs1_(5'b00000);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_({in[12+:20], 12'b0});
 			end
@@ -715,6 +878,8 @@ module rv_decompressing_decoder_priority #(
 				rd_(in[7+:5]);
 				rs1_(5'b00000);
 				rs2_(5'b00000);
+				csr_load = '0;
+				csr_store = '0;
 
 				imm_(unsigned'(32'(signed'({in[31], in[12+:8], in[20], in[21+:10], 1'b0}))));
 			end
