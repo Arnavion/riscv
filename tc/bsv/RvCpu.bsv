@@ -11,12 +11,15 @@ import RvDecompressor::*;
 typedef Server#(RvCpuRequest, RvCpuResponse) RvCpu;
 
 typedef struct {
+	Int#(64) csr_time;
 	Bit#(32) in;
 } RvCpuRequest deriving(Bits);
 
 typedef struct {
 	State state;
 	Int#(64) pc;
+	Int#(64) csr_cycle;
+	Int#(64) csr_instret;
 } RvCpuResponse deriving(Bits);
 
 typedef union tagged {
@@ -32,6 +35,8 @@ module mkRvCpu(RvCpu);
 	Reg#(State) execute_state <- mkReg(tagged Running);
 	Reg#(Int#(63)) pc_hi <- mkReg(0);
 	Vector#(32, Reg#(Int#(64))) x_regs <- replicateM(mkReg(0));
+	Reg#(Int#(64)) csr_cycle <- mkReg(0);
+	Reg#(Int#(64)) csr_instret <- mkReg(0);
 	Wire#(InstructionLength) inst_len <- mkWire;
 
 	RvDecompressor decompressor <- mkRvDecompressor(True);
@@ -42,6 +47,10 @@ module mkRvCpu(RvCpu);
 
 	FIFO#(RvCpuRequest) args_ <- mkBypassFIFO;
 	GetS#(RvCpuRequest) args = fifoToGetS(args_);
+
+	rule csr_cycle_increment;
+		csr_cycle <= csr_cycle + 1;
+	endrule
 
 	rule fetch(args.first matches RvCpuRequest { in: .in });
 		decompressor.request.put(RvDecompressorRequest { in: in });
@@ -68,7 +77,7 @@ module mkRvCpu(RvCpu);
 			tagged Invalid: decoder_state <= tagged Sigill;
 
 			tagged Valid .inst: begin
-				Instruction#(Int#(64), Int#(64)) ready_inst = case (inst) matches
+				Instruction#(Int#(64), Int#(64), Int#(64)) ready_inst = case (inst) matches
 					tagged Auipc { rd: .rd, imm: .imm }: return tagged Auipc {
 						rd: rd,
 						imm: imm
@@ -87,6 +96,30 @@ module mkRvCpu(RvCpu);
 						rs2: load_x_reg(x_regs, rs2),
 						offset: offset
 					};
+
+					tagged Csr { op: .op, rd: .rd, csrd: .csrd, csrs: .csrs, rs2: .rs2 }: case (op) matches
+						Csrrw: return tagged Csr {
+							op: Csrrw,
+							rd: rd,
+							csrd: csrd,
+							csrs: rd == 0 ? ? : load_csr(csr_cycle, csr_instret, args.first.csr_time, csrs),
+							rs2: load_x_reg(x_regs, rs2)
+						};
+						Csrrs: return tagged Csr {
+							op: Csrrs,
+							rd: rd,
+							csrd: csrd,
+							csrs: csrd == 0 ? ? : load_csr(csr_cycle, csr_instret, args.first.csr_time, csrs),
+							rs2: load_x_reg(x_regs, rs2)
+						};
+						Csrrc: return tagged Csr {
+							op: Csrrc,
+							rd: rd,
+							csrd: csrd,
+							csrs: csrd == 0 ? ? : load_csr(csr_cycle, csr_instret, args.first.csr_time, csrs),
+							rs2: load_x_reg(x_regs, rs2)
+						};
+					endcase
 
 					tagged Ebreak: return tagged Ebreak;
 
@@ -148,17 +181,31 @@ module mkRvCpu(RvCpu);
 			tagged Ok (AluResponseOk {
 				x_regs_rd: .x_regs_rd,
 				x_regs_rd_value: .x_regs_rd_value,
+				csrd: .csrd,
 				next_pc: .next_pc
 			}): begin
 				if (x_regs_rd != 0)
 					x_regs[x_regs_rd] <= x_regs_rd_value;
 
-				if (next_pc % 2 == 0)
+				State next_execute_state = execute_state;
+
+				if (csrd matches tagged Valid { .csrd, .csrd_value }) begin
+					case (csrd) matches
+						default: next_execute_state = tagged Efault;
+					endcase
+				end
+
+				if (next_pc % 2 != 0)
+					next_execute_state = tagged Efault;
+
+				if (next_execute_state matches tagged Running)
 					pc_hi <= truncate(next_pc / 2);
-				else
-					execute_state <= tagged Efault;
+
+				execute_state <= next_execute_state;
 			end
 		endcase
+
+		csr_instret <= csr_instret + 1;
 	endrule
 
 	interface request = toPut(args_);
@@ -173,7 +220,9 @@ module mkRvCpu(RvCpu);
 					endcase
 					.decompressor_state: return decompressor_state;
 				endcase,
-				pc: zeroExtend(pc_hi) * 2
+				pc: zeroExtend(pc_hi) * 2,
+				csr_cycle: csr_cycle,
+				csr_instret: csr_instret
 			};
 		endmethod
 
@@ -195,5 +244,44 @@ function Int#(64) load_x_reg(Vector#(32, Reg#(Int#(64))) x_regs, Either#(XReg, I
 	case (rs) matches
 		tagged Left .rs: return x_regs[rs];
 		tagged Right .imm: return extend(imm);
+	endcase
+endfunction
+
+function Int#(64) load_csr(Reg#(Int#(64)) csr_cycle, Reg#(Int#(64)) csr_instret, Int#(64) csr_time, Csr csrs);
+	case (csrs) matches
+		12'h301: return unpack({
+			2'b10, // XLEN = 64
+			'0,
+			1'b0, // Reserved
+			1'b0, // Reserved
+			1'b0, // X
+			1'b0, // Reserved
+			1'b0, // V
+			1'b0, // U
+			1'b0, // Reserved
+			1'b0, // S
+			1'b0, // Reserved
+			1'b0, // Q
+			1'b0, // Reserved
+			1'b0, // Reserved
+			1'b0, // Reserved
+			1'b0, // M
+			1'b0, // Reserved
+			1'b0, // Reserved
+			1'b0, // Reserved
+			1'b1, // I
+			1'b0, // H
+			1'b0, // Reserved
+			1'b0, // F
+			1'b0, // E
+			1'b0, // D
+			1'b1, // C
+			1'b0, // B
+			1'b0  // A
+		});
+		12'hc00: return csr_cycle;
+		12'hc01: return csr_time;
+		12'hc02: return csr_instret;
+		default: return 0;
 	endcase
 endfunction
