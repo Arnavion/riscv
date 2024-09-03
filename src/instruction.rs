@@ -868,6 +868,12 @@ instructions! {
 		#[b("bne", Branch)]
 		Bne { src1: Register, src2: Register, offset: i32 },
 
+		#[r("czero.eqz", Op)]
+		CZeroEqz { dest: Register, src1: Register, src2: Register },
+
+		#[r("czero.nez", Op)]
+		CZeroNez { dest: Register, src1: Register, src2: Register },
+
 		#[i("csrrc", System)]
 		Csrrc { dest: Register, csr: Csr, src: Register },
 
@@ -2186,6 +2192,8 @@ funct! {
 		Csrrsi = 0b110,
 		Csrrw = 0b001,
 		Csrrwi = 0b101,
+		CZeroEqz = 0b101,
+		CZeroNez = 0b111,
 		EBreak = 0b000,
 		ECall = 0b000,
 		Jalr = 0b000,
@@ -2230,6 +2238,8 @@ funct! {
 		Add = 0b000_0000,
 		Addw = 0b000_0000,
 		And = 0b000_0000,
+		CZeroEqz = 0b000_0111,
+		CZeroNez = 0b000_0111,
 		Or = 0b000_0000,
 		Sll = 0b000_0000,
 		Slli = 0b000_0000,

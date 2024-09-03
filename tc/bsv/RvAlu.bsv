@@ -252,6 +252,44 @@ module mkRvAlu(RvAlu);
 		});
 	endrule
 
+	// czero.eqz
+	rule czero_eqz_1(args.first matches AluRequest { inst: tagged Binary { op: CzeroEqz, rs1: .rs1, rs2: .rs2 } });
+		cmp.request.put(CmpRequest {
+			arg1: 0,
+			arg2: rs2,
+			signed_: ?
+		});
+	endrule
+
+	rule czero_eqz_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Binary { op: CzeroEqz, rd: .rd, rs1: .rs1 } });
+		let cmp_response = cmp.response.first;
+		result.put(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: cmp_response.eq ? 0 : rs1,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// czero.nez
+	rule czero_nez_1(args.first matches AluRequest { inst: tagged Binary { op: CzeroNez, rs1: .rs1, rs2: .rs2 } });
+		cmp.request.put(CmpRequest {
+			arg1: 0,
+			arg2: rs2,
+			signed_: ?
+		});
+	endrule
+
+	rule czero_nez_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Binary { op: CzeroNez, rd: .rd, rs1: .rs1 } });
+		let cmp_response = cmp.response.first;
+		result.put(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: cmp_response.eq ? rs1 : 0,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
 	// fence
 	rule fence_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Fence });
 		result.put(tagged Ok AluResponseOk {

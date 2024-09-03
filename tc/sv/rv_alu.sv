@@ -548,6 +548,13 @@ module rv_alu (
 					rd = shift_sr;
 				end
 
+				// czero.eqz
+				10'b101_0000111: begin
+					in3 = '0;
+					in4 = rs2;
+					rd = cmp_eq ? '0 : rs1;
+				end
+
 				// or
 				10'b110_0000000: begin
 					in3 = rs1;
@@ -560,6 +567,13 @@ module rv_alu (
 					in3 = rs1;
 					in4 = rs2;
 					rd = logical_and;
+				end
+
+				// czero.nez
+				10'b111_0000111: begin
+					in3 = '0;
+					in4 = rs2;
+					rd = cmp_eq ? rs1 : '0;
 				end
 
 				default: sigill = '1;
