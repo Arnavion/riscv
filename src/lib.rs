@@ -973,6 +973,15 @@ mod tests {
 				(0x8067, 0x0000),
 			]),
 
+			// zicond.s
+			("
+				czero.eqz a0, a1, a2
+				czero.nez a0, a3, a4
+			", &[
+				(0xd533, 0x0ec5),
+				(0xf533, 0x0ee6),
+			]),
+
 			// zihintntl.s
 			("
 				ntl.p1
