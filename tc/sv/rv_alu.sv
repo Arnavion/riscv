@@ -668,6 +668,23 @@ module rv_alu (
 			end
 
 
+			// Zicond
+
+			// czero.eqz
+			{15'b01100_101_0000111}: begin
+				in3 = '0;
+				in4 = rs2;
+				rd = cmp_out_eq ? '0 : rs1;
+			end
+
+			// czero.nez
+			{15'b01100_111_0000111}: begin
+				in3 = '0;
+				in4 = rs2;
+				rd = cmp_out_ne ? '0 : rs1;
+			end
+
+
 			// Zicsr
 
 			// csrrw
