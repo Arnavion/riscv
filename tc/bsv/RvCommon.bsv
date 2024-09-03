@@ -52,6 +52,8 @@ typedef enum {
 	Add,
 	Addw,
 	And,
+	CzeroEqz,
+	CzeroNez,
 	Or,
 	Sll,
 	Sllw,
