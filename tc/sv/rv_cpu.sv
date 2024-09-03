@@ -2,6 +2,8 @@ module rv_cpu (
 	input bit clock,
 	input bit reset,
 
+	input bit[63:0] csr_time,
+
 	input bit[63:1] pc,
 	input bit[31:0] inst,
 	input logic[63:0] ram_load_value,
@@ -35,6 +37,7 @@ module rv_cpu (
 	wire[63:0] csr_load_value;
 	rv_csrs #(.rv64(1)) csrs (
 		.clock(clock), .reset(reset),
+		.time_(csr_time),
 		.csr(csr),
 		.load(csr_load),
 		.store(csr_store),
