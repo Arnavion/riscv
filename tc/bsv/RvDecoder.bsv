@@ -83,9 +83,11 @@ module mkRvDecoder(RvDecoder);
 					10'b011_0000000: return tagged Valid tagged Binary { op: Sltu, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b100_0000000: return tagged Valid tagged Binary { op: Xor, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b101_0000000: return tagged Valid tagged Binary { op: Srl, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b101_0000111: return tagged Valid tagged Binary { op: CzeroEqz, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b101_0100000: return tagged Valid tagged Binary { op: Sra, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b110_0000000: return tagged Valid tagged Binary { op: Or, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b111_0000000: return tagged Valid tagged Binary { op: And, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b111_0000111: return tagged Valid tagged Binary { op: CzeroNez, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					default: return tagged Invalid;
 				endcase
 

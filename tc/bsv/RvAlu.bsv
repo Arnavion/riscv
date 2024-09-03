@@ -65,6 +65,8 @@ module mkRvAlu(RvAlu);
 		match { .cmp_a, .cmp_b, .cmp_signed } = case (inst) matches
 			tagged Binary { op: .op, rs1: .rs1, rs2: .rs2 }:
 				case (op) matches
+					tagged CzeroEqz: return tuple3(0, rs2, ?);
+					tagged CzeroNez: return tuple3(0, rs2, ?);
 					tagged Slt: return tuple3(rs1, rs2, True);
 					tagged Sltu: return tuple3(rs1, rs2, False);
 					default: return ?;
@@ -129,13 +131,15 @@ module mkRvAlu(RvAlu);
 					jump_pc: tagged Invalid
 				};
 
-			tagged Binary { op: .op, rd: .rd }:
+			tagged Binary { op: .op, rd: .rd, rs1: .rs1 }:
 				return tagged Ok ExecuteResultOk {
 					x_regs_rd: rd,
 					x_regs_rd_value: case (op) matches
 						tagged Add: return add_result.add;
 						tagged Addw: return add_result.addw;
 						tagged And: return logical_result.and_;
+						tagged CzeroEqz: return cmp_result.eq ? 0 : rs1;
+						tagged CzeroNez: return cmp_result.eq ? rs1 : 0;
 						tagged Or: return logical_result.or_;
 						tagged Sll: return shift_result.sll;
 						tagged Sllw: return shift_result.sll;
