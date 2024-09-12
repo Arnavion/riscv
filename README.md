@@ -36,6 +36,8 @@ The `tc/solutions/` directory contains solutions for some of the game's architec
 
 The `*.S` files contain the assembler programs. Running `cargo run -p as -- tc/solutions/foo.S` will print the compiled program to stdout which can then be copy-pasted into the game's Program component. The component must have "Data width" set to "16 Bit". Running `cargo run -p as -- --compressed tc/solutions/foo.S` will do the same but enable compressed instructions. Running `cargo run -p as -- --compressed=Zcb tc/solutions/foo.S` will also enable compressed instructions from the Zcb extension.
 
+The `--save-breaker` option will emit the output in the format used by the "save_breaker" branch's Assembler component instead. In this case, the Assembler must have its width set to "32".
+
 The assembler does not consider whether the target architecture is 32-bit or 64-bit and will simply encode whatever instructions are given to it. This works fine because RV64I does not modify the behavior of RV32I instructions, except for a few situations:
 
 1. The shift instructions take 5-bit shift amount in RV32I and 6-bit shift amount in RV64I.
@@ -48,7 +50,7 @@ Therefore the assembler also has a `--64` flag to explicitly set the target arch
 
 The `*.c` files contain equivalent C solutions that can be put in [Compiler Explorer](https://gcc.godbolt.org/) with compiler set to `RISC-V (32-bits) gcc` or `RISC-V rv32gc clang` or corresponding 64-bit version, and flags set to `--std=c23 -Os -march=rv32id_zicond` or `--std=c23 -Os -march=rv64id_zicond`. Note that the assembler programs are hand-written and will not exactly match the compiler's output.
 
-The emulator has the Level Input and Level Output wired up to memory address `2^xlen - 8`, which is why the assembler programs refer to `li fp, -8; lbu rd, 0(fp)` and the C programs refer to `IO = (volatile uint8_t*)(intptr_t)-8; x = *IO;`.
+The emulator has the Level Input and Level Output wired up to memory address `2^xlen - 8`, which is why the assembler programs refer to `li fp, -8; l{b,h}u rd, 0(fp)` and the C programs refer to `IO = (volatile uint{8,16}_t*)(intptr_t)-8; x = *IO;`.
 
 ---
 
