@@ -32,9 +32,15 @@ The assembler also only partially implements the full syntax supported by GNU / 
 
 ---
 
+The assembler can be compiled as a freestanding binary that runs on the emulator. In this case the input file is read from the game's File Loader component, and the output is written to a memory address range that is expected to be present in a RAM linked to a Console.
+
+`make freestanding` will compile the binary, `make freestanding-install` will install it along with the input file, and `make freestanding-inspect` will run `llvm-objdump` on the binary.
+
+---
+
 The `tc/` directory contains solutions for some of the game's architecture puzzles using the emulator.
 
-The `*.S` files contain the assembler programs. Running `cargo run -- tc/foo.S` will print the compiled program to stdout which can then be copy-pasted into the game's Program component. The component must have "Data width" set to "16 Bit". Running `cargo run -- --compressed tc/foo.S` will do the same but enable compressed instructions. Running `cargo run -- --compressed=Zcb tc/foo.S` will also enable compressed instructions from the Zcb extension.
+The `*.S` files contain the assembler programs. Running `cargo run --bin riscv -- tc/foo.S` will print the compiled program to stdout which can then be copy-pasted into the game's Program component. The component must have "Data width" set to "16 Bit". Running `cargo run --bin riscv -- --compressed tc/foo.S` will do the same but enable compressed instructions. Running `cargo run --bin riscv -- --compressed=Zcb tc/foo.S` will also enable compressed instructions from the Zcb extension.
 
 The `--save-breaker` option will emit the output in the format used by the "save_breaker" branch's Assembler component instead. In this case, the Assembler must have its width set to "32".
 

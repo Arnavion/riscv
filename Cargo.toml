@@ -10,6 +10,17 @@ publish = false
 [dependencies]
 
 
+[profile.dev]
+panic = "abort"
+
+
+[profile.release]
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = "symbols"
+
+
 [lints.rust]
 rust_2018_idioms = "deny"
 warnings = "deny"
