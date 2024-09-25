@@ -11,10 +11,10 @@ use crate::{
 
 #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 pub(crate) fn parse(
-	line: &str,
+	line: &[u8],
 	supported_extensions: SupportedExtensions,
 ) -> Result<SmallIterator<Instruction>, ParseError<'_>> {
-	let mut tokens = tokens(line.as_bytes());
+	let mut tokens = tokens(line);
 
 	let Some(token) = tokens.next() else {
 		return Ok(SmallIterator::Empty);
