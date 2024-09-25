@@ -1,4 +1,6 @@
 /Cargo.lock
+/freestanding/Cargo.lock
+/freestanding/target
 /target
 
 /tc/vis/netlist.json

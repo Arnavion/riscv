@@ -32,6 +32,12 @@ The assembler also only partially implements the full syntax supported by GNU / 
 
 ---
 
+The assembler can be compiled as a freestanding binary that runs on the emulator. In this case the input file is read from the game's File Loader component, and the output is written to a memory address range that is expected to be present in a RAM linked to a Console.
+
+`make freestanding` will compile the binary, `make freestanding-install` will install it along with the input file, and `make freestanding-inspect` will run `llvm-objdump` on the binary.
+
+---
+
 The `tc/solutions/` directory contains solutions for some of the game's architecture puzzles using the emulator.
 
 The `*.S` files contain the assembler programs. Running `cargo run -p as -- tc/solutions/foo.S` will print the compiled program to stdout which can then be copy-pasted into the game's Program component. The component must have "Data width" set to "16 Bit". Running `cargo run -p as -- --compressed tc/solutions/foo.S` will do the same but enable compressed instructions. Running `cargo run -p as -- --compressed=Zcb tc/solutions/foo.S` will also enable compressed instructions from the Zcb extension.

@@ -1,0 +1,2 @@
+[target."riscv64-arnavion-none-elf"]
+rustflags = ["-C", "link-arg=-Triscv64-arnavion-none-elf.ld"]

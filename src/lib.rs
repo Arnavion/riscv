@@ -11,9 +11,12 @@ pub use register::{Csr, Register};
 mod supported_extensions;
 pub use supported_extensions::SupportedExtensions;
 
-pub fn parse_program(program: &str, supported_extensions: SupportedExtensions) -> impl Iterator<Item = Result<Instruction, ParseError<'_>>> + '_ {
+pub fn parse_program<'a>(
+	program: impl IntoIterator<Item = &'a [u8]>,
+	supported_extensions: SupportedExtensions,
+) -> impl Iterator<Item = Result<Instruction, ParseError<'a>>> {
 	program
-		.lines()
+		.into_iter()
 		.flat_map(move |line| match Instruction::parse(line) {
 			Ok(Some(instruction)) => SmallIterator::One(Ok(instruction)),
 			Ok(None) => SmallIterator::Empty,
@@ -57,17 +60,17 @@ impl<T> Iterator for SmallIterator<T> {
 
 #[derive(Debug)]
 pub enum ParseError<'a> {
-	ImmediateOverflow { line: &'a str },
+	ImmediateOverflow { line: &'a [u8] },
 	InvalidUtf8 { token: &'a [u8] },
 	MalformedFenceSet { token: &'a [u8] },
 	MalformedImmediate { token: &'a [u8] },
-	MalformedInstruction { line: &'a str },
+	MalformedInstruction { line: &'a [u8] },
 	MalformedIntegerCsr { token: &'a [u8] },
 	MalformedRegister { token: &'a str },
-	SpInstructionRegIsNotX2 { pos: &'static str, line: &'a str },
-	TrailingGarbage { line: &'a str },
-	TruncatedInstruction { line: &'a str },
-	UnknownInstruction { line: &'a str },
+	SpInstructionRegIsNotX2 { pos: &'static str, line: &'a [u8] },
+	TrailingGarbage { line: &'a [u8] },
+	TruncatedInstruction { line: &'a [u8] },
+	UnknownInstruction { line: &'a [u8] },
 }
 
 impl core::error::Error for ParseError<'_> {}
@@ -75,17 +78,17 @@ impl core::error::Error for ParseError<'_> {}
 impl core::fmt::Display for ParseError<'_> {
 	fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
 		match self {
-			Self::ImmediateOverflow { line } => write!(f, "immediate overflow {line:?}"),
-			Self::InvalidUtf8 { token } => write!(f, "invalid UTF-8 {token:?}"),
-			Self::MalformedFenceSet { token } => write!(f, "malformed fence set {token:?}"),
-			Self::MalformedImmediate { token } => write!(f, "malformed immediate {token:?}"),
-			Self::MalformedInstruction { line } => write!(f, "malformed instruction {line:?}"),
-			Self::MalformedIntegerCsr { token } => write!(f, "malformed integer CSR {token:?}"),
+			Self::ImmediateOverflow { line } => write!(f, r#"immediate overflow "{}""#, line.escape_ascii()),
+			Self::InvalidUtf8 { token } => write!(f, r#"invalid UTF-8 "{}""#, token.escape_ascii()),
+			Self::MalformedFenceSet { token } => write!(f, r#"malformed fence set "{}""#, token.escape_ascii()),
+			Self::MalformedImmediate { token } => write!(f, r#"malformed immediate "{}""#, token.escape_ascii()),
+			Self::MalformedInstruction { line } => write!(f, r#"malformed instruction "{}""#, line.escape_ascii()),
+			Self::MalformedIntegerCsr { token } => write!(f, r#"malformed integer CSR "{}""#, token.escape_ascii()),
 			Self::MalformedRegister { token } => write!(f, "malformed register {token:?}"),
 			Self::SpInstructionRegIsNotX2 { pos, line } => write!(f, "{pos} register must be x2 {line:?}"),
-			Self::TrailingGarbage { line } => write!(f, "trailing garbage {line:?}"),
-			Self::TruncatedInstruction { line } => write!(f, "truncated instruction {line:?}"),
-			Self::UnknownInstruction { line } => write!(f, "unknown instruction {line:?}"),
+			Self::TrailingGarbage { line } => write!(f, r#"trailing garbage "{}""#, line.escape_ascii()),
+			Self::TruncatedInstruction { line } => write!(f, r#"truncated instruction "{}""#, line.escape_ascii()),
+			Self::UnknownInstruction { line } => write!(f, r#"unknown instruction "{}""#, line.escape_ascii()),
 		}
 	}
 }
@@ -371,7 +374,7 @@ mod tests {
 			std::eprintln!("{input}");
 
 			let actual =
-				super::parse_program(input, SUPPORTED_EXTENSIONS)
+				super::parse_program(input.lines().map(str::as_bytes), SUPPORTED_EXTENSIONS)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
 					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
@@ -575,7 +578,7 @@ mod tests {
 			std::eprintln!("{input}");
 
 			let actual =
-				super::parse_program(input, SUPPORTED_EXTENSIONS)
+				super::parse_program(input.lines().map(str::as_bytes), SUPPORTED_EXTENSIONS)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
 					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
@@ -651,7 +654,7 @@ mod tests {
 			std::eprintln!("{input}");
 
 			let actual =
-				super::parse_program(input, SUPPORTED_EXTENSIONS)
+				super::parse_program(input.lines().map(str::as_bytes), SUPPORTED_EXTENSIONS)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
 					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
@@ -710,7 +713,7 @@ mod tests {
 			std::eprintln!("{input}");
 
 			let actual =
-				super::parse_program(input, SUPPORTED_EXTENSIONS)
+				super::parse_program(input.lines().map(str::as_bytes), SUPPORTED_EXTENSIONS)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
 					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
@@ -1031,7 +1034,7 @@ mod tests {
 
 			let expected = expected.iter().map(|&(lo, hi)| (lo, Some(hi))).collect::<Vec<_>>();
 			let actual =
-				super::parse_program(input, SUPPORTED_EXTENSIONS)
+				super::parse_program(input.lines().map(str::as_bytes), SUPPORTED_EXTENSIONS)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
 					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
@@ -1352,7 +1355,7 @@ mod tests {
 			std::eprintln!("{input}");
 
 			let actual =
-				super::parse_program(input, SUPPORTED_EXTENSIONS)
+				super::parse_program(input.lines().map(str::as_bytes), SUPPORTED_EXTENSIONS)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
 					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
@@ -1486,7 +1489,7 @@ mod tests {
 
 			let expected = expected.iter().map(|&(lo, hi)| (lo, Some(hi))).collect::<Vec<_>>();
 			let actual =
-				super::parse_program(input, SUPPORTED_EXTENSIONS)
+				super::parse_program(input.lines().map(str::as_bytes), SUPPORTED_EXTENSIONS)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
 					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
@@ -1741,7 +1744,7 @@ mod tests {
 			std::eprintln!("{input}");
 
 			let actual =
-				super::parse_program(input, SUPPORTED_EXTENSIONS)
+				super::parse_program(input.lines().map(str::as_bytes), SUPPORTED_EXTENSIONS)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
 					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;

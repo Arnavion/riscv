@@ -27,8 +27,8 @@ macro_rules! instructions {
 				raw_instruction.encode()
 			}
 
-			$vis fn parse($parse_line: &str) -> Result<Option<Self>, ParseError<'_>> {
-				let mut $parse_tokens = tokens($parse_line.as_bytes());
+			$vis fn parse($parse_line: &[u8]) -> Result<Option<Self>, ParseError<'_>> {
+				let mut $parse_tokens = tokens($parse_line);
 
 				let Some(token) = $parse_tokens.next() else {
 					return Ok(None);

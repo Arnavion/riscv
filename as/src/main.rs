@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 	let mut pc = 0_u64;
 
-	for instruction in riscv::parse_program(&program, supported_extensions) {
+	for instruction in riscv::parse_program(program.lines().map(str::as_bytes), supported_extensions) {
 		let instruction = instruction.map_err(|err| err.to_string())?;
 		let (lo, hi) =
 			instruction.encode(supported_extensions)
