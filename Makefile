@@ -58,6 +58,15 @@ test-load_store:
 	(cd "$$d" && iverilog -g2012 -DTESTING -o test "$$src/tc/sv/load_store32.sv" "$$src/tc/sv/load_store64.sv" && ./test)
 
 
+.PHONY: test-ram_cache
+test: test-ram_cache
+test-ram_cache:
+	src="$$PWD" && \
+	d="$$(mktemp -d)" && \
+	trap "rm -rf '$$d'" EXIT && \
+	(cd "$$d" && iverilog -g2012 -DTESTING -o test "$$src/tc/sv/ram_cache.sv" && ./test)
+
+
 .PHONY: freestanding
 freestanding:
 	cd freestanding && cargo build --release --target riscv64-arnavion-none-elf.json -Z build-std=core
