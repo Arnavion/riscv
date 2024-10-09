@@ -1,0 +1,26 @@
++---------+------+-------+-------+-----------------+------+----+---------+-----------------+------+-----------------+-------+-----------------+------+-------+-----------------+
+| Current | Load | Store | Flush |     Address     | Slow | -> |  Next   |  Next Address   | Busy |   Load Value    | Fast  |      Fast       | Slow | Slow  |      Slow       |
+|  State  |      |       |       |                 | Busy | -> |  State  |                 |      |                 | Store |   Store Value   | Load | Store |     Address     |
++=========+======+=======+=======+=================+======+====+=========+=================+======+=================+=======+=================+======+=======+=================+
+| Clean   | 0    | 0     |       |                 |      | -> | Clean   | Current Address | 0    |                 | 0     |                 | 0    | 0     |                 |
+| Clean   | 1    | 0     | 0     | Current Address |      | -> | Clean   | Current Address | 0    | Fast Load Value | 0     |                 | 0    | 0     |                 |
+| Clean   | 0    | 1     | 0     | Current Address |      | -> | Dirty   | Current Address | 0    | Fast Load Value | 1     | Store Value     | 0    | 0     |                 |
+| Clean   | 1    | 0     | 0     | New Address     |      | -> | Reading | New Address     | 1    |                 | 0     |                 | 1    | 0     | New Address     |
+| Clean   | 0    | 1     | 0     | New Address     |      | -> | Reading | New Address     | 1    |                 | 0     |                 | 1    | 0     | New Address     |
++---------+------+-------+-------+-----------------+------+----+---------+-----------------+------+-----------------+-------+-----------------+------+-------+-----------------+
+| Dirty   | 0    | 0     | 0     |                 |      | -> | Dirty   | Current Address | 0    |                 | 0     |                 | 0    | 0     |                 |
+| Dirty   | 1    | 0     | 0     | Current Address |      | -> | Dirty   | Current Address | 0    | Fast Load Value | 0     |                 | 0    | 0     |                 |
+| Dirty   | 0    | 1     | 0     | Current Address |      | -> | Dirty   | Current Address | 0    | Fast Load Value | 1     | Store Value     | 0    | 0     |                 |
+| Dirty   | 1    | 0     | 0     | New Address     |      | -> | Writing | New Address     | 1    |                 | 0     |                 | 0    | 1     | Current Address |
+| Dirty   | 0    | 1     | 0     | New Address     |      | -> | Writing | New Address     | 1    |                 | 0     |                 | 0    | 1     | Current Address |
+| Dirty   | 0    | 0     | 1     |                 |      | -> | Writing | Current Address | 1    |                 | 0     |                 | 0    | 1     | Current Address |
++---------+------+-------+-------+-----------------+------+----+---------+-----------------+------+-----------------+-------+-----------------+------+-------+-----------------+
+| Writing |      |       |       |                 | 1    | -> | Writing | Current Address | 1    |                 | 0     |                 | 0    | 0     |                 |
+| Writing | 1    | 0     | 0     |                 | 0    | -> | Reading | Current Address | 1    |                 | 0     |                 | 1    | 0     | Current Address |
+| Writing | 0    | 1     | 0     |                 | 0    | -> | Reading | Current Address | 1    |                 | 0     |                 | 1    | 0     | Current Address |
+| Writing | 0    | 0     | 1     |                 | 0    | -> | Clean   | Current Address | 0    |                 | 0     |                 | 0    | 0     |                 |
++---------+------+-------+-------+-----------------+------+----+---------+-----------------+------+-----------------+-------+-----------------+------+-------+-----------------+
+| Reading |      |       |       |                 | 1    | -> | Reading | Current Address | 1    |                 | 0     |                 | 0    | 0     |                 |
+| Reading | 1    | 0     | 0     |                 | 0    | -> | Clean   | Current Address | 0    | Slow Load Value | 1     | Slow Load Value | 0    | 0     |                 |
+| Reading | 0    | 1     | 0     |                 | 0    | -> | Dirty   | Current Address | 0    | Slow Load Value | 1     | Store Value     | 0    | 0     |                 |
++---------+------+-------+-------+-----------------+------+----+---------+-----------------+------+-----------------+-------+-----------------+------+-------+-----------------+
