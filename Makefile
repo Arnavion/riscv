@@ -19,7 +19,7 @@ print:
 
 
 .PHONY: test
-test: test-decompressor
+test: test-decompressor test-load test-ram_cache
 	cargo test --workspace
 	for bitness in '--32' '--64'; do \
 		for compressed in 'false' 'true' 'Zcb'; do \
@@ -37,6 +37,22 @@ test-decompressor:
 	d="$$(mktemp -d)" && \
 	trap "rm -rf '$$d'" EXIT && \
 	(cd "$$d" && iverilog -g2012 -DTESTING -o test "$$src/tc/sv/rv_decompressor.sv" && ./test)
+
+
+.PHONY: test-load
+test-load:
+	src="$$PWD" && \
+	d="$$(mktemp -d)" && \
+	trap "rm -rf '$$d'" EXIT && \
+	(cd "$$d" && iverilog -g2012 -DTESTING -o test "$$src/tc/sv/load32.sv" "$$src/tc/sv/load64.sv" && ./test)
+
+
+.PHONY: test-ram_cache
+test-ram_cache:
+	src="$$PWD" && \
+	d="$$(mktemp -d)" && \
+	trap "rm -rf '$$d'" EXIT && \
+	(cd "$$d" && iverilog -g2012 -DTESTING -o test "$$src/tc/sv/ram_cache.sv" && ./test)
 
 
 .PHONY: freestanding
