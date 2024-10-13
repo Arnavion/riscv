@@ -299,7 +299,19 @@ module rv_alu (
 		OpCode_System = 5'b11100
 	} OpCode;
 
+	wire[63:0] rs1_sh1 = {rs1[0+:63], 1'b0};
+
+	wire[63:0] rs1_sh2 = {rs1[0+:62], 2'b0};
+
+	wire[63:0] rs1_sh3 = {rs1[0+:61], 3'b0};
+
 	wire[63:0] rs1uw = 64'(rs1[0+:32]);
+
+	wire[63:0] rs1uw_sh1 = {rs1uw[0+:63], 1'b0};
+
+	wire[63:0] rs1uw_sh2 = {rs1uw[0+:62], 2'b0};
+
+	wire[63:0] rs1uw_sh3 = {rs1uw[0+:61], 3'b0};
 
 	wire[63:0] rs1w = unsigned'(64'(signed'(rs1[0+:32])));
 
@@ -467,13 +479,20 @@ module rv_alu (
 					rd = add_addw;
 				end
 
-				3'b001: unique case (imm[5+:7])
+				3'b001: unique casez (imm[5+:7])
 					// slliw
 					7'b0000000: begin
 						in3 = rs1;
 						in4 = {58'bx, imm[0+:6]};
 						shift_arithmetic = imm[10];
 						rd = shift_sllw;
+					end
+
+					// slli.uw
+					7'b000010?: begin
+						in3 = rs1uw;
+						in4 = {58'bx, imm[0+:6]};
+						rd = shift_sll;
 					end
 
 					default: sigill = '1;
@@ -533,11 +552,27 @@ module rv_alu (
 					rd = 64'(cmp_lt);
 				end
 
+				// sh1add
+				10'b010_0010000: begin
+					in1 = rs1_sh1;
+					in2 = rs2;
+					add_cin = '0;
+					rd = add_add;
+				end
+
 				// xor
 				10'b100_0000000: begin
 					in3 = rs1;
 					in4 = rs2;
 					rd = logical_xor;
+				end
+
+				// sh2add
+				10'b100_0010000: begin
+					in1 = rs1_sh2;
+					in2 = rs2;
+					add_cin = '0;
+					rd = add_add;
 				end
 
 				// srl, sra
@@ -560,6 +595,14 @@ module rv_alu (
 					in3 = rs1;
 					in4 = rs2;
 					rd = logical_or;
+				end
+
+				// sh3add
+				10'b110_0010000: begin
+					in1 = rs1_sh3;
+					in2 = rs2;
+					add_cin = '0;
+					rd = add_add;
 				end
 
 				// and
@@ -593,6 +636,14 @@ module rv_alu (
 					rd = add_addw;
 				end
 
+				// add.uw
+				10'b000_0000100: begin
+					in1 = rs1uw;
+					in2 = rs2;
+					add_cin = '0;
+					rd = add_add;
+				end
+
 				// sllw
 				10'b001_0000000: begin
 					in3 = rs1;
@@ -601,12 +652,36 @@ module rv_alu (
 					rd = shift_sllw;
 				end
 
+				// sh1add.uw
+				10'b010_0010000: begin
+					in1 = rs1uw_sh1;
+					in2 = rs2;
+					add_cin = '0;
+					rd = add_add;
+				end
+
+				// sh2add.uw
+				10'b100_0010000: begin
+					in1 = rs1uw_sh2;
+					in2 = rs2;
+					add_cin = '0;
+					rd = add_add;
+				end
+
 				// srlw, sraw
 				10'b101_0?00000: begin
 					in3 = rs1;
 					in4 = {58'bx, rs2[0+:6]};
 					shift_arithmetic = funct7[5];
 					rd = shift_srw;
+				end
+
+				// sh3add.uw
+				10'b110_0010000: begin
+					in1 = rs1uw_sh3;
+					in2 = rs2;
+					add_cin = '0;
+					rd = add_add;
 				end
 
 				default: sigill = '1;
