@@ -287,7 +287,19 @@ module rv_alu (
 	output bit csr_store,
 	output logic[63:0] csr_store_value
 );
+	wire[63:0] rs1_sh1 = {rs1[0+:63], 1'b0};
+
+	wire[63:0] rs1_sh2 = {rs1[0+:62], 2'b0};
+
+	wire[63:0] rs1_sh3 = {rs1[0+:61], 3'b0};
+
 	wire[63:0] rs1uw = {32'b0, rs1[0+:32]};
+
+	wire[63:0] rs1uw_sh1 = {rs1uw[0+:63], 1'b0};
+
+	wire[63:0] rs1uw_sh2 = {rs1uw[0+:62], 2'b0};
+
+	wire[63:0] rs1uw_sh3 = {rs1uw[0+:61], 3'b0};
 
 	wire[63:0] rs1w = {{32{rs1[31]}}, rs1[0+:32]};
 
@@ -741,6 +753,65 @@ module rv_alu (
 				csr_load = '1;
 				csr_store = (csrimm != '0);
 				csr_store_value = logical_and;
+			end
+
+
+			// Zba
+
+			// add.uw
+			{15'b01110_000_0000100}: begin
+				in1 = rs1uw;
+				in2 = rs2;
+				rd = adder_addw;
+			end
+
+			// sh1add
+			{15'b01100_010_0010000}: begin
+				in1 = rs1_sh1;
+				in2 = rs2;
+				rd = adder_add;
+			end
+
+			// sh1add.uw
+			{15'b01110_010_0010000}: begin
+				in1 = rs1uw_sh1;
+				in2 = rs2;
+				rd = adder_addw;
+			end
+
+			// sh2add
+			{15'b01100_100_0010000}: begin
+				in1 = rs1_sh2;
+				in2 = rs2;
+				rd = adder_add;
+			end
+
+			// sh2add.uw
+			{15'b01110_100_0010000}: begin
+				in1 = rs1uw_sh2;
+				in2 = rs2;
+				rd = adder_addw;
+			end
+
+			// sh3add
+			{15'b01100_110_0010000}: begin
+				in1 = rs1_sh3;
+				in2 = rs2;
+				rd = adder_add;
+			end
+
+			// sh3add.uw
+			{15'b01110_110_0010000}: begin
+				in1 = rs1uw_sh3;
+				in2 = rs2;
+				rd = adder_addw;
+			end
+
+			// slli.uw
+			{15'b00110_001_000010?}: begin
+				in3 = rs1uw;
+				in4 = {58'b0, imm[0+:6]};
+				rd = shift_sll;
 			end
 
 
