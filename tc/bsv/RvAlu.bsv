@@ -40,14 +40,24 @@ module mkRvAlu(RvAlu);
 			tagged Auipc { imm: .imm }:
 				return tuple3(pc, extend(imm) << 12, False);
 
-			tagged Binary { op: .op, rs1: .rs1, rs2: .rs2 }:
+			tagged Binary { op: .op, rs1: .rs1, rs2: .rs2 }: begin
+				Int#(64) rs1uw = unpack(zeroExtend(pack(rs1)[31:0]));
+
 				case (op) matches
 					tagged Add: return tuple3(rs1, rs2, False);
+					tagged AddUw: return tuple3(rs1uw, rs2, False);
 					tagged Addw: return tuple3(rs1, rs2, False);
+					tagged Sh1add: return tuple3(rs1 << 1, rs2, False);
+					tagged Sh1addUw: return tuple3(rs1uw << 1, rs2, False);
+					tagged Sh2add: return tuple3(rs1 << 2, rs2, False);
+					tagged Sh2addUw: return tuple3(rs1uw << 2, rs2, False);
+					tagged Sh3add: return tuple3(rs1 << 3, rs2, False);
+					tagged Sh3addUw: return tuple3(rs1uw << 3, rs2, False);
 					tagged Sub: return tuple3(rs1, ~rs2, True);
 					tagged Subw: return tuple3(rs1, ~rs2, True);
 					default: return ?;
 				endcase
+			end
 
 			tagged Branch { imm: .imm }:
 				return tuple3(pc, extend(imm) << 1, False);
@@ -107,9 +117,12 @@ module mkRvAlu(RvAlu);
 		let logical_result = logical.run(logical_arg1, logical_arg2);
 
 		match { .shift_value, .shift_shamt, .shift_arithmetic } = case (inst) matches
-			tagged Binary { op: .op, rs1: .rs1, rs2: .rs2 }:
+			tagged Binary { op: .op, rs1: .rs1, rs2: .rs2 }: begin
+				Int#(64) rs1uw = unpack(zeroExtend(pack(rs1)[31:0]));
+
 				case (op) matches
 					tagged Sll: return tuple3(rs1, rs2, ?);
+					tagged SllUw: return tuple3(rs1uw, rs2, ?);
 					tagged Sllw: return tuple3(rs1, rs2, ?);
 					tagged Sra: return tuple3(rs1, rs2, True);
 					tagged Sraw: return tuple3(rs1, rs2, True);
@@ -117,6 +130,7 @@ module mkRvAlu(RvAlu);
 					tagged Srlw: return tuple3(rs1, rs2, False);
 					default: return ?;
 				endcase
+			end
 
 			default: return ?;
 		endcase;
@@ -136,12 +150,20 @@ module mkRvAlu(RvAlu);
 					x_regs_rd: rd,
 					x_regs_rd_value: case (op) matches
 						tagged Add: return add_result.add;
+						tagged AddUw: return add_result.add;
 						tagged Addw: return add_result.addw;
 						tagged And: return logical_result.and_;
 						tagged CzeroEqz: return cmp_result.eq ? 0 : rs1;
 						tagged CzeroNez: return cmp_result.eq ? rs1 : 0;
 						tagged Or: return logical_result.or_;
+						tagged Sh1add: return add_result.add;
+						tagged Sh1addUw: return add_result.add;
+						tagged Sh2add: return add_result.add;
+						tagged Sh2addUw: return add_result.add;
+						tagged Sh3add: return add_result.add;
+						tagged Sh3addUw: return add_result.add;
 						tagged Sll: return shift_result.sll;
+						tagged SllUw: return shift_result.sll;
 						tagged Sllw: return shift_result.sll;
 						tagged Slt: return cmp_result.lt ? 1 : 0;
 						tagged Sltu: return cmp_result.lt ? 1 : 0;
