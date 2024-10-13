@@ -26,6 +26,7 @@ import RvDecompressorCommon::*;
 (* descending_urgency = "sub_xor_or_and, invalid" *)
 (* descending_urgency = "subw_addw, invalid" *)
 (* descending_urgency = "zext_b, invalid" *)
+(* descending_urgency = "zext_w, invalid" *)
 (* descending_urgency = "not_, invalid" *)
 (* descending_urgency = "j, invalid" *)
 (* descending_urgency = "beqz_bnez, invalid" *)
@@ -187,6 +188,17 @@ module mkRvDecompressorPriority#(parameter Bool rv64)(RvDecompressor);
 			3'b111,
 			{ 2'b01, in[9:7] },
 			12'b000011111111
+		));
+	endrule
+
+	rule zext_w(rv64 &&& args.first matches RvDecompressorRequest { in: .in } &&& in[15:0] matches 16'b100_111_???_11_100_01);
+		write_out(in, result, type_r(
+			OpCode_Op32,
+			{ 2'b01, in[9:7] },
+			3'b000,
+			{ 2'b01, in[9:7] },
+			5'b00000,
+			7'b0000100
 		));
 	endrule
 

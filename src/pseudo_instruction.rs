@@ -1042,10 +1042,15 @@ pub(crate) fn parse(
 			}
 
 			if supported_extensions.contains(SupportedExtensions::RV64I) {
-				SmallIterator::Two(
-					Instruction::Slli { dest, src, shamt: 32 },
-					Instruction::Srli { dest, src: dest, shamt: 32 },
-				)
+				if supported_extensions.contains(SupportedExtensions::ZBA) {
+					SmallIterator::One(Instruction::Adduw { dest, src1: src, src2: Register::X0 })
+				}
+				else {
+					SmallIterator::Two(
+						Instruction::Slli { dest, src, shamt: 32 },
+						Instruction::Srli { dest, src: dest, shamt: 32 },
+					)
+				}
 			}
 			else {
 				SmallIterator::One(Instruction::Addi { dest, src, imm: 0 })
