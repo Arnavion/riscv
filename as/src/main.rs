@@ -63,6 +63,8 @@ fn parse_args(mut args: impl Iterator<Item = std::ffi::OsString>, argv0: &std::f
 
 			Some("--save-breaker" | "--sb") => save_breaker = true,
 
+			Some("--zba") => supported_extensions |= riscv::SupportedExtensions::ZBA,
+
 			Some("--32") => supported_extensions &= !riscv::SupportedExtensions::RV64I,
 
 			Some("--64") => supported_extensions |= riscv::SupportedExtensions::RV64I,
@@ -85,5 +87,5 @@ fn write_usage_and_crash(argv0: &std::ffi::OsStr) -> ! {
 }
 
 fn write_usage(mut w: impl std::io::Write, argv0: &std::ffi::OsStr) {
-	_ = writeln!(w, "Usage: {} [ --32 | --64 ] [ -c | --compressed | --compressed=[true|false|Zcb] ] [ --sb | --save-breaker ] [ -- ] <program.S>", argv0.to_string_lossy());
+	_ = writeln!(w, "Usage: {} [ --32 | --64 ] [ -c | --compressed | --compressed=[true|false|Zcb] ] [ --sb | --save-breaker ] [ --zba ] [ -- ] <program.S>", argv0.to_string_lossy());
 }

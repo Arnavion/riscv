@@ -58,7 +58,7 @@ fn main_inner(console: &mut Console<'_>) -> Result<(), ()> {
 	let program = unsafe { core::slice::from_raw_parts(in_file_ptr, (*in_file_len_ptr).try_into().expect("u64 -> usize")) };
 	let program = core::str::from_utf8(program).map_err(|err| { _ = writeln!(console, "{err}"); })?;
 
-	let supported_extensions = riscv::SupportedExtensions::RV64C_ZCB;
+	let supported_extensions = riscv::SupportedExtensions::RV64C_ZCB | riscv::SupportedExtensions::ZBA;
 
 	let mut pc = 0_u64;
 
