@@ -298,7 +298,19 @@ module rv_alu (
 		OpCode_System = 5'b11100
 	} OpCode;
 
+	wire[63:0] rs1_sh1 = {rs1[0+:63], 1'b0};
+
+	wire[63:0] rs1_sh2 = {rs1[0+:62], 2'b0};
+
+	wire[63:0] rs1_sh3 = {rs1[0+:61], 3'b0};
+
 	wire[63:0] rs1uw = {32'b0, rs1[0+:32]};
+
+	wire[63:0] rs1uw_sh1 = {rs1uw[0+:63], 1'b0};
+
+	wire[63:0] rs1uw_sh2 = {rs1uw[0+:62], 2'b0};
+
+	wire[63:0] rs1uw_sh3 = {rs1uw[0+:61], 3'b0};
 
 	wire[63:0] rs1w = {{32{rs1[31]}}, rs1[0+:32]};
 
@@ -464,12 +476,19 @@ module rv_alu (
 					rd = adder_addw;
 				end
 
-				3'b001: unique case (imm[5+:7])
+				3'b001: unique casez (imm[5+:7])
 					// slliw
 					7'b0000000: begin
 						in3 = rs1;
 						in4 = {59'b0, imm[0+:5]};
 						rd = shift_sllw;
+					end
+
+					// slli.uw
+					7'b000010?: begin
+						in3 = rs1uw;
+						in4 = {58'b0, imm[0+:6]};
+						rd = shift_sll;
 					end
 
 					default: sigill = '1;
@@ -543,6 +562,13 @@ module rv_alu (
 					rd = {63'b0, cmp_out_lt};
 				end
 
+				// sh1add
+				10'b010_0010000: begin
+					in1 = rs1_sh1;
+					in2 = rs2;
+					rd = adder_add;
+				end
+
 				// sltu
 				10'b011_0000000: begin
 					in3 = rs1;
@@ -556,6 +582,13 @@ module rv_alu (
 					in3 = rs1;
 					in4 = rs2;
 					rd = logical_xor;
+				end
+
+				// sh2add
+				10'b100_0010000: begin
+					in1 = rs1_sh2;
+					in2 = rs2;
+					rd = adder_add;
 				end
 
 				// srl
@@ -584,6 +617,13 @@ module rv_alu (
 					in3 = rs1;
 					in4 = rs2;
 					rd = logical_or;
+				end
+
+				// sh3add
+				10'b110_0010000: begin
+					in1 = rs1_sh3;
+					in2 = rs2;
+					rd = adder_add;
 				end
 
 				// and
@@ -616,6 +656,13 @@ module rv_alu (
 					rd = adder_addw;
 				end
 
+				// add.uw
+				10'b000_0000100: begin
+					in1 = rs1uw;
+					in2 = rs2;
+					rd = adder_addw;
+				end
+
 				// subw
 				10'b000_0100000: begin
 					in1 = rs1;
@@ -631,6 +678,20 @@ module rv_alu (
 					rd = shift_sllw;
 				end
 
+				// sh1add.uw
+				10'b010_0010000: begin
+					in1 = rs1uw_sh1;
+					in2 = rs2;
+					rd = adder_addw;
+				end
+
+				// sh2add.uw
+				10'b100_0010000: begin
+					in1 = rs1uw_sh2;
+					in2 = rs2;
+					rd = adder_addw;
+				end
+
 				// srlw
 				10'b101_0000000: begin
 					in3 = rs1uw;
@@ -643,6 +704,13 @@ module rv_alu (
 					in3 = rs1w;
 					in4 = {59'b0, rs2[0+:5]};
 					rd = shift_sra;
+				end
+
+				// sh3add.uw
+				10'b110_0010000: begin
+					in1 = rs1uw_sh3;
+					in2 = rs2;
+					rd = adder_addw;
 				end
 
 				default: sigill = '1;
