@@ -63,7 +63,7 @@ fn main_inner(console: &mut Console<'_>) -> Result<(), ()> {
 		})
 	};
 
-	let supported_extensions = riscv::SupportedExtensions::RV64C_ZCB;
+	let supported_extensions = riscv::SupportedExtensions::RV64C_ZCB | riscv::SupportedExtensions::ZBA;
 
 	let mut pc = 0_u64;
 
