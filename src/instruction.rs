@@ -838,6 +838,9 @@ instructions! {
 		#[i("addiw", OpImm32)]
 		Addiw { dest: Register, src: Register, imm: i32 },
 
+		#[r("add.uw", Op32)]
+		Adduw { dest: Register, src1: Register, src2: Register },
+
 		#[r("addw", Op32)]
 		Addw { dest: Register, src1: Register, src2: Register },
 
@@ -947,11 +950,32 @@ instructions! {
 		#[s("sh", Store)]
 		Sh { base: Register, offset: i32, src: Register },
 
+		#[r("sh1add", Op)]
+		Sh1add { dest: Register, src1: Register, src2: Register },
+
+		#[r("sh1add.uw", Op32)]
+		Sh1adduw { dest: Register, src1: Register, src2: Register },
+
+		#[r("sh2add", Op)]
+		Sh2add { dest: Register, src1: Register, src2: Register },
+
+		#[r("sh2add.uw", Op32)]
+		Sh2adduw { dest: Register, src1: Register, src2: Register },
+
+		#[r("sh3add", Op)]
+		Sh3add { dest: Register, src1: Register, src2: Register },
+
+		#[r("sh3add.uw", Op32)]
+		Sh3adduw { dest: Register, src1: Register, src2: Register },
+
 		#[r("sll", Op)]
 		Sll { dest: Register, src1: Register, src2: Register },
 
 		#[i("slli", OpImm)]
 		Slli { dest: Register, src: Register, shamt: i32 },
+
+		#[i("slli.uw", OpImm32)]
+		Slliuw { dest: Register, src: Register, shamt: i32 },
 
 		#[i("slliw", OpImm32)]
 		Slliw { dest: Register, src: Register, shamt: i32 },
@@ -1126,6 +1150,18 @@ impl Instruction {
 				rd_rs1: dest,
 				imm1: bit_slice::<0, 5>(imm),
 				imm2: bit_slice::<5, 6>(imm),
+			},
+
+			Self::Adduw { dest, src1: src, src2: Register::X0 } |
+			Self::Adduw { dest, src1: Register::X0, src2: src } if
+				supported_extensions.contains(SupportedExtensions::ZCB) &&
+				dest.is_compressible() &&
+				src == dest
+			=> RawInstruction::Zcb {
+				opcode: OpCodeC::ZextW,
+				reg: dest,
+				imm1: 0b100,
+				imm2: 0b11,
 			},
 
 			Self::Addw { dest, src1: src, src2: other } |
@@ -2177,6 +2213,7 @@ funct! {
 		Add = 0b000,
 		Addi = 0b000,
 		Addiw = 0b000,
+		Adduw = 0b000,
 		Addw = 0b000,
 		And = 0b111,
 		Andi = 0b111,
@@ -2209,8 +2246,15 @@ funct! {
 		Sb = 0b000,
 		Sd = 0b011,
 		Sh = 0b001,
+		Sh1add = 0b010,
+		Sh1adduw = 0b010,
+		Sh2add = 0b100,
+		Sh2adduw = 0b100,
+		Sh3add = 0b110,
+		Sh3adduw = 0b110,
 		Sll = 0b001,
 		Slli = 0b001,
+		Slliuw = 0b001,
 		Slliw = 0b001,
 		Sllw = 0b001,
 		Slt = 0b010,
@@ -2236,13 +2280,21 @@ funct! {
 funct! {
 	enum Funct7 {
 		Add = 0b000_0000,
+		Adduw = 0b000_0100,
 		Addw = 0b000_0000,
 		And = 0b000_0000,
 		CZeroEqz = 0b000_0111,
 		CZeroNez = 0b000_0111,
 		Or = 0b000_0000,
+		Sh1add = 0b001_0000,
+		Sh1adduw = 0b001_0000,
+		Sh2add = 0b001_0000,
+		Sh2adduw = 0b001_0000,
+		Sh3add = 0b001_0000,
+		Sh3adduw = 0b001_0000,
 		Sll = 0b000_0000,
 		Slli = 0b000_0000,
+		Slliuw = 0b000_0100,
 		Slliw = 0b000_0000,
 		Sllw = 0b000_0000,
 		Slt = 0b000_0000,
@@ -2422,6 +2474,7 @@ opcodec! {
 		Sub = (C1, 0b100_011),
 		Xor = (C1, 0b100_011),
 		ZextB = (C1, 0b100_111),
+		ZextW = (C1, 0b100_111),
 	}
 }
 
