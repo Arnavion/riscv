@@ -227,6 +227,11 @@ module mkTestDecompressorModule#(RvDecompressor decompressor32, RvDecompressor d
 			request: RvDecompressorRequest { in: 32'b100_111_010_11_000_01 },
 			expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b000011111111_01010_111_01010_00100_11 }
 		},
+		// zext.w
+		TestCase {
+			request: RvDecompressorRequest { in: 32'b100_111_010_11_100_01 },
+			expected_response: RvDecompressorResponse { inst: tagged Invalid }
+		},
 		// not
 		TestCase {
 			request: RvDecompressorRequest { in: 32'b100_111_010_11_101_01 },
@@ -459,6 +464,11 @@ module mkTestDecompressorModule#(RvDecompressor decompressor32, RvDecompressor d
 		TestCase {
 			request: RvDecompressorRequest { in: 32'b100_111_010_11_000_01 },
 			expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b000011111111_01010_111_01010_00100_11 }
+		},
+		// zext.w
+		TestCase {
+			request: RvDecompressorRequest { in: 32'b100_111_010_11_100_01 },
+			expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b0000100_00000_01010_000_01010_01110_11 }
 		},
 		// not
 		TestCase {

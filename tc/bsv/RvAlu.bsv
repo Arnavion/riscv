@@ -57,6 +57,26 @@ module mkRvAlu(RvAlu);
 		});
 	endrule
 
+	// add.uw
+	rule add_uw_1(args.first matches AluRequest { inst: tagged Binary { op: AddUw, rs1: .rs1, rs2: .rs2 } });
+		Int#(64) rs1uw = unpack(zeroExtend(pack(rs1)[31:0]));
+		adder.request.put(AdderRequest {
+			arg1: rs1uw,
+			arg2: rs2,
+			cin: False
+		});
+	endrule
+
+	rule add_uw_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Binary { op: AddUw, rd: .rd } });
+		let adder_response = adder.response.first;
+		result.put(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: adder_response.add,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
 	// addw
 	rule addw_1(args.first matches AluRequest { inst: tagged Binary { op: Addw, rs1: .rs1, rs2: .rs2 } });
 		adder.request.put(AdderRequest {
@@ -355,6 +375,123 @@ module mkRvAlu(RvAlu);
 		});
 	endrule
 
+	// sh1add
+	rule sh1add_1(args.first matches AluRequest { inst: tagged Binary { op: Sh1add, rs1: .rs1, rs2: .rs2 } });
+		adder.request.put(AdderRequest {
+			arg1: rs1 << 1,
+			arg2: rs2,
+			cin: False
+		});
+	endrule
+
+	rule sh1add_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Binary { op: Sh1add, rd: .rd } });
+		let adder_response = adder.response.first;
+		result.put(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: adder_response.add,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// sh1add.uw
+	rule sh1add_uw_1(args.first matches AluRequest { inst: tagged Binary { op: Sh1addUw, rs1: .rs1, rs2: .rs2 } });
+		Int#(64) rs1uw = unpack(zeroExtend(pack(rs1)[31:0]));
+		adder.request.put(AdderRequest {
+			arg1: rs1uw << 1,
+			arg2: rs2,
+			cin: False
+		});
+	endrule
+
+	rule sh1add_uw_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Binary { op: Sh1addUw, rd: .rd } });
+		let adder_response = adder.response.first;
+		result.put(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: adder_response.add,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// sh2add
+	rule sh2add_1(args.first matches AluRequest { inst: tagged Binary { op: Sh2add, rs1: .rs1, rs2: .rs2 } });
+		adder.request.put(AdderRequest {
+			arg1: rs1 << 1,
+			arg2: rs2,
+			cin: False
+		});
+	endrule
+
+	rule sh2add_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Binary { op: Sh2add, rd: .rd } });
+		let adder_response = adder.response.first;
+		result.put(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: adder_response.add,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// sh2add.uw
+	rule sh2add_uw_1(args.first matches AluRequest { inst: tagged Binary { op: Sh2addUw, rs1: .rs1, rs2: .rs2 } });
+		Int#(64) rs1uw = unpack(zeroExtend(pack(rs1)[31:0]));
+		adder.request.put(AdderRequest {
+			arg1: rs1uw << 2,
+			arg2: rs2,
+			cin: False
+		});
+	endrule
+
+	rule sh2add_uw_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Binary { op: Sh2addUw, rd: .rd } });
+		let adder_response = adder.response.first;
+		result.put(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: adder_response.add,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// sh3add
+	rule sh3add_1(args.first matches AluRequest { inst: tagged Binary { op: Sh3add, rs1: .rs1, rs2: .rs2 } });
+		adder.request.put(AdderRequest {
+			arg1: rs1 << 1,
+			arg2: rs2,
+			cin: False
+		});
+	endrule
+
+	rule sh3add_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Binary { op: Sh3add, rd: .rd } });
+		let adder_response = adder.response.first;
+		result.put(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: adder_response.add,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// sh3add.uw
+	rule sh3add_uw_1(args.first matches AluRequest { inst: tagged Binary { op: Sh3addUw, rs1: .rs1, rs2: .rs2 } });
+		Int#(64) rs1uw = unpack(zeroExtend(pack(rs1)[31:0]));
+		adder.request.put(AdderRequest {
+			arg1: rs1uw << 3,
+			arg2: rs2,
+			cin: False
+		});
+	endrule
+
+	rule sh3add_uw_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Binary { op: Sh3addUw, rd: .rd } });
+		let adder_response = adder.response.first;
+		result.put(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: adder_response.add,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
 	// sll
 	rule sll_1(args.first matches AluRequest { inst: tagged Binary { op: Sll, rs1: .rs1, rs2: .rs2 } });
 		shift.request.put(ShiftRequest {
@@ -365,6 +502,26 @@ module mkRvAlu(RvAlu);
 	endrule
 
 	rule sll_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Binary { op: Sll, rd: .rd } });
+		let shift_response = shift.response.first;
+		result.put(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: shift_response.sll,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// sll.uw
+	rule sll_uw_1(args.first matches AluRequest { inst: tagged Binary { op: SllUw, rs1: .rs1, rs2: .rs2 } });
+		Int#(64) rs1uw = unpack(zeroExtend(pack(rs1)[31:0]));
+		shift.request.put(ShiftRequest {
+			value: rs1uw,
+			shamt: rs2,
+			arithmetic: ?
+		});
+	endrule
+
+	rule sll_uw_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Binary { op: SllUw, rd: .rd } });
 		let shift_response = shift.response.first;
 		result.put(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
