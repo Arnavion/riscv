@@ -319,6 +319,12 @@ mod tests {
 			("sh a0, -11(a1)", &[(0x9aa3, Some(0xfea5))]),
 			("sh a0, 11(a1)", &[(0x95a3, Some(0x00a5))]),
 
+			("sh1add a0, a1, a2", &[(0xa533, Some(0x20c5))]),
+
+			("sh2add a0, a1, a2", &[(0xc533, Some(0x20c5))]),
+
+			("sh3add a0, a1, a2", &[(0xe533, Some(0x20c5))]),
+
 			("sll a0, a1, a2", &[(0x9533, Some(0x00c5))]),
 
 			("slli a0, a1, 11", &[(0x9513, Some(0x00b5))]),
@@ -595,6 +601,8 @@ mod tests {
 			("addiw a0, a1, -11", &[(0x851b, Some(0xff55))]),
 			("addiw a0, a1, 11", &[(0x851b, Some(0x00b5))]),
 
+			("add.uw a0, a1, a2", &[(0x853b, Some(0x08c5))]),
+
 			("addw a0, a1, a2", &[(0x853b, Some(0x00c5))]),
 
 			("ld a0, -36", &[(0x0517, Some(0x0000)), (0x3503, Some(0xfdc5))]),
@@ -618,7 +626,15 @@ mod tests {
 
 			("sext.w a0, a1", &[(0x851b, Some(0x0005))]),
 
+			("sh1add.uw a0, a1, a2", &[(0xa53b, Some(0x20c5))]),
+
+			("sh2add.uw a0, a1, a2", &[(0xc53b, Some(0x20c5))]),
+
+			("sh3add.uw a0, a1, a2", &[(0xe53b, Some(0x20c5))]),
+
 			("slli a0, a1, 63", &[(0x9513, Some(0x03f5))]),
+
+			("slli.uw a0, a1, 63", &[(0x951b, Some(0x0bf5))]),
 
 			("slliw a0, a1, 11", &[(0x951b, Some(0x00b5))]),
 			("slliw a0, a1, 31", &[(0x951b, Some(0x01f5))]),
@@ -707,17 +723,20 @@ mod tests {
 			("xor x8, x8, x9", &[(0x8c25, None)]),
 			("xor x3, x3, x9", &[(0xc1b3, Some(0x0091))]), // Incompressible register
 			("xor x8, x8, x4", &[(0x4433, Some(0x0044))]), // Incompressible register
+
+			("zext.w x8, x8", &[(0x9c71, None)]),
+			("zext.w x3, x3", &[(0x81bb, Some(0x0801))]), // Incompressible register
 		];
 		for &(input, expected) in TESTS {
-			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV64C_ZCB;
+			let supported_extensions: crate::SupportedExtensions = crate::SupportedExtensions::RV64C_ZCB | crate::SupportedExtensions::ZBA;
 
 			std::eprintln!("{input}");
 
 			let actual =
-				super::parse_program(input, SUPPORTED_EXTENSIONS)
+				super::parse_program(input, supported_extensions)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
-					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
+					let encoded = crate::Instruction::encode(i, supported_extensions).map_err(|err| err.to_string())?;
 					Ok(encoded)
 				})
 				.collect::<Result<Vec<_>, _>>()
@@ -740,6 +759,17 @@ mod tests {
 			", &[
 				(0x0017, 0x0000),
 				(0x2003, 0x0000),
+			]),
+
+			// b-ext.s
+			("
+				sh1add a0, a1, a2
+				sh2add a0, a1, a2
+				sh3add a0, a1, a2
+			", &[
+				(0xa533, 0x20c5),
+				(0xc533, 0x20c5),
+				(0xe533, 0x20c5),
 			]),
 
 			// bge.s
@@ -1367,6 +1397,23 @@ mod tests {
 	#[test]
 	fn gas_uncompressed64() {
 		static TESTS: &[(&str, &[(u16, u16)])] = &[
+			// b-ext-64.s
+			("
+				sh1add.uw a0, a1, a2
+				sh2add.uw a0, a1, a2
+				sh3add.uw a0, a1, a2
+				add.uw a0, a1, a2
+				zext.w a0, a1
+				slli.uw a0, a1, 2
+			", &[
+				(0xa53b, 0x20c5),
+				(0xc53b, 0x20c5),
+				(0xe53b, 0x20c5),
+				(0x853b, 0x08c5),
+				(0x853b, 0x0805),
+				(0x951b, 0x0825),
+			]),
+
 			// csr.s
 			("
 				# User Counter/Timers
@@ -1476,16 +1523,16 @@ mod tests {
 			]),
 		];
 		for &(input, expected) in TESTS {
-			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV64I;
+			let supported_extensions: crate::SupportedExtensions = crate::SupportedExtensions::RV64I | crate::SupportedExtensions::ZBA;
 
 			std::eprintln!("{input}");
 
 			let expected = expected.iter().map(|&(lo, hi)| (lo, Some(hi))).collect::<Vec<_>>();
 			let actual =
-				super::parse_program(input, SUPPORTED_EXTENSIONS)
+				super::parse_program(input, supported_extensions)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
-					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
+					let encoded = crate::Instruction::encode(i, supported_extensions).map_err(|err| err.to_string())?;
 					Ok(encoded)
 				})
 				.collect::<Result<Vec<_>, _>>()
@@ -1730,17 +1777,26 @@ mod tests {
 				(0x8082, None),
 				(0x9082, None),
 			]),
+
+			// zcb.s
+			("
+				zext.w x8,x8
+				zext.w x15,x15
+			", &[
+				(0x9c71, None),
+				(0x9ff1, None),
+			]),
 		];
 		for &(input, expected) in TESTS {
-			const SUPPORTED_EXTENSIONS: crate::SupportedExtensions = crate::SupportedExtensions::RV64C_ZCB;
+			let supported_extensions: crate::SupportedExtensions = crate::SupportedExtensions::RV64C_ZCB | crate::SupportedExtensions::ZBA;
 
 			std::eprintln!("{input}");
 
 			let actual =
-				super::parse_program(input, SUPPORTED_EXTENSIONS)
+				super::parse_program(input, supported_extensions)
 				.map(|i| -> Result<_, String> {
 					let i = i.map_err(|err| err.to_string())?;
-					let encoded = crate::Instruction::encode(i, SUPPORTED_EXTENSIONS).map_err(|err| err.to_string())?;
+					let encoded = crate::Instruction::encode(i, supported_extensions).map_err(|err| err.to_string())?;
 					Ok(encoded)
 				})
 				.collect::<Result<Vec<_>, _>>()
