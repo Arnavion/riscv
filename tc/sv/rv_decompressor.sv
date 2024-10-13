@@ -95,6 +95,7 @@ match [11:10] {
 		101 => c.addw,
 		111 => match [4:2] {
 			000 => c.zext.b,
+			100 => c.zext.w,
 			101 => c.not,
 		},
 	},
@@ -394,6 +395,19 @@ module rv_decompressor #(
 							out[12+:3] = 3'b111;
 							out[15+:5] = {2'b01, in[7+:3]};
 							out[20+:12] = 12'b000011111111;
+						end
+
+						// zext.w
+						3'b100: if (rv64) begin
+							out[0+:7] = 7'b0111011;
+							out[7+:5] = {2'b01, in[7+:3]};
+							out[12+:3] = 3'b000;
+							out[15+:5] = {2'b01, in[7+:3]};
+							out[20+:5] = 5'b00000;
+							out[25+:7] = 7'b0000100;
+						end else begin
+							sigill = '1;
+							is_compressed = 'x;
 						end
 
 						// not
