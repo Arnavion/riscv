@@ -449,6 +449,19 @@ module rv_decompressing_decoder #(
 								imm = rv64 ? 64'b000011111111 : 32'b000011111111;
 							end
 
+							// zext.w
+							3'b100: begin
+								opcode = 5'b01110;
+								funct3 = 3'b000;
+								funct7 = 7'b0000100;
+								rd = {2'b01, in[7+:3]};
+								rd_decoded = rd_decoded_raw;
+								rs1 = {2'b01, in[7+:3]};
+								rs1_decoded = rs1_decoded_raw;
+								rs2 = 5'b00000;
+								rs2_decoded = rs2_decoded_raw;
+							end
+
 							// not
 							3'b101: begin
 								opcode = 5'b00100;

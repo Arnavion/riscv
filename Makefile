@@ -23,7 +23,9 @@ test:
 	cargo test --workspace
 	for bitness in '--32' '--64'; do \
 		for compress in 'false' 'true' 'Zcb'; do \
-			for f in tc/*.S; do cargo run --bin riscv -- $$bitness "--compress=$$compress" "$$f" >/dev/null || exit 1; done; \
+			for zba in '' '--zba'; do \
+				for f in tc/*.S; do cargo run --bin riscv -- $$bitness "--compress=$$compress" $$zba "$$f" >/dev/null || exit 1; done; \
+			done; \
 		done; \
 	done
 	cargo clippy --workspace --tests --examples
