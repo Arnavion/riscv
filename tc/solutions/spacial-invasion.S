@@ -7,7 +7,6 @@ li a2, 3 # enjoy
 # loop
 sb a1, 0(fp)
 lbu a1, 0(fp)
-czero.nez a3, a2, a1 # a1 = (a1 == 0) ? a2 : a0
-czero.eqz a1, a0, a1 #
-or a1, a1, a3        #
-j -14 # loop
+snez a1, a1        # a1 = (a1 == 0) ? 3 : 5
+sh1add a1, a1, a2  #    = (a1 != 0) * 2 + 3
+j -12 # loop
