@@ -365,6 +365,22 @@ module rv_decompressing_decoder #(
 								imm_(32'(8'('1)));
 							end
 
+							3'b100: if (rv64) begin
+								// zext.w
+								opcode = OpCode_Op32;
+								funct3 = 3'b000;
+								funct7 = 7'b0000100;
+
+								rd_({2'b01, in[7+:3]});
+								rs1_({2'b01, in[7+:3]});
+								rs2_(5'b00000);
+								csr_load = '0;
+								csr_store = '0;
+							end else begin
+								sigill = '1;
+								is_compressed = 'x;
+							end
+
 							// not
 							3'b101: begin
 								opcode = OpCode_OpImm;
