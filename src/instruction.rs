@@ -853,14 +853,32 @@ instructions! {
 		#[u("auipc", Auipc)]
 		Auipc { dest: Register, imm: i32 },
 
+		#[r("bclr", Op)]
+		BClr { dest: Register, src1: Register, src2: Register },
+
+		#[i("bclri", OpImm)]
+		BClri { dest: Register, src: Register, shamt: i32 },
+
 		#[b("beq", Branch)]
 		Beq { src1: Register, src2: Register, offset: i32 },
+
+		#[r("bext", Op)]
+		BExt { dest: Register, src1: Register, src2: Register },
+
+		#[i("bexti", OpImm)]
+		BExti { dest: Register, src: Register, shamt: i32 },
 
 		#[b("bge", Branch)]
 		Bge { src1: Register, src2: Register, offset: i32 },
 
 		#[b("bgeu", Branch)]
 		Bgeu { src1: Register, src2: Register, offset: i32 },
+
+		#[r("binv", Op)]
+		BInv { dest: Register, src1: Register, src2: Register },
+
+		#[i("binvi", OpImm)]
+		BInvi { dest: Register, src: Register, shamt: i32 },
 
 		#[b("blt", Branch)]
 		Blt { src1: Register, src2: Register, offset: i32 },
@@ -870,6 +888,12 @@ instructions! {
 
 		#[b("bne", Branch)]
 		Bne { src1: Register, src2: Register, offset: i32 },
+
+		#[r("bset", Op)]
+		BSet { dest: Register, src1: Register, src2: Register },
+
+		#[i("bseti", OpImm)]
+		BSeti { dest: Register, src: Register, shamt: i32 },
 
 		#[r("czero.eqz", Op)]
 		CZeroEqz { dest: Register, src1: Register, src2: Register },
@@ -2217,12 +2241,20 @@ funct! {
 		Addw = 0b000,
 		And = 0b111,
 		Andi = 0b111,
+		BClr = 0b001,
+		BClri = 0b001,
+		BExt = 0b101,
+		BExti = 0b101,
 		Beq = 0b000,
 		Bge = 0b101,
 		Bgeu = 0b111,
+		BInv = 0b001,
+		BInvi = 0b001,
 		Blt = 0b100,
 		Bltu = 0b110,
 		Bne = 0b001,
+		BSet = 0b001,
+		BSeti = 0b001,
 		Csrrc = 0b011,
 		Csrrci = 0b111,
 		Csrrs = 0b010,
@@ -2283,6 +2315,14 @@ funct! {
 		Adduw = 0b000_0100,
 		Addw = 0b000_0000,
 		And = 0b000_0000,
+		BClr = 0b010_0100,
+		BClri = 0b010_0100,
+		BExt = 0b010_0100,
+		BExti = 0b010_0100,
+		BInv = 0b011_0100,
+		BInvi = 0b011_0100,
+		BSet = 0b001_0100,
+		BSeti = 0b001_0100,
 		CZeroEqz = 0b000_0111,
 		CZeroNez = 0b000_0111,
 		Or = 0b000_0000,
