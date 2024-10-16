@@ -159,11 +159,21 @@ mod tests {
 			("auipc a0, -11", &[(0x5517, Some(0xffff))]),
 			("auipc a0, 11", &[(0xb517, Some(0x0000))]),
 
+			("bclr a0, a1, a2", &[(0x9533, Some(0x48c5))]),
+
+			("bclri a0, a1, 11", &[(0x9513, Some(0x48b5))]),
+			("bclri a0, a1, 31", &[(0x9513, Some(0x49f5))]),
+
 			("beq a0, a1, -4", &[(0x0ee3, Some(0xfeb5))]),
 			("beq a0, a1, 44", &[(0x0663, Some(0x02b5))]),
 
 			("beqz a0, -4", &[(0x0ee3, Some(0xfe05))]),
 			("beqz a0, 28", &[(0x0e63, Some(0x0005))]),
+
+			("bext a0, a1, a2", &[(0xd533, Some(0x48c5))]),
+
+			("bexti a0, a1, 11", &[(0xd513, Some(0x48b5))]),
+			("bexti a0, a1, 31", &[(0xd513, Some(0x49f5))]),
 
 			("bge a0, a1, -12", &[(0x5ae3, Some(0xfeb5))]),
 			("bge a0, a1, 36", &[(0x5263, Some(0x02b5))]),
@@ -182,6 +192,11 @@ mod tests {
 
 			("bgtz a0, -4", &[(0x4ee3, Some(0xfea0))]),
 			("bgtz a0, 12", &[(0x4663, Some(0x00a0))]),
+
+			("binv a0, a1, a2", &[(0x9533, Some(0x68c5))]),
+
+			("binvi a0, a1, 11", &[(0x9513, Some(0x68b5))]),
+			("binvi a0, a1, 31", &[(0x9513, Some(0x69f5))]),
 
 			("ble a0, a1, -20", &[(0xd6e3, Some(0xfea5))]),
 			("ble a0, a1, 12", &[(0xd663, Some(0x00a5))]),
@@ -206,6 +221,11 @@ mod tests {
 
 			("bnez a0, -28", &[(0x12e3, Some(0xfe05))]),
 			("bnez a0, 4", &[(0x1263, Some(0x0005))]),
+
+			("bset a0, a1, a2", &[(0x9533, Some(0x28c5))]),
+
+			("bseti a0, a1, 11", &[(0x9513, Some(0x28b5))]),
+			("bseti a0, a1, 31", &[(0x9513, Some(0x29f5))]),
 
 			("call -4", &[(0x0097, Some(0x0000)), (0x80e7, Some(0xffc0))]),
 			("call 24", &[(0x0097, Some(0x0000)), (0x80e7, Some(0x0180))]),
@@ -608,6 +628,14 @@ mod tests {
 
 			("addw a0, a1, a2", &[(0x853b, Some(0x00c5))]),
 
+			("bclri a0, a1, 63", &[(0x9513, Some(0x4bf5))]),
+
+			("bexti a0, a1, 63", &[(0xd513, Some(0x4bf5))]),
+
+			("binvi a0, a1, 63", &[(0x9513, Some(0x6bf5))]),
+
+			("bseti a0, a1, 63", &[(0x9513, Some(0x2bf5))]),
+
 			("ld a0, -36", &[(0x0517, Some(0x0000)), (0x3503, Some(0xfdc5))]),
 			("ld a0, 72", &[(0x0517, Some(0x0000)), (0x3503, Some(0x0485))]),
 			("ld a0, -11(a1)", &[(0xb503, Some(0xff55))]),
@@ -765,10 +793,34 @@ mod tests {
 				sh1add a0, a1, a2
 				sh2add a0, a1, a2
 				sh3add a0, a1, a2
+				bclri a0, a1, 0
+				bclri a0, a1, 31
+				bseti a0, a1, 0
+				bseti a0, a1, 31
+				binvi a0, a1, 0
+				binvi a0, a1, 31
+				bexti a0, a1, 0
+				bexti a0, a1, 31
+				bclr a0, a1, a2
+				bset a0, a1, a2
+				binv a0, a1, a2
+				bext a0, a1, a2
 			", &[
 				(0xa533, 0x20c5),
 				(0xc533, 0x20c5),
 				(0xe533, 0x20c5),
+				(0x9513, 0x4805),
+				(0x9513, 0x49f5),
+				(0x9513, 0x2805),
+				(0x9513, 0x29f5),
+				(0x9513, 0x6805),
+				(0x9513, 0x69f5),
+				(0xd513, 0x4805),
+				(0xd513, 0x49f5),
+				(0x9533, 0x48c5),
+				(0x9533, 0x28c5),
+				(0x9533, 0x68c5),
+				(0xd533, 0x48c5),
 			]),
 
 			// bge.s
@@ -1408,6 +1460,10 @@ mod tests {
 				add.uw a0, a1, a2
 				zext.w a0, a1
 				slli.uw a0, a1, 2
+				bclri a0, a1, 63
+				bseti a0, a1, 63
+				binvi a0, a1, 63
+				bexti a0, a1, 63
 			", &[
 				(0xa53b, 0x20c5),
 				(0xc53b, 0x20c5),
@@ -1415,6 +1471,10 @@ mod tests {
 				(0x853b, 0x08c5),
 				(0x853b, 0x0805),
 				(0x951b, 0x0825),
+				(0x9513, 0x4bf5),
+				(0x9513, 0x2bf5),
+				(0x9513, 0x6bf5),
+				(0xd513, 0x4bf5),
 			]),
 
 			// csr.s
