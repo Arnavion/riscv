@@ -97,13 +97,21 @@ module mkRvAlu(RvAlu);
 		let cmp_result = cmp.cmp(cmp_a, cmp_b, cmp_signed);
 
 		match { .logical_arg1, .logical_arg2 } = case (inst) matches
-			tagged Binary { op: .op, rs1: .rs1, rs2: .rs2 }:
+			tagged Binary { op: .op, rs1: .rs1, rs2: .rs2 }: begin
+				UInt#(64) rs2u = unpack(pack(rs2));
+				UInt#(6) rs2_shamt = truncate(rs2u);
+				Int#(64) rs2_decoded = 1 << rs2_shamt;
+
 				case (op) matches
 					tagged And: return tuple2(rs1, rs2);
+					tagged Bclr: return tuple2(rs1, ~rs2_decoded);
+					tagged Binv: return tuple2(rs1, rs2_decoded);
+					tagged Bset: return tuple2(rs1, rs2_decoded);
 					tagged Or: return tuple2(rs1, rs2);
 					tagged Xor: return tuple2(rs1, rs2);
 					default: return ?;
 				endcase
+			end
 
 			tagged Csr .op:
 				case (op) matches
@@ -121,6 +129,7 @@ module mkRvAlu(RvAlu);
 				Int#(64) rs1uw = unpack(zeroExtend(pack(rs1)[31:0]));
 
 				case (op) matches
+					tagged Bext: return tuple3(rs1, rs2, ?);
 					tagged Sll: return tuple3(rs1, rs2, ?);
 					tagged SllUw: return tuple3(rs1uw, rs2, ?);
 					tagged Sllw: return tuple3(rs1, rs2, ?);
@@ -153,6 +162,10 @@ module mkRvAlu(RvAlu);
 						tagged AddUw: return add_result.add;
 						tagged Addw: return add_result.addw;
 						tagged And: return logical_result.and_;
+						tagged Bclr: return logical_result.and_;
+						tagged Bext: return shift_result.sr & 1;
+						tagged Binv: return logical_result.xor_;
+						tagged Bset: return logical_result.or_;
 						tagged CzeroEqz: return cmp_result.eq ? 0 : rs1;
 						tagged CzeroNez: return cmp_result.eq ? rs1 : 0;
 						tagged Or: return logical_result.or_;
