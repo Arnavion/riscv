@@ -303,6 +303,10 @@ module rv_alu (
 
 	wire[63:0] rs1w = {{32{rs1[31]}}, rs1[0+:32]};
 
+	wire[63:0] rs2_decoded = 64'b1 << rs2[0+:6];
+
+	wire[63:0] imm_decoded = 64'b1 << imm[0+:6];
+
 	logic[63:0] in1;
 	logic[63:0] in2;
 	logic[63:0] in3;
@@ -812,6 +816,65 @@ module rv_alu (
 				in3 = rs1uw;
 				in4 = {58'b0, imm[0+:6]};
 				rd = shift_sll;
+			end
+
+
+			// Zbs
+
+			// bseti
+			{15'b00100_001_001010?}: begin
+				in3 = rs1;
+				in4 = imm_decoded;
+				rd = logical_or;
+			end
+
+			// bset
+			{15'b01100_001_0010100}: begin
+				in3 = rs1;
+				in4 = rs2_decoded;
+				rd = logical_or;
+			end
+
+			// bclri
+			{15'b00100_001_010010?}: begin
+				in3 = rs1;
+				in4 = ~imm_decoded;
+				rd = logical_and;
+			end
+
+			// bclr
+			{15'b01100_001_0100100}: begin
+				in3 = rs1;
+				in4 = ~rs2_decoded;
+				rd = logical_and;
+			end
+
+			// bexti
+			{15'b00100_101_011010?}: begin
+				in3 = rs1;
+				in4 = imm;
+				rd = {63'b0, shift_srl[0]};
+			end
+
+			// bext
+			{15'b01100_101_0110100}: begin
+				in3 = rs1;
+				in4 = rs2;
+				rd = {63'b0, shift_srl[0]};
+			end
+
+			// binvi
+			{15'b00100_001_011010?}: begin
+				in3 = rs1;
+				in4 = imm_decoded;
+				rd = logical_xor;
+			end
+
+			// binv
+			{15'b01100_001_0110100}: begin
+				in3 = rs1;
+				in4 = rs2_decoded;
+				rd = logical_xor;
 			end
 
 
