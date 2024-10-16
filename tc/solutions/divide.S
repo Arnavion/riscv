@@ -12,7 +12,7 @@ addi a4, a4, -1
 sltu a3, a0, a1       # a3 = (numerator < denominator) ? 1 : 0
 czero.nez a5, a1, a3  # a5 = (numerator < denominator) ? 0 : denominator
 sub a0, a0, a5
-xori a3, a3, 0b1      # a3 = (numerator >= denominator) ? 1 : 0
+binvi a3, a3, 0       # a3 = (numerator >= denominator) ? 1 : 0
 sh1add a2, a2, a3
 bgtz a4, -22 # loop
 

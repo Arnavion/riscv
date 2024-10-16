@@ -319,6 +319,10 @@ module rv_alu (
 
 	wire[63:0] csrimm = 64'(csrimm_);
 
+	wire[63:0] rs2_decoded = 64'b1 << rs2[0+:6];
+
+	wire[63:0] imm_decoded = 64'b1 << imm[0+:6];
+
 	logic[63:0] in1;
 	logic[63:0] in2;
 	logic[63:0] in3;
@@ -417,6 +421,27 @@ module rv_alu (
 						rd = shift_sll;
 					end
 
+					// bseti
+					6'b001010: begin
+						in3 = rs1;
+						in4 = imm_decoded;
+						rd = logical_or;
+					end
+
+					// bclri
+					6'b010010: begin
+						in3 = rs1;
+						in4 = ~imm_decoded;
+						rd = logical_and;
+					end
+
+					// binvi
+					6'b011010: begin
+						in3 = rs1;
+						in4 = imm_decoded;
+						rd = logical_xor;
+					end
+
 					default: sigill = '1;
 				endcase
 
@@ -442,6 +467,13 @@ module rv_alu (
 						in4 = {58'bx, imm[0+:6]};
 						shift_arithmetic = imm[10];
 						rd = shift_sr;
+					end
+
+					// bexti
+					6'b010010: begin
+						in3 = rs1;
+						in4 = {58'bx, imm[0+:6]};
+						rd = 64'(shift_sr[0]);
 					end
 
 					default: sigill = '1;
@@ -544,6 +576,27 @@ module rv_alu (
 					rd = shift_sll;
 				end
 
+				// bset
+				10'b001_0010100: begin
+					in3 = rs1;
+					in4 = rs2_decoded;
+					rd = logical_or;
+				end
+
+				// bclr
+				10'b001_0100100: begin
+					in3 = rs1;
+					in4 = ~rs2_decoded;
+					rd = logical_and;
+				end
+
+				// binv
+				10'b001_0110100: begin
+					in3 = rs1;
+					in4 = rs2_decoded;
+					rd = logical_xor;
+				end
+
 				// slt, sltu
 				10'b01?_0000000: begin
 					in3 = rs1;
@@ -588,6 +641,13 @@ module rv_alu (
 					in3 = '0;
 					in4 = rs2;
 					rd = cmp_eq ? '0 : rs1;
+				end
+
+				// bext
+				10'b101_0100100: begin
+					in3 = rs1;
+					in4 = {58'bx, rs2[0+:6]};
+					rd = 64'(shift_sr[0]);
 				end
 
 				// or

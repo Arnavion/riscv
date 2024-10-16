@@ -133,6 +133,88 @@ module mkRvAlu(RvAlu);
 		});
 	endrule
 
+	// bclr
+	rule bclr_1(args.first matches AluRequest { inst: tagged Binary { op: Bclr, rs1: .rs1, rs2: .rs2 } });
+		UInt#(64) rs2u = unpack(pack(rs2));
+		UInt#(6) rs2_shamt = truncate(rs2u);
+		Int#(64) rs2_decoded = 1 << rs2_shamt;
+		logical.request.put(LogicalRequest {
+			arg1: rs1,
+			arg2: ~rs2_decoded
+		});
+	endrule
+
+	rule bclr_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Binary { op: Bclr, rd: .rd } });
+		let logical_response = logical.response.first;
+		result.put(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: logical_response.and_,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// bext
+	rule bext_1(args.first matches AluRequest { inst: tagged Binary { op: Bext, rs1: .rs1, rs2: .rs2 } });
+		shift.request.put(ShiftRequest {
+			value: rs1,
+			shamt: rs2,
+			arithmetic: ?
+		});
+	endrule
+
+	rule bext_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Binary { op: Bext, rd: .rd } });
+		let shift_response = shift.response.first;
+		result.put(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: shift_response.sr & 1,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// binv
+	rule binv_1(args.first matches AluRequest { inst: tagged Binary { op: Binv, rs1: .rs1, rs2: .rs2 } });
+		UInt#(64) rs2u = unpack(pack(rs2));
+		UInt#(6) rs2_shamt = truncate(rs2u);
+		Int#(64) rs2_decoded = 1 << rs2_shamt;
+		logical.request.put(LogicalRequest {
+			arg1: rs1,
+			arg2: rs2_decoded
+		});
+	endrule
+
+	rule binv_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Binary { op: Binv, rd: .rd } });
+		let logical_response = logical.response.first;
+		result.put(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: logical_response.xor_,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// bset
+	rule bset_1(args.first matches AluRequest { inst: tagged Binary { op: Bset, rs1: .rs1, rs2: .rs2 } });
+		UInt#(64) rs2u = unpack(pack(rs2));
+		UInt#(6) rs2_shamt = truncate(rs2u);
+		Int#(64) rs2_decoded = 1 << rs2_shamt;
+		logical.request.put(LogicalRequest {
+			arg1: rs1,
+			arg2: rs2_decoded
+		});
+	endrule
+
+	rule bset_end(args.first matches AluRequest { next_pc: .next_pc, inst: tagged Binary { op: Bset, rd: .rd } });
+		let logical_response = logical.response.first;
+		result.put(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: logical_response.or_,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
 	// branch
 	rule branch_1(args.first matches AluRequest { pc: .pc, inst: tagged Branch { offset: .offset } });
 		adder.request.put(AdderRequest {
