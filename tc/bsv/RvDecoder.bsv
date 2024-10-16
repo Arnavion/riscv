@@ -63,6 +63,9 @@ function Maybe#(Instruction#(XReg, Either#(XReg, Int#(12)), Csr)) decode(Bit#(32
 				3'b000: return tagged Valid tagged Binary { op: Add, rd: rd, rs1: rs1, rs2: tagged Right i_imm };
 				3'b001: case (pack(i_imm)[11:6]) matches
 					6'b000000: return tagged Valid tagged Binary { op: Sll, rd: rd, rs1: rs1, rs2: tagged Right i_imm };
+					6'b001010: return tagged Valid tagged Binary { op: Bset, rd: rd, rs1: rs1, rs2: tagged Right i_imm };
+					6'b010010: return tagged Valid tagged Binary { op: Bclr, rd: rd, rs1: rs1, rs2: tagged Right i_imm };
+					6'b011010: return tagged Valid tagged Binary { op: Binv, rd: rd, rs1: rs1, rs2: tagged Right i_imm };
 					default: return tagged Invalid;
 				endcase
 				3'b010: return tagged Valid tagged Binary { op: Slt, rd: rd, rs1: rs1, rs2: tagged Right i_imm };
@@ -71,6 +74,7 @@ function Maybe#(Instruction#(XReg, Either#(XReg, Int#(12)), Csr)) decode(Bit#(32
 				3'b101: case (pack(i_imm)[11:6]) matches
 					6'b000000: return tagged Valid tagged Binary { op: Srl, rd: rd, rs1: rs1, rs2: tagged Right i_imm };
 					6'b010000: return tagged Valid tagged Binary { op: Sra, rd: rd, rs1: rs1, rs2: tagged Right i_imm };
+					6'b010010: return tagged Valid tagged Binary { op: Bext, rd: rd, rs1: rs1, rs2: tagged Right i_imm };
 					default: return tagged Invalid;
 				endcase
 				3'b110: return tagged Valid tagged Binary { op: Or, rd: rd, rs1: rs1, rs2: tagged Right i_imm };
@@ -104,6 +108,9 @@ function Maybe#(Instruction#(XReg, Either#(XReg, Int#(12)), Csr)) decode(Bit#(32
 				10'b000_0000000: return tagged Valid tagged Binary { op: Add, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b000_0100000: return tagged Valid tagged Binary { op: Sub, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b001_0000000: return tagged Valid tagged Binary { op: Sll, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
+				10'b001_0010100: return tagged Valid tagged Binary { op: Bset, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
+				10'b001_0100100: return tagged Valid tagged Binary { op: Bclr, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
+				10'b001_0110100: return tagged Valid tagged Binary { op: Binv, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b010_0000000: return tagged Valid tagged Binary { op: Slt, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b010_0010000: return tagged Valid tagged Binary { op: Sh1add, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b011_0000000: return tagged Valid tagged Binary { op: Sltu, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
@@ -112,6 +119,7 @@ function Maybe#(Instruction#(XReg, Either#(XReg, Int#(12)), Csr)) decode(Bit#(32
 				10'b101_0000000: return tagged Valid tagged Binary { op: Srl, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b101_0000111: return tagged Valid tagged Binary { op: CzeroEqz, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b101_0100000: return tagged Valid tagged Binary { op: Sra, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
+				10'b101_0100100: return tagged Valid tagged Binary { op: Bext, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b110_0000000: return tagged Valid tagged Binary { op: Or, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b110_0010000: return tagged Valid tagged Binary { op: Sh3add, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b111_0000000: return tagged Valid tagged Binary { op: And, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
