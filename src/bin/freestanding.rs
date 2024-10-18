@@ -21,7 +21,7 @@ _halt: ebreak
 	j _halt
 ");
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn main() {
 	let mut console = Console::new();
 
