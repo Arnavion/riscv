@@ -27,7 +27,7 @@ _halt:
 	j _halt
 ");
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 extern "C" fn main() {
 	let timer = HardwareTimer::new();
 
