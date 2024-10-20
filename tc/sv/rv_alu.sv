@@ -259,6 +259,55 @@ M
 | remuw rd, rs1, rs2              | 14     | 7      | 1      |        | -> | rs1uw         | rs2uw       | %uw               |
 +---------------------------------+--------+--------+--------+--------+----+---------------+-------------+-------------------+
 
+---
+
+Zarnavion (produced by MOP fusion)
+
++---------------------------------+--------+--------+--------+--------+----+--------------------------+-------------------+------+-------+---------+
+|              inst               | opcode | funct3 | funct7 | funct5 | -> |          Adder           |        rd         | RAM  |  RAM  |   RAM   |
+|                                 |        |        |        |        | -> |        in1        | in2  |                   | Load | Store | Address |
++=================================+========+========+========+========+====+===================+======+===================+======+=======+=========+
+| lb.pc rd, imm(pc)               | 2      | 0      | 0      |        | -> | pc                | imm  | RAM Load Value    | 1    |       | +       |
+| lh.pc rd, imm(pc)               | 2      | 1      | 0      |        | -> | pc                | imm  | RAM Load Value    | 1    |       | +       |
+| lw.pc rd, imm(pc)               | 2      | 2      | 0      |        | -> | pc                | imm  | RAM Load Value    | 1    |       | +       |
+| ld.pc rd, imm(pc)               | 2      | 3      | 0      |        | -> | pc                | imm  | RAM Load Value    | 1    |       | +       |
+| lbu.pc rd, imm(pc)              | 2      | 4      | 0      |        | -> | pc                | imm  | RAM Load Value    | 1    |       | +       |
+| lhu.pc rd, imm(pc)              | 2      | 5      | 0      |        | -> | pc                | imm  | RAM Load Value    | 1    |       | +       |
+| lwu.pc rd, imm(pc)              | 2      | 6      | 0      |        | -> | pc                | imm  | RAM Load Value    | 1    |       | +       |
++---------------------------------+--------+--------+--------+--------+----+-------------------+------+-------------------+------+-------+---------+
+| lb.add rd, rs2(rs1)             | 2      | 0      | 1      |        | -> | rs1               | rs2  | RAM Load Value    | 1    |       | +       |
+| lh.add rd, rs2(rs1)             | 2      | 1      | 1      |        | -> | rs1               | rs2  | RAM Load Value    | 1    |       | +       |
+| lw.add rd, rs2(rs1)             | 2      | 2      | 1      |        | -> | rs1               | rs2  | RAM Load Value    | 1    |       | +       |
+| ld.add rd, rs2(rs1)             | 2      | 3      | 1      |        | -> | rs1               | rs2  | RAM Load Value    | 1    |       | +       |
+| lbu.add rd, rs2(rs1)            | 2      | 4      | 1      |        | -> | rs1               | rs2  | RAM Load Value    | 1    |       | +       |
+| lhu.add rd, rs2(rs1)            | 2      | 5      | 1      |        | -> | rs1               | rs2  | RAM Load Value    | 1    |       | +       |
+| lwu.add rd, rs2(rs1)            | 2      | 6      | 1      |        | -> | rs1               | rs2  | RAM Load Value    | 1    |       | +       |
++---------------------------------+--------+--------+--------+--------+----+-------------------+------+-------------------+------+-------+---------+
+| lb.sh1add rd, (rs1 << 1 + rs2)  | 2      | 0      | 2      |        | -> | rs1 << 1          | rs2  | RAM Load Value    | 1    |       | +       |
+| lh.sh1add rd, (rs1 << 1 + rs2)  | 2      | 1      | 2      |        | -> | rs1 << 1          | rs2  | RAM Load Value    | 1    |       | +       |
+| lw.sh1add rd, (rs1 << 1 + rs2)  | 2      | 2      | 2      |        | -> | rs1 << 1          | rs2  | RAM Load Value    | 1    |       | +       |
+| ld.sh1add rd, (rs1 << 1 + rs2)  | 2      | 3      | 2      |        | -> | rs1 << 1          | rs2  | RAM Load Value    | 1    |       | +       |
+| lbu.sh1add rd, (rs1 << 1 + rs2) | 2      | 4      | 2      |        | -> | rs1 << 1          | rs2  | RAM Load Value    | 1    |       | +       |
+| lhu.sh1add rd, (rs1 << 1 + rs2) | 2      | 5      | 2      |        | -> | rs1 << 1          | rs2  | RAM Load Value    | 1    |       | +       |
+| lwu.sh1add rd, (rs1 << 1 + rs2) | 2      | 6      | 2      |        | -> | rs1 << 1          | rs2  | RAM Load Value    | 1    |       | +       |
++---------------------------------+--------+--------+--------+--------+----+-------------------+------+-------------------+------+-------+---------+
+| lb.sh2add rd, (rs1 << 2 + rs2)  | 2      | 0      | 3      |        | -> | rs1 << 2          | rs2  | RAM Load Value    | 1    |       | +       |
+| lh.sh2add rd, (rs1 << 2 + rs2)  | 2      | 1      | 3      |        | -> | rs1 << 2          | rs2  | RAM Load Value    | 1    |       | +       |
+| lw.sh2add rd, (rs1 << 2 + rs2)  | 2      | 2      | 3      |        | -> | rs1 << 2          | rs2  | RAM Load Value    | 1    |       | +       |
+| ld.sh2add rd, (rs1 << 2 + rs2)  | 2      | 3      | 3      |        | -> | rs1 << 2          | rs2  | RAM Load Value    | 1    |       | +       |
+| lbu.sh2add rd, (rs1 << 2 + rs2) | 2      | 4      | 3      |        | -> | rs1 << 2          | rs2  | RAM Load Value    | 1    |       | +       |
+| lhu.sh2add rd, (rs1 << 2 + rs2) | 2      | 5      | 3      |        | -> | rs1 << 2          | rs2  | RAM Load Value    | 1    |       | +       |
+| lwu.sh2add rd, (rs1 << 2 + rs2) | 2      | 6      | 3      |        | -> | rs1 << 2          | rs2  | RAM Load Value    | 1    |       | +       |
++---------------------------------+--------+--------+--------+--------+----+-------------------+------+-------------------+------+-------+---------+
+| lb.sh3add rd, (rs1 << 3 + rs2)  | 2      | 0      | 4      |        | -> | rs1 << 3          | rs2  | RAM Load Value    | 1    |       | +       |
+| lh.sh3add rd, (rs1 << 3 + rs2)  | 2      | 1      | 4      |        | -> | rs1 << 3          | rs2  | RAM Load Value    | 1    |       | +       |
+| lw.sh3add rd, (rs1 << 3 + rs2)  | 2      | 2      | 4      |        | -> | rs1 << 3          | rs2  | RAM Load Value    | 1    |       | +       |
+| ld.sh3add rd, (rs1 << 3 + rs2)  | 2      | 3      | 4      |        | -> | rs1 << 3          | rs2  | RAM Load Value    | 1    |       | +       |
+| lbu.sh3add rd, (rs1 << 3 + rs2) | 2      | 4      | 4      |        | -> | rs1 << 3          | rs2  | RAM Load Value    | 1    |       | +       |
+| lhu.sh3add rd, (rs1 << 3 + rs2) | 2      | 5      | 4      |        | -> | rs1 << 3          | rs2  | RAM Load Value    | 1    |       | +       |
+| lwu.sh3add rd, (rs1 << 3 + rs2) | 2      | 6      | 4      |        | -> | rs1 << 3          | rs2  | RAM Load Value    | 1    |       | +       |
++---------------------------------+--------+--------+--------+--------+----+-------------------+------+-------------------+------+-------+---------+
+
  */
 
 module rv_alu (
@@ -267,7 +316,7 @@ module rv_alu (
 	input bit[6:0] funct7,
 	input logic[63:0] rs1,
 	input logic[63:0] rs2,
-	input logic[31:0] immw,
+	input logic[32:0] imm_,
 	input logic[4:0] csrimm_,
 	input bit[63:1] pc,
 	input bit[63:1] pcnext_in,
@@ -286,6 +335,7 @@ module rv_alu (
 );
 	typedef enum bit[4:0] {
 		OpCode_Load = 5'b00000,
+		OpCode_Zarnavion = 5'b00010,
 		OpCode_OpImm = 5'b00100,
 		OpCode_Auipc = 5'b00101,
 		OpCode_OpImm32 = 5'b00110,
@@ -315,7 +365,7 @@ module rv_alu (
 
 	wire[63:0] rs1w = unsigned'(64'(signed'(rs1[0+:32])));
 
-	wire[63:0] imm = unsigned'(64'(signed'(immw)));
+	wire[63:0] imm = unsigned'(64'(signed'(imm_)));
 
 	wire[63:0] csrimm = 64'(csrimm_);
 
@@ -402,6 +452,80 @@ module rv_alu (
 					ram_funct3 = funct3;
 					ram_address = add_add;
 				end
+
+			OpCode_Zarnavion: unique casez ({funct3, funct7})
+				// l*.pc
+				10'b???_0000000:
+					if (& funct3[0+:3])
+						sigill = '1;
+					else begin
+						in1 = {pc, 1'b0};
+						in2 = imm;
+						add_cin = '0;
+						rd = ram_load_value;
+						ram_load = '1;
+						ram_funct3 = funct3;
+						ram_address = add_add;
+					end
+
+				// l*.add
+				10'b???_0000001:
+					if (& funct3[0+:3])
+						sigill = '1;
+					else begin
+						in1 = rs1;
+						in2 = rs2;
+						add_cin = '0;
+						rd = ram_load_value;
+						ram_load = '1;
+						ram_funct3 = funct3;
+						ram_address = add_add;
+					end
+
+				// l*.sh1add
+				10'b???_0000010:
+					if (& funct3[0+:3])
+						sigill = '1;
+					else begin
+						in1 = rs1_sh1;
+						in2 = rs2;
+						add_cin = '0;
+						rd = ram_load_value;
+						ram_load = '1;
+						ram_funct3 = funct3;
+						ram_address = add_add;
+					end
+
+				// l*.sh2add
+				10'b???_0000011:
+					if (& funct3[0+:3])
+						sigill = '1;
+					else begin
+						in1 = rs1_sh2;
+						in2 = rs2;
+						add_cin = '0;
+						rd = ram_load_value;
+						ram_load = '1;
+						ram_funct3 = funct3;
+						ram_address = add_add;
+					end
+
+				// l*.sh3add
+				10'b???_0000100:
+					if (& funct3[0+:3])
+						sigill = '1;
+					else begin
+						in1 = rs1_sh3;
+						in2 = rs2;
+						add_cin = '0;
+						rd = ram_load_value;
+						ram_load = '1;
+						ram_funct3 = funct3;
+						ram_address = add_add;
+					end
+
+				default: sigill = '1;
+			endcase
 
 			OpCode_OpImm: unique casez (funct3)
 				// addi
