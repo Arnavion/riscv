@@ -5,7 +5,7 @@ module rv_cpu (
 	input bit[63:0] csr_time,
 
 	input bit[63:1] pc,
-	input bit[31:0] inst,
+	input bit[63:0] inst,
 	input logic[63:0] ram_load_value,
 
 	output bit halt,
@@ -33,6 +33,7 @@ module rv_cpu (
 	wire csr_load;
 	wire csr_store;
 	wire[63:0] csr_store_value;
+	wire insts_num_minus_one;
 	wire csrs_sigill;
 	wire[63:0] csr_load_value;
 	rv_csrs #(.rv64(1)) csrs (
@@ -42,31 +43,85 @@ module rv_cpu (
 		.load(csr_load),
 		.store(csr_store),
 		.store_value(csr_store_value),
-
+		.insts_num_minus_one(insts_num_minus_one),
 		.sigill(csrs_sigill),
 		.load_value(csr_load_value)
 	);
 
-	wire decompressor_sigill;
-	wire decompressor_is_compressed;
-	wire[31:0] decompressor_inst;
-	rv_decompressor #(.rv64(1)) decompressor (
-		.in(inst),
-		.sigill(decompressor_sigill), .is_compressed(decompressor_is_compressed),
-		.out(decompressor_inst)
+	wire decompressor1_sigill;
+	wire decompressor1_is_compressed;
+	wire[31:0] decompressor1_inst;
+	rv_decompressor #(.rv64(1)) decompressor1 (
+		.in(inst[0+:32]),
+		.sigill(decompressor1_sigill), .is_compressed(decompressor1_is_compressed),
+		.out(decompressor1_inst)
 	);
 
-	wire decoder_sigill;
+	wire decoder1_sigill;
+	wire[4:0] decoder1_rd;
+	wire[4:0] decoder1_rs1;
+	wire[4:0] decoder1_rs2;
+	wire[11:0] decoder1_csr;
+	wire[4:0] decoder1_opcode;
+	wire[2:0] decoder1_funct3;
+	wire[6:0] decoder1_funct7;
+	wire[4:0] decoder1_funct5;
+	wire[31:0] decoder1_imm;
+	wire[4:0] decoder1_csrimm;
+	rv_decoder decoder1 (
+		.in(decompressor1_inst),
+		.sigill(decoder1_sigill),
+		.rd(decoder1_rd), .rs1(decoder1_rs1), .rs2(decoder1_rs2),
+		.csr(decoder1_csr), .csr_load(csr_load), .csr_store(csr_store),
+		.opcode(decoder1_opcode), .funct3(decoder1_funct3), .funct7(decoder1_funct7), .funct5(decoder1_funct5),
+		.imm(decoder1_imm), .csrimm(decoder1_csrimm)
+	);
+
+	wire decompressor2_sigill;
+	wire decompressor2_is_compressed;
+	wire[31:0] decompressor2_inst;
+	rv_decompressor #(.rv64(1)) decompressor2 (
+		.in(decompressor1_is_compressed ? inst[16+:32] : inst[32+:32]),
+		.sigill(decompressor2_sigill), .is_compressed(decompressor2_is_compressed),
+		.out(decompressor2_inst)
+	);
+
+	wire decoder2_sigill;
+	wire[4:0] decoder2_rd;
+	wire[4:0] decoder2_rs1;
+	wire[4:0] decoder2_rs2;
+	wire[4:0] decoder2_opcode;
+	wire[2:0] decoder2_funct3;
+	wire[6:0] decoder2_funct7;
+	wire[31:0] decoder2_imm;
+	rv_decoder decoder2 (
+		.in(decompressor2_inst),
+		.sigill(decoder2_sigill),
+		.rd(decoder2_rd), .rs1(decoder2_rs1), .rs2(decoder2_rs2),
+		.opcode(decoder2_opcode), .funct3(decoder2_funct3), .funct7(decoder2_funct7),
+		.imm(decoder2_imm)
+	);
+
+	wire[1:0] insts_len_half_minus_one;
 	wire[4:0] opcode;
 	wire[2:0] funct3;
 	wire[6:0] funct7;
-	wire[31:0] imm;
+	wire[32:0] imm;
 	wire[4:0] csrimm;
-	rv_decoder decoder (
-		.in(decompressor_inst),
-		.sigill(decoder_sigill),
-		.rd(rd), .rs1(rs1), .rs2(rs2),
-		.csr(csr), .csr_load(csr_load), .csr_store(csr_store),
+	rv_mop_fusion mop_fusion (
+		.a_is_compressed(decompressor1_is_compressed),
+		.a_rd(decoder1_rd), .a_rs1(decoder1_rs1), .a_rs2(decoder1_rs2), .a_csr(decoder1_csr),
+		.a_opcode(decoder1_opcode), .a_funct3(decoder1_funct3), .a_funct7(decoder1_funct7), .a_funct5(decoder1_funct5),
+		.a_imm(decoder1_imm), .a_csrimm(decoder1_csrimm),
+
+		.b_is_valid(~(decompressor2_sigill | decoder2_sigill)), .b_is_compressed(decompressor2_is_compressed),
+		.b_rd(decoder2_rd), .b_rs1(decoder2_rs1), .b_rs2(decoder2_rs2),
+		.b_opcode(decoder2_opcode), .b_funct3(decoder2_funct3), .b_funct7(decoder2_funct7),
+		.b_imm(decoder2_imm),
+
+		.insts_num_minus_one(insts_num_minus_one), .insts_len_half_minus_one(insts_len_half_minus_one),
+
+		.rd(rd), .rs1(rs1), .rs2(rs2), .csr(csr),
 		.opcode(opcode), .funct3(funct3), .funct7(funct7),
 		.imm(imm), .csrimm(csrimm)
 	);
@@ -77,8 +132,8 @@ module rv_cpu (
 	wire[2:0] ram_address_lo;
 	rv_alu alu (
 		.opcode(opcode), .funct3(funct3), .funct7(funct7),
-		.rs1(rs1_load_value), .rs2(rs2_load_value), .immw(imm), .csrimm_(csrimm),
-		.pc(pc), .pcnext_in(pc + 63'(!decompressor_is_compressed) + 63'b1),
+		.rs1(rs1_load_value), .rs2(rs2_load_value), .imm_(imm), .csrimm_(csrimm),
+		.pc(pc), .pcnext_in(pc + 63'(insts_len_half_minus_one) + 63'b1),
 		.ram_load_value(ram_load_value_), .csr_load_value(csr_load_value),
 		.sigill(alu_sigill),
 		.pcnext_out(pcnext),
@@ -98,7 +153,7 @@ module rv_cpu (
 		.ram_store_value(ram_store_value)
 	);
 
-	assign halt = csrs_sigill | decompressor_sigill | decoder_sigill | alu_sigill | efault;
+	assign halt = csrs_sigill | decompressor1_sigill | decoder1_sigill | alu_sigill | efault;
 endmodule
 
 `include "load_store64.sv"
@@ -106,4 +161,5 @@ endmodule
 `include "rv_csrs.sv"
 `include "rv_decoder.sv"
 `include "rv_decompressor.sv"
+`include "rv_mop_fusion.sv"
 `include "rv_x_regs.sv"
