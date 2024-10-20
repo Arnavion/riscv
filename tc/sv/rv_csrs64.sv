@@ -7,6 +7,8 @@ module rv_csrs64 (
 	input bit csr_store,
 	input logic[63:0] csr_store_value,
 
+	input bit insts_num_minus_one,
+
 	output bit sigill,
 	output logic[63:0] csr_load_value
 );
@@ -22,7 +24,7 @@ module rv_csrs64 (
 		end else begin
 			cycle <= cycle + 1;
 			time_ <= time_ + 1000;
-			instret <= instret + 64'b1;
+			instret <= instret + 64'(insts_num_minus_one) + 64'b1;
 		end
 
 	always_comb begin
