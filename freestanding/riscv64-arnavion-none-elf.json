@@ -7,7 +7,7 @@
 	"data-layout": "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128",
 	"eh-frame-header": false,
 	"emit-debug-gdb-scripts": false,
-	"features": "+forced-atomics,+zba,+zbs,+zca,+zcb,+zic64b,+zicntr,+zicond,+zicsr,+zkt",
+	"features": "+auipc-addi-fusion,+forced-atomics,+ld-add-fusion,+lui-addi-fusion,+zba,+zbs,+zca,+zcb,+zic64b,+zicntr,+zicond,+zicsr,+zkt",
 	"linker": "rust-lld",
 	"linker-flavor": "gnu-lld",
 	"llvm-abiname": "lp64",

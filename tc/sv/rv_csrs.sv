@@ -12,6 +12,8 @@ module rv_csrs #(
 	input bit store,
 	input logic[xlen - 1:0] store_value,
 
+	input bit insts_num_minus_one,
+
 	output bit sigill,
 	output logic[xlen - 1:0] load_value
 );
@@ -24,7 +26,7 @@ module rv_csrs #(
 			instret <= '0;
 		end else begin
 			cycle <= cycle + 1;
-			instret <= instret + 64'b1;
+			instret <= instret + 64'(insts_num_minus_one) + 64'b1;
 		end
 
 	always_comb begin
