@@ -58,6 +58,15 @@ Load
 | ld rd_b, imm_b(rs1_b)     |                                                 |                               |
 +---------------------------+-------------------------------------------------+-------------------------------+
 
+Op
+
++---------------------------+-------------------------------------------------+-------------------------------+
+|       Instructions        |                Fusion condition                 |       Fused instruction       |
++===========================+=================================================+===============================+
+| sub rd_a, x0, rs2_a       | rd_a == rd_b && rd_a == rs1_b && rs2_a == rs2_b | abs rd_a, rs2_a               |
+| max rd_b, rs1_b, rs2_b    |                                                 |                               |
++---------------------------+-------------------------------------------------+-------------------------------+
+
 ---
 
 Fused instruction length
@@ -96,6 +105,7 @@ module mop_fusion (
 	input logic[4:0] b_rs2,
 	input bit[4:0] b_opcode,
 	input logic[2:0] b_funct3,
+	input logic[6:0] b_funct7,
 	input logic[31:0] b_imm,
 
 	output bit[1:0] insts_num,
@@ -144,9 +154,9 @@ module mop_fusion (
 		csrimm = a_csrimm;
 
 		if (a_rd == b_rd && a_rd == b_rs1)
-			unique casez ({a_opcode, a_funct3, a_funct7, b_opcode, b_funct3})
+			unique casez ({a_opcode, a_funct3, a_funct7, b_opcode, b_funct3, b_funct7})
 				// auipc, addi -> auipc
-				{OpCode_Auipc, 10'b???_???????, OpCode_OpImm, 3'b000}: begin
+				{OpCode_Auipc, 10'b???_???????, OpCode_OpImm, 10'b000_???????}: begin
 					performed_fusion = '1;
 
 					rd = a_rd;
@@ -162,7 +172,7 @@ module mop_fusion (
 				end
 
 				// lui, add -> addi
-				{OpCode_Lui, 10'b???_???????, OpCode_Op, 3'b000}: if (b_rs1 == b_rs2) begin
+				{OpCode_Lui, 10'b???_???????, OpCode_Op, 10'b000_???????}: if (b_rs1 == b_rs2) begin
 					performed_fusion = '1;
 
 					rd = a_rd;
@@ -194,7 +204,7 @@ module mop_fusion (
 				end
 
 				// lui, addi -> lui
-				{OpCode_Lui, 10'b???_???????, OpCode_OpImm, 3'b000}: begin
+				{OpCode_Lui, 10'b???_???????, OpCode_OpImm, 10'b000_???????}: begin
 					performed_fusion = '1;
 
 					rd = a_rd;
@@ -210,7 +220,7 @@ module mop_fusion (
 				end
 
 				// lui, addiw -> lui
-				{OpCode_Lui, 10'b???_???????, OpCode_OpImm32, 3'b000}: begin
+				{OpCode_Lui, 10'b???_???????, OpCode_OpImm32, 10'b000_???????}: begin
 					performed_fusion = '1;
 
 					rd = a_rd;
@@ -226,7 +236,7 @@ module mop_fusion (
 				end
 
 				// auipc, jalr -> jal
-				{OpCode_Auipc, 10'b???_???????, OpCode_Jalr, 3'b???}: begin
+				{OpCode_Auipc, 10'b???_???????, OpCode_Jalr, 10'b???_???????}: begin
 					performed_fusion = '1;
 
 					rd = a_rd;
@@ -242,7 +252,7 @@ module mop_fusion (
 				end
 
 				// auipc, load -> load.pc
-				{OpCode_Auipc, 10'b???_???????, OpCode_Load, 3'b???}: begin
+				{OpCode_Auipc, 10'b???_???????, OpCode_Load, 10'b???_???????}: begin
 					performed_fusion = '1;
 
 					rd = a_rd;
@@ -258,7 +268,7 @@ module mop_fusion (
 				end
 
 				// lui, load -> load
-				{OpCode_Lui, 10'b???_???????, OpCode_Load, 3'b???}: begin
+				{OpCode_Lui, 10'b???_???????, OpCode_Load, 10'b???_???????}: begin
 					performed_fusion = '1;
 
 					rd = a_rd;
@@ -274,7 +284,7 @@ module mop_fusion (
 				end
 
 				// add, load -> load.add
-				{OpCode_Op, 10'b000_0000000, OpCode_Load, 3'b???}: if (b_imm == '0) begin
+				{OpCode_Op, 10'b000_0000000, OpCode_Load, 10'b???_???????}: if (b_imm == '0) begin
 					performed_fusion = '1;
 
 					rd = a_rd;
@@ -290,7 +300,7 @@ module mop_fusion (
 				end
 
 				// sh1add, load -> load.sh1add
-				{OpCode_Op, 10'b010_0010000, OpCode_Load, 3'b???}: if (b_imm == '0) begin
+				{OpCode_Op, 10'b010_0010000, OpCode_Load, 10'b???_???????}: if (b_imm == '0) begin
 					performed_fusion = '1;
 
 					rd = a_rd;
@@ -306,7 +316,7 @@ module mop_fusion (
 				end
 
 				// sh2add, load -> load.sh2add
-				{OpCode_Op, 10'b100_0010000, OpCode_Load, 3'b???}: if (b_imm == '0) begin
+				{OpCode_Op, 10'b100_0010000, OpCode_Load, 10'b???_???????}: if (b_imm == '0) begin
 					performed_fusion = '1;
 
 					rd = a_rd;
@@ -322,7 +332,7 @@ module mop_fusion (
 				end
 
 				// sh3add, load -> load.sh3add
-				{OpCode_Op, 10'b110_0010000, OpCode_Load, 3'b???}: if (b_imm == '0) begin
+				{OpCode_Op, 10'b110_0010000, OpCode_Load, 10'b???_???????}: if (b_imm == '0) begin
 					performed_fusion = '1;
 
 					rd = a_rd;
@@ -332,6 +342,22 @@ module mop_fusion (
 					opcode = OpCode_Zarnavion;
 					funct3 = b_funct3;
 					funct7 = 7'b0000100;
+					funct5 = 'x;
+					imm = 'x;
+					csrimm = 'x;
+				end
+
+				// sub, max -> abs
+				{OpCode_Op, 10'b000_0100000, OpCode_Op, 10'b110_0000101}: if (a_rs1 == 5'b00000 && a_rs2 == b_rs2) begin
+					performed_fusion = '1;
+
+					rd = a_rd;
+					rs1 = a_rs2;
+					rs2 = 5'b00000;
+					csr = a_csr; // = 'x
+					opcode = 5'b00010;
+					funct3 = 3'b000;
+					funct7 = 7'b0000101;
 					funct5 = 'x;
 					imm = 'x;
 					csrimm = 'x;
