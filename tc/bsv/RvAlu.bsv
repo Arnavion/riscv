@@ -1,5 +1,6 @@
 import ClientServer::*;
 import GetPut::*;
+import Vector::*;
 
 import RvCommon::*;
 
@@ -29,7 +30,9 @@ module mkRvAlu(RvAlu);
 	Adder adder <- mkAdder;
 	Cmp cmp <- mkCmp;
 	Logical logical <- mkLogical;
-	Shift shift <- mkShift;
+	OrcB orc_b <- mkOrcB;
+	Popcnt popcnt <- mkPopcnt;
+	ShiftRotate shift_rotate <- mkShiftRotate;
 
 	Wire#(Int#(64)) pc <- mkWire;
 	Wire#(Int#(64)) next_pc <- mkWire;
@@ -99,11 +102,31 @@ module mkRvAlu(RvAlu);
 	rule and_1(inst matches tagged Binary { op: And, rs1: .rs1, rs2: .rs2 });
 		logical.request.put(LogicalRequest {
 			arg1: rs1,
-			arg2: rs2
+			arg2: rs2,
+			invert_arg2: False
 		});
 	endrule
 
 	rule and_end(inst matches tagged Binary { op: And, rd: .rd });
+		let logical_response <- logical.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: logical_response.and_,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// andn
+	rule andn_1(inst matches tagged Binary { op: Andn, rs1: .rs1, rs2: .rs2 });
+		logical.request.put(LogicalRequest {
+			arg1: rs1,
+			arg2: rs2,
+			invert_arg2: True
+		});
+	endrule
+
+	rule andn_end(inst matches tagged Binary { op: Andn, rd: .rd });
 		let logical_response <- logical.response.get;
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
@@ -139,7 +162,8 @@ module mkRvAlu(RvAlu);
 		Int#(64) rs2_decoded = 1 << rs2_shamt;
 		logical.request.put(LogicalRequest {
 			arg1: rs1,
-			arg2: ~rs2_decoded
+			arg2: rs2_decoded,
+			invert_arg2: True
 		});
 	endrule
 
@@ -155,18 +179,21 @@ module mkRvAlu(RvAlu);
 
 	// bext
 	rule bext_1(inst matches tagged Binary { op: Bext, rs1: .rs1, rs2: .rs2 });
-		shift.request.put(ShiftRequest {
+		shift_rotate.request.put(ShiftRotateRequest {
 			value: rs1,
 			shamt: rs2,
-			arithmetic: ?
+			right: True,
+			rotate: ?,
+			arithmetic: ?,
+			w: ?
 		});
 	endrule
 
 	rule bext_end(inst matches tagged Binary { op: Bext, rd: .rd });
-		let shift_response <- shift.response.get;
+		let shift_rotate_response <- shift_rotate.response.get;
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
-			x_regs_rd_value: shift_response.sr & 1,
+			x_regs_rd_value: shift_rotate_response.shift_rotate & 1,
 			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
@@ -179,7 +206,8 @@ module mkRvAlu(RvAlu);
 		Int#(64) rs2_decoded = 1 << rs2_shamt;
 		logical.request.put(LogicalRequest {
 			arg1: rs1,
-			arg2: rs2_decoded
+			arg2: rs2_decoded,
+			invert_arg2: False
 		});
 	endrule
 
@@ -200,7 +228,8 @@ module mkRvAlu(RvAlu);
 		Int#(64) rs2_decoded = 1 << rs2_shamt;
 		logical.request.put(LogicalRequest {
 			arg1: rs1,
-			arg2: rs2_decoded
+			arg2: rs2_decoded,
+			invert_arg2: False
 		});
 	endrule
 
@@ -303,7 +332,8 @@ module mkRvAlu(RvAlu);
 	rule csrrs_1(inst matches tagged Csr { op: Csrrs, csrd: .csrd, csrs: .csrs, rs2: .rs2 } &&& csrd != 0);
 		logical.request.put(LogicalRequest {
 			arg1: csrs,
-			arg2: rs2
+			arg2: rs2,
+			invert_arg2: False
 		});
 	endrule
 
@@ -330,7 +360,8 @@ module mkRvAlu(RvAlu);
 	rule csrrc_1(inst matches tagged Csr { op: Csrrc, csrd: .csrd, csrs: .csrs, rs2: .rs2 } &&& csrd != 0);
 		logical.request.put(LogicalRequest {
 			arg1: csrs,
-			arg2: ~rs2
+			arg2: rs2,
+			invert_arg2: True
 		});
 	endrule
 
@@ -349,6 +380,180 @@ module mkRvAlu(RvAlu);
 			x_regs_rd: rd,
 			x_regs_rd_value: csrs,
 			csrd: csrd == 0 ? tagged Invalid : tagged Valid tuple2(csrd, logical_response.and_),
+			next_pc: next_pc
+		});
+	endrule
+
+	// clz
+	rule clz_1(inst matches tagged Unary { op: Clz, rs: .rs });
+		adder.request.put(AdderRequest {
+			arg1: unpack(reverseBits(pack(rs))),
+			arg2: -1,
+			cin: False
+		});
+	endrule
+
+	rule clz_2(inst matches tagged Unary { op: Clz, rs: .rs });
+		let adder_response <- adder.response.get;
+		logical.request.put(LogicalRequest {
+			arg1: adder_response.add,
+			arg2: unpack(reverseBits(pack(rs))),
+			invert_arg2: True
+		});
+	endrule
+
+	rule clz_3(inst matches tagged Unary { op: Clz });
+		let logical_response <- logical.response.get;
+		popcnt.request.put(PopcntRequest {
+			arg: logical_response.and_
+		});
+	endrule
+
+	rule clz_end(inst matches tagged Unary { op: Clz, rd: .rd });
+		let popcnt_response <- popcnt.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: popcnt_response.cpop,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// clzw
+	rule clzw_1(inst matches tagged Unary { op: Clzw, rs: .rs });
+		adder.request.put(AdderRequest {
+			arg1: unpack(reverseBits(pack(rs))),
+			arg2: -1,
+			cin: False
+		});
+	endrule
+
+	rule clzw_2(inst matches tagged Unary { op: Clzw, rs: .rs });
+		let adder_response <- adder.response.get;
+		logical.request.put(LogicalRequest {
+			arg1: adder_response.add,
+			arg2: unpack(reverseBits(pack(rs))),
+			invert_arg2: True
+		});
+	endrule
+
+	rule clzw_3(inst matches tagged Unary { op: Clzw });
+		let logical_response <- logical.response.get;
+		popcnt.request.put(PopcntRequest {
+			arg: logical_response.and_
+		});
+	endrule
+
+	rule clzw_end(inst matches tagged Unary { op: Clzw, rd: .rd });
+		let popcnt_response <- popcnt.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: popcnt_response.cpopw,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// cpop
+	rule cpop_1(inst matches tagged Unary { op: Cpop, rs: .rs });
+		popcnt.request.put(PopcntRequest {
+			arg: rs
+		});
+	endrule
+
+	rule cpop_end(inst matches tagged Unary { op: Cpop, rd: .rd });
+		let popcnt_response <- popcnt.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: popcnt_response.cpop,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// cpopw
+	rule cpopw_1(inst matches tagged Unary { op: Cpopw, rs: .rs });
+		popcnt.request.put(PopcntRequest {
+			arg: rs
+		});
+	endrule
+
+	rule cpopw_end(inst matches tagged Unary { op: Cpopw, rd: .rd });
+		let popcnt_response <- popcnt.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: popcnt_response.cpopw,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// ctz
+	rule ctz_1(inst matches tagged Unary { op: Ctz, rs: .rs });
+		adder.request.put(AdderRequest {
+			arg1: rs,
+			arg2: -1,
+			cin: False
+		});
+	endrule
+
+	rule ctz_2(inst matches tagged Unary { op: Ctz, rs: .rs });
+		let adder_response <- adder.response.get;
+		logical.request.put(LogicalRequest {
+			arg1: adder_response.add,
+			arg2: rs,
+			invert_arg2: True
+		});
+	endrule
+
+	rule ctz_3(inst matches tagged Unary { op: Ctz });
+		let logical_response <- logical.response.get;
+		popcnt.request.put(PopcntRequest {
+			arg: logical_response.and_
+		});
+	endrule
+
+	rule ctz_end(inst matches tagged Unary { op: Ctz, rd: .rd });
+		let popcnt_response <- popcnt.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: popcnt_response.cpop,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// ctzw
+	rule ctzw_1(inst matches tagged Unary { op: Ctzw, rs: .rs });
+		adder.request.put(AdderRequest {
+			arg1: rs,
+			arg2: -1,
+			cin: False
+		});
+	endrule
+
+	rule ctzw_2(inst matches tagged Unary { op: Ctzw, rs: .rs });
+		let adder_response <- adder.response.get;
+		logical.request.put(LogicalRequest {
+			arg1: adder_response.add,
+			arg2: rs,
+			invert_arg2: True
+		});
+	endrule
+
+	rule ctzw_3(inst matches tagged Unary { op: Ctzw });
+		let logical_response <- logical.response.get;
+		popcnt.request.put(PopcntRequest {
+			arg: logical_response.and_
+		});
+	endrule
+
+	rule ctzw_end(inst matches tagged Unary { op: Ctzw, rd: .rd });
+		let popcnt_response <- popcnt.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: popcnt_response.cpopw,
+			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
 	endrule
@@ -428,11 +633,88 @@ module mkRvAlu(RvAlu);
 		});
 	endrule
 
+	// max
+	rule max_1(inst matches tagged Binary { op: Max, rs1: .rs1, rs2: .rs2 });
+		cmp.request.put(CmpRequest {
+			arg1: rs1,
+			arg2: rs2,
+			signed_: True
+		});
+	endrule
+
+	rule max_end(inst matches tagged Binary { op: Max, rd: .rd, rs1: .rs1, rs2: .rs2 });
+		let cmp_response <- cmp.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: cmp_response.lt ? rs2 : rs1,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// maxu
+	rule maxu_1(inst matches tagged Binary { op: Maxu, rs1: .rs1, rs2: .rs2 });
+		cmp.request.put(CmpRequest {
+			arg1: rs1,
+			arg2: rs2,
+			signed_: False
+		});
+	endrule
+
+	rule maxu_end(inst matches tagged Binary { op: Maxu, rd: .rd, rs1: .rs1, rs2: .rs2 });
+		let cmp_response <- cmp.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: cmp_response.lt ? rs2 : rs1,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// min
+	rule min_1(inst matches tagged Binary { op: Min, rs1: .rs1, rs2: .rs2 });
+		cmp.request.put(CmpRequest {
+			arg1: rs1,
+			arg2: rs2,
+			signed_: True
+		});
+	endrule
+
+	rule min_end(inst matches tagged Binary { op: Min, rd: .rd, rs1: .rs1, rs2: .rs2 });
+		let cmp_response <- cmp.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: cmp_response.lt ? rs1 : rs2,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// minu
+	rule minu_1(inst matches tagged Binary { op: Minu, rs1: .rs1, rs2: .rs2 });
+		cmp.request.put(CmpRequest {
+			arg1: rs1,
+			arg2: rs2,
+			signed_: False
+		});
+	endrule
+
+	rule minu_end(inst matches tagged Binary { op: Minu, rd: .rd, rs1: .rs1, rs2: .rs2 });
+		let cmp_response <- cmp.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: cmp_response.lt ? rs1 : rs2,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
 	// or
 	rule or_1(inst matches tagged Binary { op: Or, rs1: .rs1, rs2: .rs2 });
 		logical.request.put(LogicalRequest {
 			arg1: rs1,
-			arg2: rs2
+			arg2: rs2,
+			invert_arg2: False
 		});
 	endrule
 
@@ -441,6 +723,173 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: logical_response.or_,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// orc.b
+	rule orc_b_1(inst matches tagged Unary { op: OrcB, rs: .rs });
+		orc_b.request.put(OrcBRequest {
+			arg: rs
+		});
+	endrule
+
+	rule orc_b_end(inst matches tagged Unary { op: OrcB, rd: .rd });
+		let orc_b_response <- orc_b.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: orc_b_response.orc_b,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// orn
+	rule orn_1(inst matches tagged Binary { op: Orn, rs1: .rs1, rs2: .rs2 });
+		logical.request.put(LogicalRequest {
+			arg1: rs1,
+			arg2: rs2,
+			invert_arg2: True
+		});
+	endrule
+
+	rule orn_end(inst matches tagged Binary { op: Orn, rd: .rd });
+		let logical_response <- logical.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: logical_response.or_,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// rev8
+	rule rev8_end(inst matches tagged Unary { op: Rev8, rd: .rd, rs: .rs });
+		let rs_bits = pack(rs);
+		let rev8_response = unpack({
+			rs_bits[7:0],
+			rs_bits[15:8],
+			rs_bits[23:16],
+			rs_bits[31:24],
+			rs_bits[39:32],
+			rs_bits[47:40],
+			rs_bits[55:48],
+			rs_bits[63:56]
+		});
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: rev8_response,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// rol
+	rule rol_1(inst matches tagged Binary { op: Rol, rs1: .rs1, rs2: .rs2 });
+		shift_rotate.request.put(ShiftRotateRequest {
+			value: rs1,
+			shamt: rs2,
+			right: False,
+			rotate: True,
+			arithmetic: ?,
+			w: False
+		});
+	endrule
+
+	rule rol_end(inst matches tagged Binary { op: Rol, rd: .rd });
+		let shift_rotate_response <- shift_rotate.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: shift_rotate_response.shift_rotate,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// rolw
+	rule rolw_1(inst matches tagged Binary { op: Rolw, rs1: .rs1, rs2: .rs2 });
+		shift_rotate.request.put(ShiftRotateRequest {
+			value: rs1,
+			shamt: rs2,
+			right: False,
+			rotate: True,
+			arithmetic: ?,
+			w: True
+		});
+	endrule
+
+	rule rolw_end(inst matches tagged Binary { op: Rolw, rd: .rd });
+		let shift_rotate_response <- shift_rotate.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: shift_rotate_response.shift_rotate,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// ror
+	rule ror_1(inst matches tagged Binary { op: Ror, rs1: .rs1, rs2: .rs2 });
+		shift_rotate.request.put(ShiftRotateRequest {
+			value: rs1,
+			shamt: rs2,
+			right: True,
+			rotate: True,
+			arithmetic: ?,
+			w: False
+		});
+	endrule
+
+	rule ror_end(inst matches tagged Binary { op: Ror, rd: .rd });
+		let shift_rotate_response <- shift_rotate.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: shift_rotate_response.shift_rotate,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// rorw
+	rule rorw_1(inst matches tagged Binary { op: Rorw, rs1: .rs1, rs2: .rs2 });
+		shift_rotate.request.put(ShiftRotateRequest {
+			value: rs1,
+			shamt: rs2,
+			right: True,
+			rotate: True,
+			arithmetic: ?,
+			w: True
+		});
+	endrule
+
+	rule rorw_end(inst matches tagged Binary { op: Rorw, rd: .rd });
+		let shift_rotate_response <- shift_rotate.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: shift_rotate_response.shift_rotate,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// sext.b
+	rule sext_b_end(inst matches tagged Unary { op: SextB, rd: .rd, rs: .rs });
+		Int#(8) rs_ = truncate(rs);
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: extend(rs_),
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// sext.h
+	rule sext_h_end(inst matches tagged Unary { op: SextH, rd: .rd, rs: .rs });
+		Int#(16) rs_ = truncate(rs);
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: extend(rs_),
 			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
@@ -565,18 +1014,21 @@ module mkRvAlu(RvAlu);
 
 	// sll
 	rule sll_1(inst matches tagged Binary { op: Sll, rs1: .rs1, rs2: .rs2 });
-		shift.request.put(ShiftRequest {
+		shift_rotate.request.put(ShiftRotateRequest {
 			value: rs1,
 			shamt: rs2,
-			arithmetic: ?
+			right: False,
+			rotate: False,
+			arithmetic: ?,
+			w: False
 		});
 	endrule
 
 	rule sll_end(inst matches tagged Binary { op: Sll, rd: .rd });
-		let shift_response <- shift.response.get;
+		let shift_rotate_response <- shift_rotate.response.get;
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
-			x_regs_rd_value: shift_response.sll,
+			x_regs_rd_value: shift_rotate_response.shift_rotate,
 			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
@@ -585,18 +1037,21 @@ module mkRvAlu(RvAlu);
 	// sll.uw
 	rule sll_uw_1(inst matches tagged Binary { op: SllUw, rs1: .rs1, rs2: .rs2 });
 		Int#(64) rs1uw = unpack(zeroExtend(pack(rs1)[31:0]));
-		shift.request.put(ShiftRequest {
+		shift_rotate.request.put(ShiftRotateRequest {
 			value: rs1uw,
 			shamt: rs2,
-			arithmetic: ?
+			right: False,
+			rotate: False,
+			arithmetic: ?,
+			w: False
 		});
 	endrule
 
 	rule sll_uw_end(inst matches tagged Binary { op: SllUw, rd: .rd });
-		let shift_response <- shift.response.get;
+		let shift_rotate_response <- shift_rotate.response.get;
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
-			x_regs_rd_value: shift_response.sll,
+			x_regs_rd_value: shift_rotate_response.shift_rotate,
 			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
@@ -604,18 +1059,21 @@ module mkRvAlu(RvAlu);
 
 	// sllw
 	rule sllw_1(inst matches tagged Binary { op: Sllw, rs1: .rs1, rs2: .rs2 });
-		shift.request.put(ShiftRequest {
+		shift_rotate.request.put(ShiftRotateRequest {
 			value: rs1,
 			shamt: rs2,
-			arithmetic: ?
+			right: False,
+			rotate: False,
+			arithmetic: ?,
+			w: True
 		});
 	endrule
 
 	rule sllw_end(inst matches tagged Binary { op: Sllw, rd: .rd });
-		let shift_response <- shift.response.get;
+		let shift_rotate_response <- shift_rotate.response.get;
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
-			x_regs_rd_value: shift_response.sllw,
+			x_regs_rd_value: shift_rotate_response.shift_rotate,
 			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
@@ -623,18 +1081,21 @@ module mkRvAlu(RvAlu);
 
 	// sra
 	rule sra_1(inst matches tagged Binary { op: Sra, rs1: .rs1, rs2: .rs2 });
-		shift.request.put(ShiftRequest {
+		shift_rotate.request.put(ShiftRotateRequest {
 			value: rs1,
 			shamt: rs2,
-			arithmetic: True
+			right: True,
+			rotate: False,
+			arithmetic: True,
+			w: False
 		});
 	endrule
 
 	rule sra_end(inst matches tagged Binary { op: Sra, rd: .rd });
-		let shift_response <- shift.response.get;
+		let shift_rotate_response <- shift_rotate.response.get;
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
-			x_regs_rd_value: shift_response.sr,
+			x_regs_rd_value: shift_rotate_response.shift_rotate,
 			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
@@ -642,18 +1103,21 @@ module mkRvAlu(RvAlu);
 
 	// sraw
 	rule sraw_1(inst matches tagged Binary { op: Sraw, rs1: .rs1, rs2: .rs2 });
-		shift.request.put(ShiftRequest {
+		shift_rotate.request.put(ShiftRotateRequest {
 			value: rs1,
 			shamt: rs2,
-			arithmetic: True
+			right: True,
+			rotate: False,
+			arithmetic: True,
+			w: True
 		});
 	endrule
 
 	rule sraw_end(inst matches tagged Binary { op: Sraw, rd: .rd });
-		let shift_response <- shift.response.get;
+		let shift_rotate_response <- shift_rotate.response.get;
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
-			x_regs_rd_value: shift_response.srw,
+			x_regs_rd_value: shift_rotate_response.shift_rotate,
 			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
@@ -661,18 +1125,21 @@ module mkRvAlu(RvAlu);
 
 	// srl
 	rule srl_1(inst matches tagged Binary { op: Srl, rs1: .rs1, rs2: .rs2 });
-		shift.request.put(ShiftRequest {
+		shift_rotate.request.put(ShiftRotateRequest {
 			value: rs1,
 			shamt: rs2,
-			arithmetic: False
+			right: True,
+			rotate: False,
+			arithmetic: False,
+			w: False
 		});
 	endrule
 
 	rule srl_end(inst matches tagged Binary { op: Srl, rd: .rd });
-		let shift_response <- shift.response.get;
+		let shift_rotate_response <- shift_rotate.response.get;
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
-			x_regs_rd_value: shift_response.sr,
+			x_regs_rd_value: shift_rotate_response.shift_rotate,
 			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
@@ -680,18 +1147,21 @@ module mkRvAlu(RvAlu);
 
 	// srlw
 	rule srlw_1(inst matches tagged Binary { op: Srlw, rs1: .rs1, rs2: .rs2 });
-		shift.request.put(ShiftRequest {
+		shift_rotate.request.put(ShiftRotateRequest {
 			value: rs1,
 			shamt: rs2,
-			arithmetic: False
+			right: True,
+			rotate: False,
+			arithmetic: False,
+			w: True
 		});
 	endrule
 
 	rule srlw_end(inst matches tagged Binary { op: Srlw, rd: .rd });
-		let shift_response <- shift.response.get;
+		let shift_rotate_response <- shift_rotate.response.get;
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
-			x_regs_rd_value: shift_response.srw,
+			x_regs_rd_value: shift_rotate_response.shift_rotate,
 			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
@@ -773,11 +1243,31 @@ module mkRvAlu(RvAlu);
 		});
 	endrule
 
+	// xnor
+	rule xnor_1(inst matches tagged Binary { op: Xnor, rs1: .rs1, rs2: .rs2 });
+		logical.request.put(LogicalRequest {
+			arg1: rs1,
+			arg2: rs2,
+			invert_arg2: True
+		});
+	endrule
+
+	rule xnor_end(inst matches tagged Binary { op: Xnor, rd: .rd });
+		let logical_response <- logical.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: logical_response.xor_,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
 	// xor
 	rule xor_1(inst matches tagged Binary { op: Xor, rs1: .rs1, rs2: .rs2 });
 		logical.request.put(LogicalRequest {
 			arg1: rs1,
-			arg2: rs2
+			arg2: rs2,
+			invert_arg2: False
 		});
 	endrule
 
@@ -786,6 +1276,17 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: logical_response.xor_,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// zext.h
+	rule zext_h_end(inst matches tagged Unary { op: ZextH, rd: .rd, rs: .rs });
+		Int#(16) rs_ = truncate(rs);
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: zeroExtend(rs_),
 			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
@@ -923,6 +1424,7 @@ typedef Server#(LogicalRequest#(64), LogicalResponse#(64)) Logical;
 typedef struct {
 	Int#(width) arg1;
 	Int#(width) arg2;
+	Bool invert_arg2;
 } LogicalRequest#(numeric type width) deriving(Bits);
 
 typedef struct {
@@ -935,25 +1437,28 @@ typedef struct {
 module mkLogical(Logical);
 	Wire#(Int#(64)) arg1 <- mkWire;
 	Wire#(Int#(64)) arg2 <- mkWire;
+	Wire#(Bool) invert_arg2 <- mkWire;
 	RWire#(LogicalResponse#(64)) result <- mkRWire;
 
 	rule run;
-		result.wset(logical_inner(arg1, arg2));
+		result.wset(logical_inner(arg1, arg2, invert_arg2));
 	endrule
 
 	interface Put request;
 		method Action put(LogicalRequest#(64) request);
 			arg1 <= request.arg1;
 			arg2 <= request.arg2;
+			invert_arg2 <= request.invert_arg2;
 		endmethod
 	endinterface
 
 	interface response = toGet(result);
 endmodule
 
-function LogicalResponse#(width) logical_inner(Int#(width) arg1, Int#(width) arg2);
-	let and_ = arg1 & arg2;
-	let or_ = arg1 | arg2;
+function LogicalResponse#(width) logical_inner(Int#(width) arg1, Int#(width) arg2, Bool invert_arg2);
+	let arg2_ = invert_arg2 ? ~arg2 : arg2;
+	let and_ = arg1 & arg2_;
+	let or_ = arg1 | arg2_;
 	return LogicalResponse {
 		and_: and_,
 		or_: or_,
@@ -961,85 +1466,269 @@ function LogicalResponse#(width) logical_inner(Int#(width) arg1, Int#(width) arg
 	};
 endfunction
 
-typedef Server#(ShiftRequest#(64), ShiftResponse#(64)) Shift;
+typedef Server#(OrcBRequest#(64), OrcBResponse#(64)) OrcB;
 
 typedef struct {
-	Int#(width) value;
-	Int#(width) shamt;
-	Bool arithmetic;
-} ShiftRequest#(numeric type width) deriving(Bits);
+	Int#(width) arg;
+} OrcBRequest#(numeric type width) deriving(Bits);
 
 typedef struct {
-	Int#(width) sll;
-	Int#(width) sllw;
-	Int#(width) sr;
-	Int#(width) srw;
-} ShiftResponse#(numeric type width) deriving(Bits);
+	Int#(width) orc_b;
+} OrcBResponse#(numeric type width) deriving(Bits);
 
 (* synthesize *)
-module mkShift(Shift);
-	Wire#(Int#(64)) value <- mkWire;
-	Wire#(Int#(64)) shamt <- mkWire;
-	Wire#(Bool) arithmetic <- mkWire;
-	RWire#(ShiftResponse#(64)) result <- mkRWire;
+module mkOrcB(OrcB);
+	Wire#(Int#(64)) arg <- mkWire;
+	RWire#(OrcBResponse#(64)) result <- mkRWire;
 
 	rule run;
-		Bit#(5) shamt32 = truncate(pack(shamt));
-		Int#(32) sll_value32 = truncate(value);
-		Bit#(33) sr_value32 = arithmetic ? signExtend(pack(sll_value32)) : zeroExtend(pack(sll_value32));
-		let shift_inner_result32 = shift_inner(sll_value32, unpack(sr_value32), shamt32, 16);
-
-		Bit#(6) shamt64 = truncate(pack(shamt));
-		Bit#(65) sr_value64 = arithmetic ? signExtend(pack(value)) : zeroExtend(pack(value));
-		let shift_inner_result64 = shift_inner(value, unpack(sr_value64), shamt64, 32);
-
-		result.wset(ShiftResponse {
-			sll: shift_inner_result64.sll,
-			sllw: signExtend(shift_inner_result32.sll),
-			sr: shift_inner_result64.sr,
-			srw: signExtend(shift_inner_result32.sr)
+		result.wset(OrcBResponse {
+			orc_b: unpack(orc_b_inner(pack(arg)))
 		});
 	endrule
 
 	interface Put request;
-		method Action put(ShiftRequest#(64) request);
-			value <= request.value;
-			shamt <= request.shamt;
-			arithmetic <= request.arithmetic;
+		method Action put(OrcBRequest#(64) request);
+			arg <= request.arg;
 		endmethod
 	endinterface
 
 	interface response = toGet(result);
 endmodule
 
-typeclass Shifter#(numeric type width, numeric type shamt_width);
-	function ShiftInnerResponse#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(shamt_width) shamt, Integer offset);
-endtypeclass
+function Bit#(width) orc_b_inner(Bit#(width) arg)
+provisos (
+	Add#(a__, 8, width),
+	Div#(width, 8, num_cells),
+	Mul#(num_cells, 8, width)
+);
+	let num_cells = valueOf(num_cells);
+
+	Bit#(width) result = 0;
+
+	for (Integer i = 0; i < num_cells; i = i + 1) begin
+		Bit#(8) cell_ = arg[i * 8 + 7:i * 8];
+		cell_ = signExtend(| cell_);
+		result[i * 8 + 7:i * 8] = cell_;
+	end
+
+	return result;
+endfunction
+
+typedef Server#(PopcntRequest#(64), PopcntResponse#(64)) Popcnt;
 
 typedef struct {
-	Int#(width) sll;
-	Int#(width) sr;
-} ShiftInnerResponse#(numeric type width) deriving(Bits);
+	Int#(width) arg;
+} PopcntRequest#(numeric type width) deriving(Bits);
 
-instance Shifter#(width, 0);
-	function ShiftInnerResponse#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(0) shamt, Integer offset);
-		return ShiftInnerResponse {
-			sll: sll,
-			sr: unpack(truncate(pack(sr)))
-		};
+typedef struct {
+	Int#(width) cpop;
+	Int#(width) cpopw;
+} PopcntResponse#(numeric type width) deriving(Bits);
+
+(* synthesize *)
+module mkPopcnt(Popcnt);
+	Wire#(Int#(64)) arg <- mkWire;
+	RWire#(PopcntResponse#(64)) result <- mkRWire;
+
+	rule run;
+		Tuple2#(Bit#(32), Bit#(32)) arg_parts = split(pack(arg));
+		match { .arg_hi, .arg_lo } = arg_parts;
+		UInt#(7) cpop_lo = extend(popcnt_inner(arg_lo));
+		UInt#(7) cpop_hi = extend(popcnt_inner(arg_hi));
+		result.wset(PopcntResponse {
+			cpop: unpack(pack(extend(cpop_lo + cpop_hi))),
+			cpopw: unpack(pack(extend(cpop_lo)))
+		});
+	endrule
+
+	interface Put request;
+		method Action put(PopcntRequest#(64) request);
+			arg <= request.arg;
+		endmethod
+	endinterface
+
+	interface response = toGet(result);
+endmodule
+
+typeclass PopcntInner#(numeric type width);
+	function UInt#(TLog#(TAdd#(width, 1))) popcnt_inner(Bit#(width) arg);
+endtypeclass
+
+instance PopcntInner#(1);
+	function UInt#(1) popcnt_inner(Bit#(1) arg);
+		return unpack(arg);
 	endfunction
 endinstance
 
-instance Shifter#(width, shamt_width)
+instance PopcntInner#(width)
 provisos (
-	Shifter#(width, TSub#(shamt_width, 1))
+	Div#(width, 2, hi_width),
+	Add#(hi_width, lo_width, width),
+	Add#(TLog#(TAdd#(hi_width, 1)), a__, TLog#(TAdd#(width, 1))),
+	Add#(TLog#(TAdd#(lo_width, 1)), b__, TLog#(TAdd#(width, 1))),
+	PopcntInner#(hi_width),
+	PopcntInner#(lo_width)
 );
-	function ShiftInnerResponse#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(shamt_width) shamt, Integer offset);
-		if (shamt[valueOf(TSub#(shamt_width, 1))] != 0) begin
-			sll = sll << offset;
-			sr = sr >> offset;
-		end
-		Bit#(TSub#(shamt_width, 1)) shamt_ = truncate(shamt);
-		return shift_inner(sll, sr, shamt_, offset / 2);
+	function UInt#(TLog#(TAdd#(width, 1))) popcnt_inner(Bit#(width) arg);
+		Tuple2#(Bit#(hi_width), Bit#(lo_width)) arg_parts = split(arg);
+		match { .arg_hi, .arg_lo } = arg_parts;
+		UInt#(TLog#(TAdd#(width, 1))) hi = extend(popcnt_inner(arg_hi));
+		UInt#(TLog#(TAdd#(width, 1))) lo = extend(popcnt_inner(arg_lo));
+		return hi + lo;
 	endfunction
 endinstance
+
+typedef Server#(ShiftRotateRequest#(64), ShiftRotateResponse#(64)) ShiftRotate;
+
+typedef struct {
+	Int#(width) value;
+	Int#(width) shamt;
+	Bool right;
+	Bool rotate;
+	Bool arithmetic;
+	Bool w;
+} ShiftRotateRequest#(numeric type width) deriving(Bits);
+
+typedef struct {
+	Int#(width) shift_rotate;
+} ShiftRotateResponse#(numeric type width) deriving(Bits);
+
+module mkShiftRotate(ShiftRotate);
+	Wire#(Int#(64)) value <- mkWire;
+	Wire#(Int#(64)) shamt <- mkWire;
+	Wire#(Bool) right <- mkWire;
+	Wire#(Bool) rotate <- mkWire;
+	Wire#(Bool) arithmetic <- mkWire;
+	Wire#(Bool) w <- mkWire;
+	RWire#(ShiftRotateResponse#(64)) result <- mkRWire;
+
+	rule run;
+		Bit#(6) shamt_ = truncate(pack(shamt));
+		result.wset(ShiftRotateResponse {
+			shift_rotate: shift_rotate_inner(value, shamt_, right, rotate, arithmetic, w)
+		});
+	endrule
+
+	interface Put request;
+		method Action put(ShiftRotateRequest#(64) request);
+			value <= request.value;
+			shamt <= request.shamt;
+			right <= request.right;
+			rotate <= request.rotate;
+			arithmetic <= request.arithmetic;
+			w <= request.w;
+		endmethod
+	endinterface
+
+	interface response = toGet(result);
+endmodule
+
+function Int#(width) shift_rotate_inner(Int#(width) value, Bit#(shamt_width) shamt, Bool right, Bool rotate, Bool arithmetic, Bool w)
+provisos (
+	Add#(a__, 1, width),
+	Add#(b__, 1, TDiv#(width, 2)),
+	Add#(TDiv#(width, 2), TDiv#(width, 2), width),
+	ShiftInnerRound#(width, TSub#(shamt_width, 1))
+);
+	let width = valueOf(width);
+	let shamt_width = valueOf(shamt_width);
+
+	Bit#(width) value_ = pack(value);
+	if (w) begin
+		Bit#(TDiv#(width, 2)) value_lo = truncate(value_);
+		value_ = { value_lo, value_lo };
+	end
+
+	if (!right)
+		shamt = ~shamt;
+
+	Bit#(width) r = right ? value_ : rotateBitsBy(value_, fromInteger(width - 1));
+
+	Bit#(width) p = signExtend(pack(right || rotate));
+	p[width - 1] = 1;
+
+	Bit#(width) result = 0;
+
+	Tuple2#(Bit#(1), Bit#(TSub#(shamt_width, 1))) shamt_parts = split(shamt);
+	match { .shamt_hi, .shamt_lo } = shamt_parts;
+
+	let round_result = shift_rotate_inner_round(shamt_lo, right, rotate, 0, r, p);
+	r = round_result.r;
+	p = round_result.p;
+
+	if (w) begin
+		Bit#(TDiv#(width, 2)) r_lo = truncate(r);
+		Bit#(TDiv#(width, 2)) p_hi = truncateLSB(p);
+
+		let result_lo = (r_lo & p_hi) | ~((signExtend(arithmetic ? 0 : value_[width - 1])) | p_hi);
+		result = signExtend(result_lo);
+
+	end else begin
+		let round_result = shift_rotate_inner_round(shamt_hi, right, rotate, shamt_width - 1, r, p);
+		r = round_result.r;
+		p = round_result.p;
+
+		result = (r & p) | ~(signExtend(arithmetic ? 0 : value_[width - 1]) | p);
+	end
+
+	return unpack(result);
+endfunction
+
+typeclass ShiftInnerRound#(numeric type width, numeric type shamt_width);
+	function ShiftInnerRoundResponse#(width) shift_rotate_inner_round(
+		Bit#(shamt_width) shamt,
+		Bool right,
+		Bool rotate,
+		Integer i,
+		Bit#(width) r,
+		Bit#(width) p
+	);
+endtypeclass
+
+instance ShiftInnerRound#(width, 0);
+	function ShiftInnerRoundResponse#(width) shift_rotate_inner_round(
+		Bit#(0) shamt,
+		Bool right,
+		Bool rotate,
+		Integer i,
+		Bit#(width) r,
+		Bit#(width) p
+	);
+		return ShiftInnerRoundResponse { r: r, p: p };
+	endfunction
+endinstance
+
+instance ShiftInnerRound#(width, shamt_width)
+provisos (
+	Add#(a__, 1, width),
+	ShiftInnerRound#(width, TSub#(shamt_width, 1))
+);
+	function ShiftInnerRoundResponse#(width) shift_rotate_inner_round(
+		Bit#(shamt_width) shamt,
+		Bool right,
+		Bool rotate,
+		Integer i,
+		Bit#(width) r,
+		Bit#(width) p
+	);
+		let width = valueOf(width);
+
+		if (unpack(shamt[0])) begin
+			let r_ = r;
+			r = (r_ >> (2 ** i)) | (r_ << (width - 2 ** i));
+
+			let p_ = p;
+			Bit#(width) p__ = signExtend(pack(!right || rotate));
+			p = (p_ >> (2 ** i)) | (p__ << (width - 2 ** i));
+		end
+
+		Bit#(TSub#(shamt_width, 1)) shamt_ = truncateLSB(shamt);
+		return shift_rotate_inner_round(shamt_, right, rotate, i + 1, r, p);
+	endfunction
+endinstance
+
+typedef struct {
+	Bit#(width) r;
+	Bit#(width) p;
+} ShiftInnerRoundResponse#(numeric type width) deriving(Bits);
