@@ -7,6 +7,7 @@ impl SupportedExtensions {
 	pub const RVC: Self = Self(1 << 1);
 	pub const ZCB: Self = Self(Self::RVC.0 | (1 << 2));
 	pub const ZBA: Self = Self(1 << 3);
+	pub const ZBB: Self = Self(1 << 4);
 
 	pub const RV32C: Self = Self(Self::RV32I.0 | Self::RVC.0);
 	pub const RV32C_ZCB: Self = Self(Self::RV32I.0 | Self::RVC.0 | Self::ZCB.0);
