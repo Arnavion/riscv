@@ -27,7 +27,7 @@ macro_rules! instructions {
 				raw_instruction.encode()
 			}
 
-			$vis fn parse($parse_line: &[u8]) -> Result<Option<Self>, ParseError<'_>> {
+			$vis fn parse($parse_line: &[u8], $supported_extensions: SupportedExtensions) -> Result<Option<Self>, ParseError<'_>> {
 				let mut $parse_tokens = tokens($parse_line);
 
 				let Some(token) = $parse_tokens.next() else {
@@ -107,6 +107,126 @@ macro_rules! instructions {
 				$f
 				$($display_arms)*
 				Self::$variant { dest, src1, src2 } => write!($f, concat!($asm, " {}, {}, {}"), dest, src1, src2),
+			}
+			{ $($rest)* }
+		}
+	};
+
+	(
+		@inner
+		$vis:vis
+		$ty:ident
+		{ $($variants:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
+		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
+		{ $f:ident $($display_arms:tt)* }
+		{ #[r( $asm:tt , $opcode:tt, $rs2:tt )] $variant:tt { dest: Register, src: Register }, $($rest:tt)* }
+	) => {
+		instructions! {
+			@inner
+			$vis
+			$ty
+			{
+				$($variants)*
+				$variant { dest: Register, src: Register },
+			}
+			{
+				$self
+				$supported_extensions
+				$($encode_arms)*
+				Self::$variant { dest, src } => RawInstruction::R {
+					opcode: OpCode::$opcode,
+					rd: dest,
+					funct3: Funct3::$variant,
+					rs1: src,
+					rs2: Register::$rs2,
+					funct7: Funct7::$variant,
+				},
+			}
+			{
+				$parse_line
+				$parse_tokens
+				$($parse_arms)*
+				$asm => {
+					let dest = $parse_tokens.next().ok_or(ParseError::TruncatedInstruction { line: $parse_line })?;
+					let dest = dest.try_into()?;
+
+					let src = $parse_tokens.next().ok_or(ParseError::TruncatedInstruction { line: $parse_line })?;
+					let src = src.try_into()?;
+
+					if $parse_tokens.next().is_some() {
+						return Err(ParseError::TrailingGarbage { line: $parse_line });
+					}
+
+					Self::$variant { dest, src }
+				},
+			}
+			{
+				$f
+				$($display_arms)*
+				Self::$variant { dest, src } => write!($f, concat!($asm, " {}, {}"), dest, src),
+			}
+			{ $($rest)* }
+		}
+	};
+
+	(
+		@inner
+		$vis:vis
+		$ty:ident
+		{ $($variants:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
+		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
+		{ $f:ident $($display_arms:tt)* }
+		{ #[r( $asm:tt , $opcode:tt, $rs2:tt, zbb )] $variant:tt { dest: Register, src: Register }, $($rest:tt)* }
+	) => {
+		instructions! {
+			@inner
+			$vis
+			$ty
+			{
+				$($variants)*
+				$variant { dest: Register, src: Register },
+			}
+			{
+				$self
+				$supported_extensions
+				$($encode_arms)*
+				Self::$variant { dest, src } => RawInstruction::R {
+					opcode: OpCode::$opcode,
+					rd: dest,
+					funct3: Funct3::$variant,
+					rs1: src,
+					rs2: Register::$rs2,
+					funct7: Funct7::$variant,
+				},
+			}
+			{
+				$parse_line
+				$parse_tokens
+				$($parse_arms)*
+				$asm => {
+					if !$supported_extensions.contains(SupportedExtensions::ZBB) {
+						return Err(ParseError::UnknownInstruction { line: $parse_line });
+					}
+
+					let dest = $parse_tokens.next().ok_or(ParseError::TruncatedInstruction { line: $parse_line })?;
+					let dest = dest.try_into()?;
+
+					let src = $parse_tokens.next().ok_or(ParseError::TruncatedInstruction { line: $parse_line })?;
+					let src = src.try_into()?;
+
+					if $parse_tokens.next().is_some() {
+						return Err(ParseError::TrailingGarbage { line: $parse_line });
+					}
+
+					Self::$variant { dest, src }
+				},
+			}
+			{
+				$f
+				$($display_arms)*
+				Self::$variant { dest, src } => write!($f, concat!($asm, " {}, {}"), dest, src),
 			}
 			{ $($rest)* }
 		}
@@ -813,6 +933,126 @@ macro_rules! instructions {
 		}
 	};
 
+	(
+		@inner
+		$vis:vis
+		$ty:ident
+		{ $($variants:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
+		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
+		{ $f:ident $($display_arms:tt)* }
+		{ Rev8 { dest: Register, src: Register }, $($rest:tt)* }
+	) => {
+		instructions! {
+			@inner
+			$vis
+			$ty
+			{
+				$($variants)*
+				Rev8 { dest: Register, src: Register },
+			}
+			{
+				$self
+				$supported_extensions
+				$($encode_arms)*
+				Self::Rev8 { dest, src } => RawInstruction::R {
+					opcode: OpCode::OpImm,
+					rd: dest,
+					funct3: Funct3::Rev8,
+					rs1: src,
+					rs2: Register::X24,
+					funct7: if $supported_extensions.contains(SupportedExtensions::RV64I) { Funct7::Rev8_64 } else { Funct7::Rev8_32 },
+				},
+			}
+			{
+				$parse_line
+				$parse_tokens
+				$($parse_arms)*
+				"rev8" => {
+					let dest = $parse_tokens.next().ok_or(ParseError::TruncatedInstruction { line: $parse_line })?;
+					let dest = dest.try_into()?;
+
+					let src = $parse_tokens.next().ok_or(ParseError::TruncatedInstruction { line: $parse_line })?;
+					let src = src.try_into()?;
+
+					if $parse_tokens.next().is_some() {
+						return Err(ParseError::TrailingGarbage { line: $parse_line });
+					}
+
+					Self::Rev8 { dest, src }
+				},
+			}
+			{
+				$f
+				$($display_arms)*
+				Self::Rev8 { dest, src } => write!($f, "rev8 {dest}, {src}"),
+			}
+			{ $($rest)* }
+		}
+	};
+
+	(
+		@inner
+		$vis:vis
+		$ty:ident
+		{ $($variants:tt)* }
+		{ $self:ident $supported_extensions:ident $($encode_arms:tt)* }
+		{ $parse_line:ident $parse_tokens:ident $($parse_arms:tt)* }
+		{ $f:ident $($display_arms:tt)* }
+		{ ZextH { dest: Register, src: Register }, $($rest:tt)* }
+	) => {
+		instructions! {
+			@inner
+			$vis
+			$ty
+			{
+				$($variants)*
+				ZextH { dest: Register, src: Register },
+			}
+			{
+				$self
+				$supported_extensions
+				$($encode_arms)*
+				Self::ZextH { dest, src } => RawInstruction::R {
+					opcode: if $supported_extensions.contains(SupportedExtensions::RV64I) { OpCode::Op32 } else { OpCode::Op },
+					rd: dest,
+					funct3: Funct3::ZextH,
+					rs1: src,
+					rs2: Register::X0,
+					funct7: Funct7::ZextH,
+				},
+			}
+			{
+				$parse_line
+				$parse_tokens
+				$($parse_arms)*
+				"zext.h" => {
+					if !$supported_extensions.contains(SupportedExtensions::ZBB) {
+						return Err(ParseError::UnknownInstruction { line: $parse_line });
+					}
+
+					let dest = $parse_tokens.next().ok_or(ParseError::TruncatedInstruction { line: $parse_line })?;
+					let dest = dest.try_into()?;
+
+					let src = $parse_tokens.next().ok_or(ParseError::TruncatedInstruction { line: $parse_line })?;
+					let src = src.try_into()?;
+
+					if $parse_tokens.next().is_some() {
+						return Err(ParseError::TrailingGarbage { line: $parse_line });
+					}
+
+					Self::ZextH { dest, src }
+				},
+			}
+			{
+				$f
+				$($display_arms)*
+				Self::ZextH { dest, src } => write!($f, "zext.h {dest}, {src}"),
+			}
+			{ $($rest)* }
+		}
+	};
+
 	($vis:vis enum $ty:ident { $($rest:tt)* }) => {
 		instructions! {
 			@inner
@@ -849,6 +1089,9 @@ instructions! {
 
 		#[i("andi", OpImm)]
 		Andi { dest: Register, src: Register, imm: i32 },
+
+		#[r("andn", Op)]
+		Andn { dest: Register, src1: Register, src2: Register },
 
 		#[u("auipc", Auipc)]
 		Auipc { dest: Register, imm: i32 },
@@ -894,6 +1137,24 @@ instructions! {
 
 		#[i("bseti", OpImm)]
 		BSeti { dest: Register, src: Register, shamt: i32 },
+
+		#[r("cpop", OpImm, X2)]
+		Cpop { dest: Register, src: Register },
+
+		#[r("cpopw", OpImm32, X2)]
+		Cpopw { dest: Register, src: Register },
+
+		#[r("clz", OpImm, X0)]
+		Clz { dest: Register, src: Register },
+
+		#[r("clzw", OpImm32, X0)]
+		Clzw { dest: Register, src: Register },
+
+		#[r("ctz", OpImm, X1)]
+		Ctz { dest: Register, src: Register },
+
+		#[r("ctzw", OpImm32, X1)]
+		Ctzw { dest: Register, src: Register },
 
 		#[r("czero.eqz", Op)]
 		CZeroEqz { dest: Register, src1: Register, src2: Register },
@@ -959,17 +1220,61 @@ instructions! {
 		#[i("lwu", Load)]
 		Lwu { dest: Register, base: Register, offset: i32 },
 
+		#[r("max", Op)]
+		Max { dest: Register, src1: Register, src2: Register },
+
+		#[r("maxu", Op)]
+		Maxu { dest: Register, src1: Register, src2: Register },
+
+		#[r("min", Op)]
+		Min { dest: Register, src1: Register, src2: Register },
+
+		#[r("minu", Op)]
+		Minu { dest: Register, src1: Register, src2: Register },
+
 		#[r("or", Op)]
 		Or { dest: Register, src1: Register, src2: Register },
 
+		#[r("orc.b", OpImm, X7)]
+		OrcB { dest: Register, src: Register },
+
 		#[i("ori", OpImm)]
 		Ori { dest: Register, src: Register, imm: i32 },
+
+		#[r("orn", Op)]
+		Orn { dest: Register, src1: Register, src2: Register },
+
+		Rev8 { dest: Register, src: Register },
+
+		#[r("rol", Op)]
+		Rol { dest: Register, src1: Register, src2: Register },
+
+		#[r("rolw", Op32)]
+		Rolw { dest: Register, src1: Register, src2: Register },
+
+		#[r("ror", Op)]
+		Ror { dest: Register, src1: Register, src2: Register },
+
+		#[i("rori", OpImm)]
+		Rori { dest: Register, src: Register, shamt: i32 },
+
+		#[i("roriw", OpImm32)]
+		Roriw { dest: Register, src: Register, shamt: i32 },
+
+		#[r("rorw", Op32)]
+		Rorw { dest: Register, src1: Register, src2: Register },
 
 		#[s("sb", Store)]
 		Sb { base: Register, offset: i32, src: Register },
 
 		#[s("sd", Store)]
 		Sd { base: Register, offset: i32, src: Register },
+
+		#[r("sext.b", OpImm, X4, zbb)]
+		SextB { dest: Register, src: Register },
+
+		#[r("sext.h", OpImm, X5, zbb)]
+		SextH { dest: Register, src: Register },
 
 		#[s("sh", Store)]
 		Sh { base: Register, offset: i32, src: Register },
@@ -1052,11 +1357,16 @@ instructions! {
 		#[s("sw", Store)]
 		Sw { base: Register, offset: i32, src: Register },
 
+		#[r("xnor", Op)]
+		Xnor { dest: Register, src1: Register, src2: Register },
+
 		#[r("xor", Op)]
 		Xor { dest: Register, src1: Register, src2: Register },
 
 		#[i("xori", OpImm)]
 		Xori { dest: Register, src: Register, imm: i32 },
+
+		ZextH { dest: Register, src: Register },
 	}
 }
 
@@ -1482,6 +1792,28 @@ impl Instruction {
 				imm2: bit_slice::<3, 6>(offset),
 			},
 
+			Self::SextB { dest, src } if
+				supported_extensions.contains(SupportedExtensions::ZCB) &&
+				dest == src &&
+				dest.is_compressible()
+			=> RawInstruction::Zcb {
+				opcode: OpCodeC::SextB,
+				reg: dest,
+				imm1: 0b001,
+				imm2: 0b11,
+			},
+
+			Self::SextH { dest, src } if
+				supported_extensions.contains(SupportedExtensions::ZCB) &&
+				dest == src &&
+				dest.is_compressible()
+			=> RawInstruction::Zcb {
+				opcode: OpCodeC::SextH,
+				reg: dest,
+				imm1: 0b011,
+				imm2: 0b11,
+			},
+
 			Self::Sh { base, offset, src } if
 				supported_extensions.contains(SupportedExtensions::ZCB) &&
 				base.is_compressible() &&
@@ -1646,6 +1978,17 @@ impl Instruction {
 				opcode: OpCodeC::Not,
 				reg: dest,
 				imm1: 0b101,
+				imm2: 0b11,
+			},
+
+			Self::ZextH { dest, src } if
+				supported_extensions.contains(SupportedExtensions::ZCB) &&
+				dest == src &&
+				dest.is_compressible()
+			=> RawInstruction::Zcb {
+				opcode: OpCodeC::ZextH,
+				reg: dest,
+				imm1: 0b010,
 				imm2: 0b11,
 			},
 
@@ -2241,6 +2584,7 @@ funct! {
 		Addw = 0b000,
 		And = 0b111,
 		Andi = 0b111,
+		Andn = 0b111,
 		BClr = 0b001,
 		BClri = 0b001,
 		BExt = 0b101,
@@ -2255,6 +2599,12 @@ funct! {
 		Bne = 0b001,
 		BSet = 0b001,
 		BSeti = 0b001,
+		Cpop = 0b001,
+		Cpopw = 0b001,
+		Clz = 0b001,
+		Clzw = 0b001,
+		Ctz = 0b001,
+		Ctzw = 0b001,
 		Csrrc = 0b011,
 		Csrrci = 0b111,
 		Csrrs = 0b010,
@@ -2273,10 +2623,25 @@ funct! {
 		Lhu = 0b101,
 		Lw = 0b010,
 		Lwu = 0b110,
+		Max = 0b110,
+		Maxu = 0b111,
+		Min = 0b100,
+		Minu = 0b101,
 		Or = 0b110,
+		OrcB = 0b101,
 		Ori = 0b110,
+		Orn = 0b110,
+		Rev8 = 0b101,
+		Rol = 0b001,
+		Rolw = 0b001,
+		Ror = 0b101,
+		Rori = 0b101,
+		Roriw = 0b101,
+		Rorw = 0b101,
 		Sb = 0b000,
 		Sd = 0b011,
+		SextB = 0b001,
+		SextH = 0b001,
 		Sh = 0b001,
 		Sh1add = 0b010,
 		Sh1adduw = 0b010,
@@ -2304,8 +2669,10 @@ funct! {
 		Sub = 0b000,
 		Subw = 0b000,
 		Sw = 0b010,
+		Xnor = 0b100,
 		Xor = 0b100,
 		Xori = 0b100,
+		ZextH = 0b100,
 	}
 }
 
@@ -2315,6 +2682,7 @@ funct! {
 		Adduw = 0b000_0100,
 		Addw = 0b000_0000,
 		And = 0b000_0000,
+		Andn = 0b010_0000,
 		BClr = 0b010_0100,
 		BClri = 0b010_0100,
 		BExt = 0b010_0100,
@@ -2323,9 +2691,31 @@ funct! {
 		BInvi = 0b011_0100,
 		BSet = 0b001_0100,
 		BSeti = 0b001_0100,
+		Cpop = 0b011_0000,
+		Cpopw = 0b011_0000,
+		Clz = 0b011_0000,
+		Clzw = 0b011_0000,
+		Ctz = 0b011_0000,
+		Ctzw = 0b011_0000,
 		CZeroEqz = 0b000_0111,
 		CZeroNez = 0b000_0111,
+		Max = 0b000_0101,
+		Maxu = 0b000_0101,
+		Min = 0b000_0101,
+		Minu = 0b000_0101,
 		Or = 0b000_0000,
+		OrcB = 0b001_0100,
+		Orn = 0b010_0000,
+		Rev8_32 = 0b011_0100,
+		Rev8_64 = 0b011_0101,
+		Rol = 0b011_0000,
+		Rolw = 0b011_0000,
+		Ror = 0b011_0000,
+		Rori = 0b011_0000,
+		Roriw = 0b011_0000,
+		Rorw = 0b011_0000,
+		SextB = 0b011_0000,
+		SextH = 0b011_0000,
 		Sh1add = 0b001_0000,
 		Sh1adduw = 0b001_0000,
 		Sh2add = 0b001_0000,
@@ -2349,7 +2739,9 @@ funct! {
 		Srlw = 0b000_0000,
 		Sub = 0b010_0000,
 		Subw = 0b010_0000,
+		Xnor = 0b010_0000,
 		Xor = 0b000_0000,
+		ZextH = 0b000_0100,
 	}
 }
 
@@ -2504,6 +2896,8 @@ opcodec! {
 		Sb = (C0, 0b100_010),
 		Sd = (C0, 0b111_000),
 		Sdsp = (C2, 0b111_000),
+		SextB = (C1, 0b100_111),
+		SextH = (C1, 0b100_111),
 		Sh = (C0, 0b100_011),
 		Slli = (C2, 0b000_000),
 		Srai = (C1, 0b100_001),
@@ -2514,6 +2908,7 @@ opcodec! {
 		Sub = (C1, 0b100_011),
 		Xor = (C1, 0b100_011),
 		ZextB = (C1, 0b100_111),
+		ZextH = (C1, 0b100_111),
 		ZextW = (C1, 0b100_111),
 	}
 }

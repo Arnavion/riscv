@@ -17,7 +17,7 @@ pub fn parse_program<'a>(
 ) -> impl Iterator<Item = Result<Instruction, ParseError<'a>>> {
 	program
 		.into_iter()
-		.flat_map(move |line| match Instruction::parse(line) {
+		.flat_map(move |line| match Instruction::parse(line, supported_extensions) {
 			Ok(Some(instruction)) => SmallIterator::One(Ok(instruction)),
 			Ok(None) => SmallIterator::Empty,
 			Err(_) => match pseudo_instruction::parse(line, supported_extensions) {
@@ -156,6 +156,8 @@ mod tests {
 			("andi a0, a1, -11", &[(0xf513, Some(0xff55))]),
 			("andi a0, a1, 11", &[(0xf513, Some(0x00b5))]),
 
+			("andn a0, a1, a2", &[(0xf533, Some(0x40c5))]),
+
 			("auipc a0, -11", &[(0x5517, Some(0xffff))]),
 			("auipc a0, 11", &[(0xb517, Some(0x0000))]),
 
@@ -232,6 +234,18 @@ mod tests {
 			("call a0, -20", &[(0x0517, Some(0x0000)), (0x0567, Some(0xfec5))]),
 			("call a0, 8", &[(0x0517, Some(0x0000)), (0x0567, Some(0x0085))]),
 
+			("clz a0, a1", &[(0x9513, Some(0x6005))]),
+
+			("clzw a0, a1", &[(0x951b, Some(0x6005))]),
+
+			("cpop a0, a1", &[(0x9513, Some(0x6025))]),
+
+			("cpopw a0, a1", &[(0x951b, Some(0x6025))]),
+
+			("ctz a0, a1", &[(0x9513, Some(0x6015))]),
+
+			("ctzw a0, a1", &[(0x951b, Some(0x6015))]),
+
 			("ebreak", &[(0x0073, Some(0x0010))]),
 
 			("ecall", &[(0x0073, Some(0x0000))]),
@@ -306,6 +320,14 @@ mod tests {
 			("lw a0, -11(a1)", &[(0xa503, Some(0xff55))]),
 			("lw a0, 11(a1)", &[(0xa503, Some(0x00b5))]),
 
+			("max a0, a1, a2", &[(0xe533, Some(0x0ac5))]),
+
+			("maxu a0, a1, a2", &[(0xf533, Some(0x0ac5))]),
+
+			("min a0, a1, a2", &[(0xc533, Some(0x0ac5))]),
+
+			("minu a0, a1, a2", &[(0xd533, Some(0x0ac5))]),
+
 			("mv a0, a1", &[(0x8513, Some(0x0005))]),
 
 			("neg a0, a1", &[(0x0533, Some(0x40b0))]),
@@ -321,12 +343,25 @@ mod tests {
 
 			("or a0, a1, a2", &[(0xe533, Some(0x00c5))]),
 
+			("orc.b a0, a1", &[(0xd513, Some(0x2875))]),
+
 			("ori a0, a1, -11", &[(0xe513, Some(0xff55))]),
 			("ori a0, a1, 11", &[(0xe513, Some(0x00b5))]),
+
+			("orn a0, a1, a2", &[(0xe533, Some(0x40c5))]),
 
 			("pause", &[(0x000f, Some(0x0100))]),
 
 			("ret", &[(0x8067, Some(0x0000))]),
+
+			("rev8 a0, a1", &[(0xd513, Some(0x6985))]),
+
+			("rol a0, a1, a2", &[(0x9533, Some(0x60c5))]),
+
+			("ror a0, a1, a2", &[(0xd533, Some(0x60c5))]),
+
+			("rori a0, a1, 11", &[(0xd513, Some(0x60b5))]),
+			("rori a0, a1, 31", &[(0xd513, Some(0x61f5))]),
 
 			("sb a0, -11(a1)", &[(0x8aa3, Some(0xfea5))]),
 			("sb a0, 11(a1)", &[(0x85a3, Some(0x00a5))]),
@@ -384,6 +419,8 @@ mod tests {
 
 			("tail -4", &[(0x0317, Some(0x0000)), (0x0067, Some(0xffc3))]),
 			("tail 8", &[(0x0317, Some(0x0000)), (0x0067, Some(0x0083))]),
+
+			("xnor a0, a1, a2", &[(0xc533, Some(0x40c5))]),
 
 			("xor a0, a1, a2", &[(0xc533, Some(0x00c5))]),
 
@@ -617,6 +654,72 @@ mod tests {
 	}
 
 	#[test]
+	fn full_uncompressed32_zbb() {
+		static TESTS: &[(&str, &[(u16, Option<u16>)])] = &[
+			("
+				sext.b a0, a1
+
+				sext.h a0, a1
+
+				zext.h a0, a1
+			", &[
+				(0x9513, Some(0x6045)),
+				(0x9513, Some(0x6055)),
+				(0xc533, Some(0x0805)),
+			]),
+		];
+		for &(input, expected) in TESTS {
+			let supported_extensions: crate::SupportedExtensions = crate::SupportedExtensions::RV32C_ZCB | crate::SupportedExtensions::ZBB;
+
+			std::eprintln!("{input}");
+
+			let actual =
+				super::parse_program(input.lines().map(str::as_bytes), supported_extensions)
+				.map(|i| -> Result<_, String> {
+					let i = i.map_err(|err| err.to_string())?;
+					let encoded = crate::Instruction::encode(i, supported_extensions).map_err(|err| err.to_string())?;
+					Ok(encoded)
+				})
+				.collect::<Result<Vec<_>, _>>()
+				.unwrap();
+			assert_eq!(expected[..], actual[..]);
+		}
+	}
+
+	#[test]
+	fn full_compressed32_zbb() {
+		static TESTS: &[(&str, &[(u16, Option<u16>)])] = &[
+			("
+				sext.b a0, a0
+
+				sext.h a0, a0
+
+				zext.h a0, a0
+			", &[
+				(0x9d65, None),
+				(0x9d6d, None),
+				(0x9d69, None),
+			]),
+		];
+		for &(input, expected) in TESTS {
+			let supported_extensions: crate::SupportedExtensions = crate::SupportedExtensions::RV32C_ZCB | crate::SupportedExtensions::ZBB;
+
+			std::eprintln!("{input}");
+
+			let actual =
+				super::parse_program(input.lines().map(str::as_bytes), supported_extensions)
+				.map(|i| -> Result<_, String> {
+					let i = i.map_err(|err| err.to_string())?;
+					let encoded = crate::Instruction::encode(i, supported_extensions).map_err(|err| err.to_string())?;
+					Ok(encoded)
+				})
+				.collect::<Result<Vec<_>, _>>()
+				.unwrap();
+			assert_eq!(expected[..], actual[..]);
+		}
+	}
+
+	#[test]
 	fn full_uncompressed64() {
 		static TESTS: &[(&str, &[(u16, Option<u16>)])] = &[
 			// Instructions
@@ -647,6 +750,15 @@ mod tests {
 			("lwu a0, 11(a1)", &[(0xe503, Some(0x00b5))]),
 
 			("negw a0, a1", &[(0x053b, Some(0x40b0))]),
+
+			("rolw a0, a1, a2", &[(0x953b, Some(0x60c5))]),
+
+			("rori a0, a1, 63", &[(0xd513, Some(0x63f5))]),
+
+			("roriw a0, a1, 11", &[(0xd51b, Some(0x60b5))]),
+			("roriw a0, a1, 31", &[(0xd51b, Some(0x61f5))]),
+
+			("rorw a0, a1, a2", &[(0xd53b, Some(0x60c5))]),
 
 			("sd a0, -11(a1)", &[(0xbaa3, Some(0xfea5))]),
 			("sd a0, 11(a1)", &[(0xb5a3, Some(0x00a5))]),
@@ -790,6 +902,21 @@ mod tests {
 
 			// b-ext.s
 			("
+				clz a0, a0
+				ctz a0, a0
+				cpop a0, a0
+				min a0, a1, a2
+				minu a0, a1, a2
+				max a0, a1, a2
+				maxu a0, a1, a2
+				andn a0, a1, a2
+				orn a0, a1, a2
+				xnor a0, a1, a2
+				rol a0, a1, a2
+				ror a0, a1, a2
+				rori a0, a1, 2
+				rev8 a0, a0
+				orc.b a0, a0
 				sh1add a0, a1, a2
 				sh2add a0, a1, a2
 				sh3add a0, a1, a2
@@ -806,6 +933,21 @@ mod tests {
 				binv a0, a1, a2
 				bext a0, a1, a2
 			", &[
+				(0x1513, 0x6005),
+				(0x1513, 0x6015),
+				(0x1513, 0x6025),
+				(0xc533, 0x0ac5),
+				(0xd533, 0x0ac5),
+				(0xe533, 0x0ac5),
+				(0xf533, 0x0ac5),
+				(0xf533, 0x40c5),
+				(0xe533, 0x40c5),
+				(0xc533, 0x40c5),
+				(0x9533, 0x60c5),
+				(0xd533, 0x60c5),
+				(0xd513, 0x6025),
+				(0x5513, 0x6985),
+				(0x5513, 0x2875),
 				(0xa533, 0x20c5),
 				(0xc533, 0x20c5),
 				(0xe533, 0x20c5),
@@ -1450,10 +1592,50 @@ mod tests {
 	}
 
 	#[test]
+	fn gas_uncompressed32_zbb() {
+		static TESTS: &[(&str, &[(u16, u16)])] = &[
+			// b-ext.s
+			("
+				sext.b a0, a0
+				sext.h a0, a0
+				zext.h a0, a0
+			", &[
+				(0x1513, 0x6045),
+				(0x1513, 0x6055),
+				(0x4533, 0x0805),
+			]),
+		];
+		for &(input, expected) in TESTS {
+			let supported_extensions: crate::SupportedExtensions = crate::SupportedExtensions::RV32I | crate::SupportedExtensions::ZBB;
+
+			std::eprintln!("{input}");
+
+			let expected = expected.iter().map(|&(lo, hi)| (lo, Some(hi))).collect::<Vec<_>>();
+			let actual =
+				super::parse_program(input.lines().map(str::as_bytes), supported_extensions)
+				.map(|i| -> Result<_, String> {
+					let i = i.map_err(|err| err.to_string())?;
+					let encoded = crate::Instruction::encode(i, supported_extensions).map_err(|err| err.to_string())?;
+					Ok(encoded)
+				})
+				.collect::<Result<Vec<_>, _>>()
+				.unwrap();
+			assert_eq!(expected[..], actual[..]);
+		}
+	}
+
+	#[test]
 	fn gas_uncompressed64() {
 		static TESTS: &[(&str, &[(u16, u16)])] = &[
 			// b-ext-64.s
 			("
+				rev8 a0, a0
+				clzw a0, a0
+				ctzw a0, a0
+				cpopw a0, a0
+				rolw a0, a1, a2
+				rorw a0, a1, a2
+				roriw a0, a1, 2
 				sh1add.uw a0, a1, a2
 				sh2add.uw a0, a1, a2
 				sh3add.uw a0, a1, a2
@@ -1465,6 +1647,13 @@ mod tests {
 				binvi a0, a1, 63
 				bexti a0, a1, 63
 			", &[
+				(0x5513, 0x6b85),
+				(0x151b, 0x6005),
+				(0x151b, 0x6015),
+				(0x151b, 0x6025),
+				(0x953b, 0x60c5),
+				(0xd53b, 0x60c5),
+				(0xd51b, 0x6025),
 				(0xa53b, 0x20c5),
 				(0xc53b, 0x20c5),
 				(0xe53b, 0x20c5),
@@ -1859,6 +2048,35 @@ mod tests {
 
 			std::eprintln!("{input}");
 
+			let actual =
+				super::parse_program(input.lines().map(str::as_bytes), supported_extensions)
+				.map(|i| -> Result<_, String> {
+					let i = i.map_err(|err| err.to_string())?;
+					let encoded = crate::Instruction::encode(i, supported_extensions).map_err(|err| err.to_string())?;
+					Ok(encoded)
+				})
+				.collect::<Result<Vec<_>, _>>()
+				.unwrap();
+			assert_eq!(expected[..], actual[..]);
+		}
+	}
+
+	#[test]
+	fn gas_uncompressed64_zbb() {
+		static TESTS: &[(&str, &[(u16, u16)])] = &[
+			// b-ext-64.s
+			("
+				zext.h a0, a0
+			", &[
+				(0x453b, 0x0805),
+			]),
+		];
+		for &(input, expected) in TESTS {
+			let supported_extensions: crate::SupportedExtensions = crate::SupportedExtensions::RV64I | crate::SupportedExtensions::ZBA | crate::SupportedExtensions::ZBB;
+
+			std::eprintln!("{input}");
+
+			let expected = expected.iter().map(|&(lo, hi)| (lo, Some(hi))).collect::<Vec<_>>();
 			let actual =
 				super::parse_program(input.lines().map(str::as_bytes), supported_extensions)
 				.map(|i| -> Result<_, String> {

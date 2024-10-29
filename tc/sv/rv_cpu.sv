@@ -106,6 +106,7 @@ module rv_cpu (
 	wire[4:0] opcode;
 	wire[2:0] funct3;
 	wire[6:0] funct7;
+	wire[4:0] funct5;
 	wire[32:0] imm;
 	wire[4:0] csrimm;
 	rv_mop_fusion mop_fusion (
@@ -122,7 +123,7 @@ module rv_cpu (
 		.insts_num_minus_one(insts_num_minus_one), .insts_len_half_minus_one(insts_len_half_minus_one),
 
 		.rd(rd), .rs1(rs1), .rs2(rs2), .csr(csr),
-		.opcode(opcode), .funct3(funct3), .funct7(funct7),
+		.opcode(opcode), .funct3(funct3), .funct7(funct7), .funct5(funct5),
 		.imm(imm), .csrimm(csrimm)
 	);
 
@@ -131,7 +132,7 @@ module rv_cpu (
 	wire alu_sigill;
 	wire[2:0] ram_address_lo;
 	rv_alu alu (
-		.opcode(opcode), .funct3(funct3), .funct7(funct7),
+		.opcode(opcode), .funct3(funct3), .funct7(funct7), .funct5(funct5),
 		.rs1(rs1_load_value), .rs2(rs2_load_value), .imm_(imm), .csrimm_(csrimm),
 		.pc(pc), .pcnext_in(pc + 63'(insts_len_half_minus_one) + 63'b1),
 		.ram_load_value(ram_load_value_), .csr_load_value(csr_load_value),

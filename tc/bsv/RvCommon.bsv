@@ -46,6 +46,8 @@ typedef union tagged {
 	struct { LoadOp op; XReg rd; rs1_src base; Int#(32) offset; } Load;
 
 	struct { StoreOp op; rs1_src base; rs2_src value; Int#(32) offset; } Store;
+
+	struct { UnaryOp op; XReg rd; rs1_src rs; } Unary;
 } Instruction#(type rs1_src, type rs2_src, type csr_src);
 
 typedef enum {
@@ -53,13 +55,23 @@ typedef enum {
 	AddUw,
 	Addw,
 	And,
+	Andn,
 	Bclr,
 	Bext,
 	Binv,
 	Bset,
 	CzeroEqz,
 	CzeroNez,
+	Max,
+	Maxu,
+	Min,
+	Minu,
 	Or,
+	Orn,
+	Rol,
+	Rolw,
+	Ror,
+	Rorw,
 	Sh1add,
 	Sh1addUw,
 	Sh2add,
@@ -77,6 +89,7 @@ typedef enum {
 	Srlw,
 	Sub,
 	Subw,
+	Xnor,
 	Xor
 } BinaryOp deriving(Bits);
 
@@ -117,6 +130,20 @@ typedef enum {
 	DoubleWord
 } StoreOp deriving(Bits);
 
+typedef enum {
+	Clz,
+	Clzw,
+	Cpop,
+	Cpopw,
+	Ctz,
+	Ctzw,
+	OrcB,
+	Rev8,
+	SextB,
+	SextH,
+	ZextH
+} UnaryOp deriving(Bits);
+
 // Raw binary representation of instructions, to ensure that fields remain at constant offsets across all ops.
 typedef struct {
 	RawOp op;
@@ -138,6 +165,7 @@ typedef union tagged {
 	void Li;
 	LoadOp Load;
 	StoreOp Store;
+	UnaryOp Unary;
 } RawOp deriving(Bits);
 
 instance Bits#(Instruction#(rs1_src, rs2_src, csr_src), inst_len)
@@ -227,6 +255,12 @@ provisos (
 				result.rs2 = pack(value);
 				result.imm = offset;
 			end
+
+			tagged Unary { op: .op, rd: .rd, rs: .rs }: begin
+				result.op = tagged Unary op;
+				result.rd = rd;
+				result.rs1 = { ?, pack(rs) };
+			end
 		endcase
 
 		return pack(result);
@@ -300,6 +334,12 @@ provisos (
 				base: rs1,
 				value: rs2,
 				offset: inst.imm
+			};
+
+			tagged Unary .op: return tagged Unary {
+				op: op,
+				rd: inst.rd,
+				rs: rs1
 			};
 		endcase
 	endfunction

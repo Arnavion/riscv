@@ -97,6 +97,12 @@ module mkRvRegisters(RvRegisters);
 				value: load_x_reg(x_regs, value),
 				offset: offset
 			};
+
+			tagged Unary { op: .op, rd: .rd, rs: .rs }: return tagged Unary {
+				op: op,
+				rd: rd,
+				rs: x_regs[rs]
+			};
 		endcase
 	endmethod
 
@@ -155,7 +161,7 @@ function Int#(64) load_csr(Reg#(Int#(64)) csr_cycle, Reg#(Int#(64)) csr_instret,
 			1'b0, // E
 			1'b0, // D
 			1'b1, // C
-			1'b0, // B
+			1'b1, // B
 			1'b0  // A
 		});
 		12'hc00: return csr_cycle;

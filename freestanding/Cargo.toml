@@ -22,6 +22,7 @@ warnings = "deny"
 [lints.clippy]
 all = { level = "deny", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
+let_and_return = "allow"
 similar_names = "allow"
 
 
