@@ -180,6 +180,27 @@ module mkRvDecompressorPriority#(parameter Bool rv64)(RvDecompressor);
 		);
 	endrule
 
+	rule sext_b_sext_h(in[15:0] matches 16'b100_111_???_11_0?1_01);
+		out <= type_i_(
+			OpCode_OpImm,
+			{ 2'b01, in[9:7] },
+			3'b001,
+			{ 2'b01, in[9:7] },
+			{ 11'b01100000010, in[3] }
+		);
+	endrule
+
+	rule zext_h(in[15:0] matches 16'b100_111_???_11_010_01);
+		out <= type_r_(
+			rv64 ? OpCode_Op32 : OpCode_Op,
+			{ 2'b01, in[9:7] },
+			3'b100,
+			{ 2'b01, in[9:7] },
+			5'b00000,
+			7'b0000100
+		);
+	endrule
+
 	rule zext_w(rv64 &&& in[15:0] matches 16'b100_111_???_11_100_01);
 		out <= type_r_(
 			OpCode_Op32,
