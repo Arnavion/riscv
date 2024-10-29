@@ -321,6 +321,7 @@ module rv_alu (
 	input bit[4:0] opcode,
 	input bit[2:0] funct3,
 	input bit[6:0] funct7,
+	input bit[4:0] funct5,
 	input logic[63:0] rs1,
 	input logic[63:0] rs2,
 	input logic[63:0] imm,
@@ -349,6 +350,12 @@ module rv_alu (
 
 	wire[63:0] rs1_sh3 = {rs1[0+:61], 3'b0};
 
+	wire[63:0] rs1sb = {{56{rs1[7]}}, rs1[0+:8]};
+
+	wire[63:0] rs1sh = {{48{rs1[15]}}, rs1[0+:16]};
+
+	wire[63:0] rs1uh = {48'b0, rs1[0+:16]};
+
 	wire[63:0] rs1uw = {32'b0, rs1[0+:32]};
 
 	wire[63:0] rs1uw_sh1 = {rs1uw[0+:63], 1'b0};
@@ -359,6 +366,12 @@ module rv_alu (
 
 	wire[63:0] rs1w = {{32{rs1[31]}}, rs1[0+:32]};
 
+	wire[63:0] rs1_rev8_b;
+	rev8_b rs1_rev8_b_module (rs1, rs1_rev8_b);
+
+	wire[63:0] rs1uw_rev8_b;
+	rev8_b rs1uw_rev8_b_module (rs1uw, rs1uw_rev8_b);
+
 	wire[63:0] rs2_decoded = 64'b1 << rs2[0+:6];
 
 	wire[63:0] imm_decoded = 64'b1 << imm[0+:6];
@@ -367,6 +380,7 @@ module rv_alu (
 	logic[63:0] in2;
 	logic[63:0] in3;
 	logic[63:0] in4;
+	logic[63:0] in5;
 
 	logic adder_cin;
 	wire[63:0] adder_add;
@@ -391,6 +405,22 @@ module rv_alu (
 	wire[63:0] shift_sra;
 	shift shift_module (in3, in4[0+:6], shift_sll, shift_sllw, shift_srl, shift_sra);
 
+	wire[63:0] rotate_rol;
+	wire[63:0] rotate_rolw;
+	wire[63:0] rotate_ror;
+	wire[63:0] rotate_rorw;
+	rotate rotate_module (in3, in4[0+:6], rotate_rol, rotate_rolw, rotate_ror, rotate_rorw);
+
+	wire[63:0] popcnt_cpop;
+	wire[63:0] popcnt_cpopw;
+	popcnt popcnt_module (in5, popcnt_cpop, popcnt_cpopw);
+
+	wire[63:0] rs1_orc_b;
+	orc_b orc_b_module (rs1, rs1_orc_b);
+
+	wire[63:0] rs1_rev8;
+	rev8 rev8_module (rs1, rs1_rev8);
+
 	always_comb begin
 		sigill = '0;
 
@@ -411,54 +441,55 @@ module rv_alu (
 		in2 = 'x;
 		in3 = 'x;
 		in4 = 'x;
+		in5 = 'x;
 		adder_cin = '0;
 		cmp_signed = 'x;
 
-		unique casez ({ opcode, funct3, funct7 })
+		unique casez ({ opcode, funct3, funct7, funct5 })
 			// I
 
 			// auipc
-			{15'b00101_???_???????}: begin
+			{20'b00101_???_???????_?????}: begin
 				in1 = pc;
 				in2 = imm;
 				rd = adder_add;
 			end
 
 			// lui
-			{15'b01101_???_???????}: begin
+			{20'b01101_???_???????_?????}: begin
 				rd = imm;
 			end
 
 			// addi
-			{15'b00100_000_???????}: begin
+			{20'b00100_000_???????_?????}: begin
 				in1 = rs1;
 				in2 = imm;
 				rd = adder_add;
 			end
 
 			// addiw
-			{15'b00110_000_???????}: begin
+			{20'b00110_000_???????_?????}: begin
 				in1 = rs1;
 				in2 = imm;
 				rd = adder_addw;
 			end
 
 			// add
-			{15'b01100_000_0000000}: begin
+			{20'b01100_000_0000000_?????}: begin
 				in1 = rs1;
 				in2 = rs2;
 				rd = adder_add;
 			end
 
 			// addw
-			{15'b01110_000_0000000}: begin
+			{20'b01110_000_0000000_?????}: begin
 				in1 = rs1;
 				in2 = rs2;
 				rd = adder_addw;
 			end
 
 			// sub
-			{15'b01100_000_0100000}: begin
+			{20'b01100_000_0100000_?????}: begin
 				in1 = rs1;
 				in2 = ~rs2;
 				adder_cin = '1;
@@ -466,7 +497,7 @@ module rv_alu (
 			end
 
 			// subw
-			{15'b01110_000_0100000}: begin
+			{20'b01110_000_0100000_?????}: begin
 				in1 = rs1;
 				in2 = ~rs2;
 				adder_cin = '1;
@@ -474,7 +505,7 @@ module rv_alu (
 			end
 
 			// slti
-			{15'b00100_010_???????}: begin
+			{20'b00100_010_???????_?????}: begin
 				in3 = rs1;
 				in4 = imm;
 				cmp_signed = '1;
@@ -482,7 +513,7 @@ module rv_alu (
 			end
 
 			// sltiu
-			{15'b00100_011_???????}: begin
+			{20'b00100_011_???????_?????}: begin
 				in3 = rs1;
 				in4 = imm;
 				cmp_signed = '0;
@@ -490,56 +521,56 @@ module rv_alu (
 			end
 
 			// xori
-			{15'b00100_100_???????}: begin
+			{20'b00100_100_???????_?????}: begin
 				in3 = rs1;
 				in4 = imm;
 				rd = logical_xor;
 			end
 
 			// ori
-			{15'b00100_110_???????}: begin
+			{20'b00100_110_???????_?????}: begin
 				in3 = rs1;
 				in4 = imm;
 				rd = logical_or;
 			end
 
 			// andi
-			{15'b00100_111_???????}: begin
+			{20'b00100_111_???????_?????}: begin
 				in3 = rs1;
 				in4 = imm;
 				rd = logical_and;
 			end
 
 			// slli
-			{15'b00100_001_000000?}: begin
+			{20'b00100_001_000000?_?????}: begin
 				in3 = rs1;
 				in4 = {58'b0, imm[0+:6]};
 				rd = shift_sll;
 			end
 
 			// slliw
-			{15'b00110_001_0000000}: begin
+			{20'b00110_001_0000000_?????}: begin
 				in3 = rs1;
 				in4 = {59'b0, imm[0+:5]};
 				rd = shift_sllw;
 			end
 
 			// sll
-			{15'b01100_001_0000000}: begin
+			{20'b01100_001_0000000_?????}: begin
 				in3 = rs1;
 				in4 = {58'b0, rs2[0+:6]};
 				rd = shift_sll;
 			end
 
 			// sllw
-			{15'b01110_001_0000000}: begin
+			{20'b01110_001_0000000_?????}: begin
 				in3 = rs1;
 				in4 = {59'b0, rs2[0+:5]};
 				rd = shift_sllw;
 			end
 
 			// slt
-			{15'b01100_010_0000000}: begin
+			{20'b01100_010_0000000_?????}: begin
 				in3 = rs1;
 				in4 = rs2;
 				cmp_signed = '1;
@@ -547,7 +578,7 @@ module rv_alu (
 			end
 
 			// sltu
-			{15'b01100_011_0000000}: begin
+			{20'b01100_011_0000000_?????}: begin
 				in3 = rs1;
 				in4 = rs2;
 				cmp_signed = '0;
@@ -555,84 +586,84 @@ module rv_alu (
 			end
 
 			// xor
-			{15'b01100_100_0000000}: begin
+			{20'b01100_100_0000000_?????}: begin
 				in3 = rs1;
 				in4 = rs2;
 				rd = logical_xor;
 			end
 
 			// srli
-			{15'b00100_101_000000?}: begin
+			{20'b00100_101_000000?_?????}: begin
 				in3 = rs1;
 				in4 = {58'b0, imm[0+:6]};
 				rd = shift_srl;
 			end
 
 			// srliw
-			{15'b00110_101_0000000}: begin
+			{20'b00110_101_0000000_?????}: begin
 				in3 = rs1uw;
 				in4 = {59'b0, imm[0+:5]};
 				rd = shift_srl;
 			end
 
 			// srl
-			{15'b01100_101_0000000}: begin
+			{20'b01100_101_0000000_?????}: begin
 				in3 = rs1;
 				in4 = {58'b0, rs2[0+:6]};
 				rd = shift_srl;
 			end
 
 			// srlw
-			{15'b01110_101_0000000}: begin
+			{20'b01110_101_0000000_?????}: begin
 				in3 = rs1uw;
 				in4 = {59'b0, rs2[0+:5]};
 				rd = shift_srl;
 			end
 
 			// or
-			{15'b01100_110_0000000}: begin
+			{20'b01100_110_0000000_?????}: begin
 				in3 = rs1;
 				in4 = rs2;
 				rd = logical_or;
 			end
 
 			// and
-			{15'b01100_111_0000000}: begin
+			{20'b01100_111_0000000_?????}: begin
 				in3 = rs1;
 				in4 = rs2;
 				rd = logical_and;
 			end
 
 			// srai
-			{15'b00100_101_010000?}: begin
+			{20'b00100_101_010000?_?????}: begin
 				in3 = rs1;
 				in4 = {58'b0, imm[0+:6]};
 				rd = shift_sra;
 			end
 
 			// sraiw
-			{15'b00110_101_0100000}: begin
+			{20'b00110_101_0100000_?????}: begin
 				in3 = rs1w;
 				in4 = {59'b0, imm[0+:5]};
 				rd = shift_sra;
 			end
 
 			// sra
-			{15'b01100_101_0100000}: begin
+			{20'b01100_101_0100000_?????}: begin
 				in3 = rs1;
 				in4 = {58'b0, rs2[0+:6]};
 				rd = shift_sra;
 			end
 
 			// sraw
-			{15'b01110_101_0100000}: begin
+			{20'b01110_101_0100000_?????}: begin
 				in3 = rs1w;
 				in4 = {59'b0, rs2[0+:5]};
 				rd = shift_sra;
 			end
 
 			// jalr
-			{15'b11001_???_???????}: begin
+			{20'b11001_???_???????_?????}: begin
 				in1 = rs1;
 				in2 = imm;
 				rd = pcnext_in;
@@ -640,7 +671,7 @@ module rv_alu (
 			end
 
 			// jal
-			{15'b11011_???_???????}: begin
+			{20'b11011_???_???????_?????}: begin
 				in1 = pc;
 				in2 = imm;
 				rd = pcnext_in;
@@ -648,7 +679,7 @@ module rv_alu (
 			end
 
 			// beq
-			{15'b11000_000_???????}: begin
+			{20'b11000_000_???????_?????}: begin
 				in1 = pc;
 				in2 = imm;
 				in3 = rs1;
@@ -658,7 +689,7 @@ module rv_alu (
 			end
 
 			// bne
-			{15'b11000_001_???????}: begin
+			{20'b11000_001_???????_?????}: begin
 				in1 = pc;
 				in2 = imm;
 				in3 = rs1;
@@ -668,7 +699,7 @@ module rv_alu (
 			end
 
 			// blt
-			{15'b11000_100_???????}: begin
+			{20'b11000_100_???????_?????}: begin
 				in1 = pc;
 				in2 = imm;
 				in3 = rs1;
@@ -679,7 +710,7 @@ module rv_alu (
 			end
 
 			// bge
-			{15'b11000_101_???????}: begin
+			{20'b11000_101_???????_?????}: begin
 				in1 = pc;
 				in2 = imm;
 				in3 = rs1;
@@ -690,7 +721,7 @@ module rv_alu (
 			end
 
 			// bltu
-			{15'b11000_110_???????}: begin
+			{20'b11000_110_???????_?????}: begin
 				in1 = pc;
 				in2 = imm;
 				in3 = rs1;
@@ -701,7 +732,7 @@ module rv_alu (
 			end
 
 			// bgeu
-			{15'b11000_111_???????}: begin
+			{20'b11000_111_???????_?????}: begin
 				in1 = pc;
 				in2 = imm;
 				in3 = rs1;
@@ -711,13 +742,13 @@ module rv_alu (
 					pcnext_out = adder_add;
 			end
 
-			{15'b00000_000_???????}, // lb
-			{15'b00000_001_???????}, // lh
-			{15'b00000_010_???????}, // lw
-			{15'b00000_011_???????}, // ld
-			{15'b00000_100_???????}, // lbu
-			{15'b00000_101_???????}, // lhu
-			{15'b00000_110_???????}  // lwu
+			{20'b00000_000_???????_?????}, // lb
+			{20'b00000_001_???????_?????}, // lh
+			{20'b00000_010_???????_?????}, // lw
+			{20'b00000_011_???????_?????}, // ld
+			{20'b00000_100_???????_?????}, // lbu
+			{20'b00000_101_???????_?????}, // lhu
+			{20'b00000_110_???????_?????}  // lwu
 			: begin
 				in1 = rs1;
 				in2 = imm;
@@ -727,10 +758,10 @@ module rv_alu (
 				ram_address = adder_add;
 			end
 
-			{15'b01000_000_???????}, // sb
-			{15'b01000_001_???????}, // sh
-			{15'b01000_010_???????}, // sw
-			{15'b01000_011_???????}  // sd
+			{20'b01000_000_???????_?????}, // sb
+			{20'b01000_001_???????_?????}, // sh
+			{20'b01000_010_???????_?????}, // sw
+			{20'b01000_011_???????_?????}  // sd
 			: begin
 				in1 = rs1;
 				in2 = imm;
@@ -743,14 +774,14 @@ module rv_alu (
 			// Zicond
 
 			// czero.eqz
-			{15'b01100_101_0000111}: begin
+			{20'b01100_101_0000111_?????}: begin
 				in3 = '0;
 				in4 = rs2;
 				rd = cmp_out_eq ? '0 : rs1;
 			end
 
 			// czero.nez
-			{15'b01100_111_0000111}: begin
+			{20'b01100_111_0000111_?????}: begin
 				in3 = '0;
 				in4 = rs2;
 				rd = cmp_out_ne ? '0 : rs1;
@@ -760,7 +791,7 @@ module rv_alu (
 			// Zicsr
 
 			// csrrw
-			{15'b11100_001_???????}: begin
+			{20'b11100_001_???????_?????}: begin
 				rd = csr_load_value;
 				csr_load = ~rd_is_x0;
 				csr_store = '1;
@@ -768,7 +799,7 @@ module rv_alu (
 			end
 
 			// csrrs
-			{15'b11100_010_???????}: begin
+			{20'b11100_010_???????_?????}: begin
 				in3 = csr_load_value;
 				in4 = rs1;
 				rd = csr_load_value;
@@ -778,7 +809,7 @@ module rv_alu (
 			end
 
 			// csrrc
-			{15'b11100_011_???????}: begin
+			{20'b11100_011_???????_?????}: begin
 				in3 = csr_load_value;
 				in4 = ~rs1;
 				rd = csr_load_value;
@@ -788,7 +819,7 @@ module rv_alu (
 			end
 
 			// csrrwi
-			{15'b11100_101_???????}: begin
+			{20'b11100_101_???????_?????}: begin
 				rd = csr_load_value;
 				csr_load = ~rd_is_x0;
 				csr_store = '1;
@@ -796,7 +827,7 @@ module rv_alu (
 			end
 
 			// csrrsi
-			{15'b11100_110_???????}: begin
+			{20'b11100_110_???????_?????}: begin
 				in3 = csr_load_value;
 				in4 = csrimm;
 				rd = csr_load_value;
@@ -806,7 +837,7 @@ module rv_alu (
 			end
 
 			// csrrci
-			{15'b11100_111_???????}: begin
+			{20'b11100_111_???????_?????}: begin
 				in3 = csr_load_value;
 				in4 = ~csrimm;
 				rd = csr_load_value;
@@ -819,115 +850,290 @@ module rv_alu (
 			// Zba
 
 			// add.uw
-			{15'b01110_000_0000100}: begin
+			{20'b01110_000_0000100_?????}: begin
 				in1 = rs1uw;
 				in2 = rs2;
 				rd = adder_addw;
 			end
 
 			// sh1add
-			{15'b01100_010_0010000}: begin
+			{20'b01100_010_0010000_?????}: begin
 				in1 = rs1_sh1;
 				in2 = rs2;
 				rd = adder_add;
 			end
 
 			// sh1add.uw
-			{15'b01110_010_0010000}: begin
+			{20'b01110_010_0010000_?????}: begin
 				in1 = rs1uw_sh1;
 				in2 = rs2;
 				rd = adder_addw;
 			end
 
 			// sh2add
-			{15'b01100_100_0010000}: begin
+			{20'b01100_100_0010000_?????}: begin
 				in1 = rs1_sh2;
 				in2 = rs2;
 				rd = adder_add;
 			end
 
 			// sh2add.uw
-			{15'b01110_100_0010000}: begin
+			{20'b01110_100_0010000_?????}: begin
 				in1 = rs1uw_sh2;
 				in2 = rs2;
 				rd = adder_addw;
 			end
 
 			// sh3add
-			{15'b01100_110_0010000}: begin
+			{20'b01100_110_0010000_?????}: begin
 				in1 = rs1_sh3;
 				in2 = rs2;
 				rd = adder_add;
 			end
 
 			// sh3add.uw
-			{15'b01110_110_0010000}: begin
+			{20'b01110_110_0010000_?????}: begin
 				in1 = rs1uw_sh3;
 				in2 = rs2;
 				rd = adder_addw;
 			end
 
 			// slli.uw
-			{15'b00110_001_000010?}: begin
+			{20'b00110_001_000010?_?????}: begin
 				in3 = rs1uw;
 				in4 = {58'b0, imm[0+:6]};
 				rd = shift_sll;
 			end
 
 
+			// Zbb
+
+			// xnor
+			{20'b01100_100_0100000_?????}: begin
+				in3 = rs1;
+				in4 = ~rs2;
+				rd = logical_xor;
+			end
+
+			// orn
+			{20'b01100_110_0100000_?????}: begin
+				in3 = rs1;
+				in4 = ~rs2;
+				rd = logical_or;
+			end
+
+			// andn
+			{20'b01100_111_0100000_?????}: begin
+				in3 = rs1;
+				in4 = ~rs2;
+				rd = logical_and;
+			end
+
+			// clz
+			{20'b00100_001_0110000_00000}: begin
+				in1 = rs1_rev8_b;
+				in2 = 64'(-1);
+				in3 = adder_add;
+				in4 = ~in1;
+				in5 = logical_and;
+				rd = popcnt_cpop;
+			end
+
+			// clzw
+			{20'b00110_001_0110000_00000}: begin
+				in1 = rs1uw_rev8_b;
+				in2 = 64'(-1);
+				in3 = adder_add;
+				in4 = ~in1;
+				in5 = logical_and;
+				rd = popcnt_cpopw;
+			end
+
+			// ctz
+			{20'b00100_001_0110000_00001}: begin
+				in1 = rs1;
+				in2 = 64'(-1);
+				in3 = adder_add;
+				in4 = ~in1;
+				in5 = logical_and;
+				rd = popcnt_cpop;
+			end
+
+			// ctzw
+			{20'b00110_001_0110000_00001}: begin
+				in1 = rs1uw;
+				in2 = 64'(-1);
+				in3 = adder_add;
+				in4 = ~in1;
+				in5 = logical_and;
+				rd = popcnt_cpopw;
+			end
+
+			// cpop
+			{20'b00100_001_0110000_00010}: begin
+				in5 = rs1;
+				rd = popcnt_cpop;
+			end
+
+			// cpopw
+			{20'b00110_001_0110000_00010}: begin
+				in5 = rs1uw;
+				rd = popcnt_cpop;
+			end
+
+			// min
+			{20'b01100_100_0000101_?????}: begin
+				in3 = rs1;
+				in4 = rs2;
+				cmp_signed = '1;
+				rd = cmp_out_lt ? rs1 : rs2;
+			end
+
+			// minu
+			{20'b01100_101_0000101_?????}: begin
+				in3 = rs1;
+				in4 = rs2;
+				cmp_signed = '0;
+				rd = cmp_out_lt ? rs1 : rs2;
+			end
+
+			// max
+			{20'b01100_110_0000101_?????}: begin
+				in3 = rs1;
+				in4 = rs2;
+				cmp_signed = '1;
+				rd = cmp_out_lt ? rs2 : rs1;
+			end
+
+			// maxu
+			{20'b01100_111_0000101_?????}: begin
+				in3 = rs1;
+				in4 = rs2;
+				cmp_signed = '0;
+				rd = cmp_out_lt ? rs2 : rs1;
+			end
+
+			// zext.h
+			{20'b01110_100_0000100_00000}: begin
+				rd = rs1uh;
+			end
+
+			// sext.b
+			{20'b00100_001_0110000_00100}: begin
+				rd = rs1sb;
+			end
+
+			// sext.h
+			{20'b00100_001_0110000_00101}: begin
+				rd = rs1sh;
+			end
+
+			// rol
+			{20'b01100_001_0110000_?????}: begin
+				in3 = rs1;
+				in4 = {58'b0, rs2[0+:6]};
+				rd = rotate_rol;
+			end
+
+			// rolw
+			{20'b01110_001_0110000_?????}: begin
+				in3 = {rs1uw[0+:32], rs1uw[0+:32]};
+				in4 = {59'b0, rs2[0+:5]};
+				rd = rotate_rolw;
+			end
+
+			// rori
+			{20'b00100_101_011000?_?????}: begin
+				in3 = rs1;
+				in4 = {58'b0, imm[0+:6]};
+				rd = rotate_ror;
+			end
+
+			// roriw
+			{20'b00110_101_0110000_?????}: begin
+				in3 = {rs1uw[0+:32], rs1uw[0+:32]};
+				in4 = {59'b0, imm[0+:5]};
+				rd = rotate_rorw;
+			end
+
+			// ror
+			{20'b01100_101_0110000_?????}: begin
+				in3 = rs1;
+				in4 = {58'b0, rs2[0+:6]};
+				rd = rotate_ror;
+			end
+
+			// rorw
+			{20'b01110_101_0110000_?????}: begin
+				in3 = {rs1uw[0+:32], rs1uw[0+:32]};
+				in4 = {59'b0, rs2[0+:5]};
+				rd = rotate_rorw;
+			end
+
+			// orc.b
+			{20'b00100_101_0010100_00111}: begin
+				rd = rs1_orc_b;
+			end
+
+			// rev8
+			{20'b00100_101_0110101_11000}: begin
+				rd = rs1_rev8;
+			end
+
+
 			// Zbs
 
 			// bseti
-			{15'b00100_001_001010?}: begin
+			{20'b00100_001_001010?_?????}: begin
 				in3 = rs1;
 				in4 = imm_decoded;
 				rd = logical_or;
 			end
 
 			// bset
-			{15'b01100_001_0010100}: begin
+			{20'b01100_001_0010100_?????}: begin
 				in3 = rs1;
 				in4 = rs2_decoded;
 				rd = logical_or;
 			end
 
 			// bclri
-			{15'b00100_001_010010?}: begin
+			{20'b00100_001_010010?_?????}: begin
 				in3 = rs1;
 				in4 = ~imm_decoded;
 				rd = logical_and;
 			end
 
 			// bclr
-			{15'b01100_001_0100100}: begin
+			{20'b01100_001_0100100_?????}: begin
 				in3 = rs1;
 				in4 = ~rs2_decoded;
 				rd = logical_and;
 			end
 
 			// bexti
-			{15'b00100_101_011010?}: begin
+			{20'b00100_101_011010?_?????}: begin
 				in3 = rs1;
 				in4 = imm;
 				rd = {63'b0, shift_srl[0]};
 			end
 
 			// bext
-			{15'b01100_101_0110100}: begin
+			{20'b01100_101_0110100_?????}: begin
 				in3 = rs1;
 				in4 = rs2;
 				rd = {63'b0, shift_srl[0]};
 			end
 
 			// binvi
-			{15'b00100_001_011010?}: begin
+			{20'b00100_001_011010?_?????}: begin
 				in3 = rs1;
 				in4 = imm_decoded;
 				rd = logical_xor;
 			end
 
 			// binv
-			{15'b01100_001_0110100}: begin
+			{20'b01100_001_0110100_?????}: begin
 				in3 = rs1;
 				in4 = rs2_decoded;
 				rd = logical_xor;
@@ -1088,4 +1294,86 @@ module shift (
 	assign sllw = {{32{sll[31]}}, sll[0+:32]};
 	assign srl = value >> shamt;
 	assign sra = unsigned'((signed'(value)) >>> shamt);
+endmodule
+
+module rotate (
+	input bit[63:0] value,
+	input bit[5:0] shamt,
+
+	output bit[63:0] rol,
+	output bit[63:0] rolw,
+	output bit[63:0] ror,
+	output bit[63:0] rorw
+);
+	assign rol = (value << shamt) | (value >> (-shamt));
+	assign rolw = {{32{rol[31]}}, rol[0+:32]};
+	assign ror = (value >> shamt) | (value << (-shamt));
+	assign rorw = {{32{ror[31]}}, ror[0+:32]};
+endmodule
+
+module popcnt (
+	input bit[63:0] arg,
+
+	output bit[63:0] cpop,
+	output bit[63:0] cpopw
+);
+	bit[6:0] sum;
+	always_comb begin
+		sum = '0;
+		for (int i = 0; i < 64; i = i + 1) begin
+			sum = sum + {6'b0, arg[i]};
+		end
+		cpop = {57'b0, sum};
+		cpopw = {58'b0, sum[6], sum[0+:5]};
+	end
+endmodule
+
+module orc_b (
+	input bit[63:0] arg,
+
+	output bit[63:0] out
+);
+	always_comb begin
+		for (int i = 0; i < 64; i = i + 8) begin
+			out[i+:8] = arg[i+:8] == '0 ? '0 : 8'(-1);
+		end
+	end
+endmodule
+
+module rev8 (
+	input bit[63:0] arg,
+
+	output bit[63:0] out
+);
+	always_comb begin
+		for (int i = 0; i < 64; i = i + 8) begin
+			out[i+:8] = arg[(56 - i)+:8];
+		end
+	end
+endmodule
+
+module rev_b (
+	input bit[63:0] arg,
+
+	output bit[63:0] out
+);
+	always_comb begin
+		for (int i = 0; i < 64; i = i + 8) begin
+			for (int j = 0; j < 8; j = j + 1) begin
+				out[i + j] = arg[i + 7 - j];
+			end
+		end
+	end
+endmodule
+
+module rev8_b (
+	input bit[63:0] arg,
+
+	output bit[63:0] out
+);
+	always_comb begin
+		for (int i = 0; i < 64; i = i + 1) begin
+			out[i] = arg[63 - i];
+		end
+	end
 endmodule

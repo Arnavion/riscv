@@ -24,7 +24,9 @@ test:
 	for bitness in '--32' '--64'; do \
 		for compress in 'false' 'true' 'Zcb'; do \
 			for zba in '' '--zba'; do \
-				for f in tc/*.S; do cargo run --bin riscv -- $$bitness "--compress=$$compress" $$zba "$$f" >/dev/null || exit 1; done; \
+				for zbb in '' '--zbb'; do \
+					for f in tc/*.S; do cargo run --bin riscv -- $$bitness "--compress=$$compress" $$zba $$zbb "$$f" >/dev/null || exit 1; done; \
+				done; \
 			done; \
 		done; \
 	done
