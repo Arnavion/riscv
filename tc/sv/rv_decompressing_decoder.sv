@@ -521,6 +521,45 @@ module rv_decompressing_decoder #(
 							imm[31+:xlen - 31] = {(xlen - 31){1'b0}};
 						end
 
+						// sext.b
+						3'b001: begin
+							opcode = 5'b00100;
+							funct3 = 3'b001;
+							funct7 = 7'b0110000;
+							funct5 = 5'b00100;
+							rd = {2'b01, in[7+:3]};
+							rd_enable = '1;
+							rs1 = {2'b01, in[7+:3]};
+							rs1_enable = '1;
+							rs2_enable = '0;
+						end
+
+						// zext.h
+						3'b010: begin
+							opcode = rv64 ? 5'b01110 : 5'b01100;
+							funct3 = 3'b100;
+							funct7 = 7'b0000100;
+							funct5 = 5'b00000;
+							rd = {2'b01, in[7+:3]};
+							rd_enable = '1;
+							rs1 = {2'b01, in[7+:3]};
+							rs1_enable = '1;
+							rs2_enable = '0;
+						end
+
+						// sext.h
+						3'b011: begin
+							opcode = 5'b00100;
+							funct3 = 3'b001;
+							funct7 = 7'b0110000;
+							funct5 = 5'b00101;
+							rd = {2'b01, in[7+:3]};
+							rd_enable = '1;
+							rs1 = {2'b01, in[7+:3]};
+							rs1_enable = '1;
+							rs2_enable = '0;
+						end
+
 						// zext.w
 						3'b100: if (rv64) begin
 							opcode = 5'b01110;
