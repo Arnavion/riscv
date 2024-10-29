@@ -529,6 +529,60 @@ module rv_decompressing_decoder #(
 								imm[20+:12] = 12'b000000000000;
 							end
 
+							// sext.b
+							3'b001: begin
+								opcode = OpCode_OpImm;
+								funct3 = 3'b001;
+								funct7 = 7'b0110000;
+
+								rd = {2'b01, in[7+:3]};
+								rs1 = {2'b01, in[7+:3]};
+								rs2 = 5'b00000;
+								csr_load = '0;
+								csr_store = '0;
+
+								imm[0] = 1'b0;
+								imm[1+:4] = 4'b0010;
+								imm[5+:6] = 6'b110000;
+								imm[11] = 1'b0;
+								imm[12+:8] = 8'b00000000;
+								imm[20+:12] = 12'b000000000000;
+							end
+
+							// zext.h
+							3'b010: begin
+								opcode = rv64 ? OpCode_Op32 : OpCode_Op;
+								funct3 = 3'b100;
+								funct7 = 7'b0000100;
+								funct5 = 5'b00000;
+
+								rd = {2'b01, in[7+:3]};
+								rs1 = {2'b01, in[7+:3]};
+								rs2 = 5'b00000;
+								csr_load = '0;
+								csr_store = '0;
+							end
+
+							// sext.h
+							3'b011: begin
+								opcode = OpCode_OpImm;
+								funct3 = 3'b001;
+								funct7 = 7'b0110000;
+
+								rd = {2'b01, in[7+:3]};
+								rs1 = {2'b01, in[7+:3]};
+								rs2 = 5'b00000;
+								csr_load = '0;
+								csr_store = '0;
+
+								imm[0] = 1'b1;
+								imm[1+:4] = 4'b0010;
+								imm[5+:6] = 6'b110000;
+								imm[11] = 1'b0;
+								imm[12+:8] = 8'b00000000;
+								imm[20+:12] = 12'b000000000000;
+							end
+
 							3'b100: if (rv64) begin
 								// zext.w
 								opcode = OpCode_Op32;
