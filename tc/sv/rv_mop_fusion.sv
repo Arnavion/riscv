@@ -58,6 +58,15 @@ Load
 | ld rd_b, imm_b(rs1_b)     |                                                 |                               |
 +---------------------------+-------------------------------------------------+-------------------------------+
 
+Op
+
++---------------------------+-------------------------------------------------+-------------------------------+
+|       Instructions        |                Fusion condition                 |       Fused instruction       |
++===========================+=================================================+===============================+
+| sub rd_a, x0, rs2_a       | rd_a == rd_b && rd_a == rs1_b && rs2_a == rs2_b | abs rd_a, rs2_a               |
+| max rd_b, rs1_b, rs2_b    |                                                 |                               |
++---------------------------+-------------------------------------------------+-------------------------------+
+
 ---
 
 Fused instruction length
@@ -337,6 +346,22 @@ module rv_mop_fusion (
 					opcode = OpCode_Zarnavion;
 					funct3 = b_funct3;
 					funct7 = 7'b0000100;
+					funct5 = 'x;
+					imm = 'x;
+					csrimm = 'x;
+				end
+
+				// sub, max -> abs
+				{OpCode_Op, 10'b000_0100000, OpCode_Op, 10'b110_0000101}: if (a_rs1 == 5'b00000 && a_rs2 == b_rs2) begin
+					performed_fusion = '1;
+
+					rd = a_rd;
+					rs1 = a_rs2;
+					rs2 = 5'b00000;
+					csr = a_csr; // = 'x
+					opcode = 5'b00010;
+					funct3 = 3'b000;
+					funct7 = 7'b0000101;
 					funct5 = 'x;
 					imm = 'x;
 					csrimm = 'x;
