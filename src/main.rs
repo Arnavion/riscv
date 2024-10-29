@@ -59,6 +59,8 @@ fn parse_args(mut args: impl Iterator<Item = std::ffi::OsString>, argv0: &std::f
 
 			Some("--zba") => supported_extensions |= riscv::SupportedExtensions::ZBA,
 
+			Some("--zbb") => supported_extensions |= riscv::SupportedExtensions::ZBB,
+
 			Some("--32") => supported_extensions &= !riscv::SupportedExtensions::RV64I,
 
 			Some("--64") => supported_extensions |= riscv::SupportedExtensions::RV64I,
