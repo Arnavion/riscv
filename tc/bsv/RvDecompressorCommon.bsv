@@ -227,6 +227,21 @@ module mkTestDecompressorModule#(RvDecompressor decompressor32, RvDecompressor d
 			request: RvDecompressorRequest { in: 32'b100_111_010_11_000_01 },
 			expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b000011111111_01010_111_01010_00100_11 }
 		},
+		// sext.b
+		TestCase {
+			request: RvDecompressorRequest { in: 32'b100_111_010_11_001_01 },
+			expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b0110000_00100_01010_001_01010_00100_11 }
+		},
+		// zext.h
+		TestCase {
+			request: RvDecompressorRequest { in: 32'b100_111_010_11_010_01 },
+			expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b0000100_00000_01010_100_01010_01100_11 }
+		},
+		// sext.h
+		TestCase {
+			request: RvDecompressorRequest { in: 32'b100_111_010_11_011_01 },
+			expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b0110000_00101_01010_001_01010_00100_11 }
+		},
 		// zext.w
 		TestCase {
 			request: RvDecompressorRequest { in: 32'b100_111_010_11_100_01 },
@@ -464,6 +479,21 @@ module mkTestDecompressorModule#(RvDecompressor decompressor32, RvDecompressor d
 		TestCase {
 			request: RvDecompressorRequest { in: 32'b100_111_010_11_000_01 },
 			expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b000011111111_01010_111_01010_00100_11 }
+		},
+		// sext.b
+		TestCase {
+			request: RvDecompressorRequest { in: 32'b100_111_010_11_001_01 },
+			expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b0110000_00100_01010_001_01010_00100_11 }
+		},
+		// zext.h
+		TestCase {
+			request: RvDecompressorRequest { in: 32'b100_111_010_11_010_01 },
+			expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b0000100_00000_01010_100_01010_01110_11 }
+		},
+		// sext.h
+		TestCase {
+			request: RvDecompressorRequest { in: 32'b100_111_010_11_011_01 },
+			expected_response: RvDecompressorResponse { inst: tagged Valid tagged Compressed 32'b0110000_00101_01010_001_01010_00100_11 }
 		},
 		// zext.w
 		TestCase {

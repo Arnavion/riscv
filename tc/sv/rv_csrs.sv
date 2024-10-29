@@ -63,7 +63,7 @@ module rv_csrs #(
 					1'b0, // E
 					1'b0, // D
 					1'b1, // C
-					1'b0, // B
+					1'b1, // B
 					1'b0  // A
 				};
 				12'hc00: load_value = cycle[0+:xlen];

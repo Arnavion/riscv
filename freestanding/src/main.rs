@@ -63,7 +63,7 @@ fn main_inner(console: &mut Console<'_>) -> Result<(), ()> {
 		})
 	};
 
-	let supported_extensions = riscv::SupportedExtensions::RV64C_ZCB | riscv::SupportedExtensions::ZBA;
+	let supported_extensions = riscv::SupportedExtensions::RV64C_ZCB | riscv::SupportedExtensions::ZBA | riscv::SupportedExtensions::ZBB;
 
 	let mut pc = 0_u64;
 
@@ -233,37 +233,153 @@ fn halt() -> ! {
 ///
 /// If `rest` is empty then `line` reached the end of the given slice,
 /// and is thus the last line.
-/// This is a SWAR implementation.
-///
-/// Ref: <https://en.wikipedia.org/w/index.php?title=SWAR&oldid=1276491101#Further_refinements_2>
-fn split_line(s: &[u8]) -> (&[u8], &[u8]) {
-	const C1: usize = usize::from_ne_bytes([b'\n'; core::mem::size_of::<usize>()]);
-	const C2: usize = usize::from_ne_bytes([0x01; core::mem::size_of::<usize>()]);
-	const C3: usize = usize::from_ne_bytes([0x80; core::mem::size_of::<usize>()]);
+mod split_line {
+	/// This is a SWAR implementation based on the Zbb extension.
+	#[cfg(target_feature = "zbb")]
+	pub(super) fn split_line(s: &[u8]) -> (&[u8], &[u8]) {
+		const C1: usize = usize::from_ne_bytes([b'\n'; core::mem::size_of::<usize>()]);
 
-	let (s_head, s_aligned, s_tail) = unsafe { s.align_to::<usize>() };
+		fn expand_slice_to_usize(s: &[u8]) -> usize {
+			unsafe { core::hint::assert_unchecked(s.len() < core::mem::size_of::<usize>()); }
 
-	if let Some(i) = s_head.iter().position(|&b| b == b'\n') {
-		return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
+			// `s` is guaranteed to be contained within an aligned usize-sized chunk.
+			// We can read that chunk, then shift it so that the bytes of `s` are the first,
+			// then set the excess bytes to 0xff. This result will then only contain a `b'\n'`
+			// at the index that `s` contains a `b'\n'`.
+			//
+			// We can't dereference the chunk pointer in Rust code because there is no guarantee that
+			// all `size_of::<usize>()` bytes are in the same allocation as `s`,
+			// so dereferencing the pointer would be UB. miri confirms this.
+			// However it *is* legal to read that usize using an inline assembly load instruction.
+			// miri cannot introspect this to prove it, but this is also what the SWAR impl of `strlen`
+			// in compiler_builtins does, with the same justification.
+
+			let s_ptr = s.as_ptr().addr();
+			let s_aligned_start_ptr = (s.as_ptr().addr() / core::mem::size_of::<usize>()) * core::mem::size_of::<usize>();
+
+			let chunk: usize;
+			unsafe {
+				core::arch::asm!(
+					"ld {chunk}, ({s_aligned_start_ptr})",
+					s_aligned_start_ptr = in(reg) s_aligned_start_ptr,
+					chunk = lateout(reg) chunk,
+					options(nostack, pure, readonly),
+				);
+			}
+
+			#[cfg(target_endian = "little")]
+			{
+				let num_trailing_garbage_bits = (s_ptr % core::mem::size_of::<usize>()) * 8;
+				let chunk = chunk >> num_trailing_garbage_bits;
+
+				let num_valid_bits = s.len() * 8;
+				let chunk = chunk | (usize::MAX << num_valid_bits);
+
+				chunk
+			}
+			#[cfg(target_endian = "big")]
+			{
+				let num_leading_garbage_bits = (s_ptr % core::mem::size_of::<usize>()) * 8;
+				let chunk = chunk << num_leading_garbage_bits;
+
+				let num_valid_bits = s.len() * 8;
+				let chunk = chunk | (usize::MAX >> num_valid_bits);
+
+				chunk
+			}
+		}
+
+		// `chunk` must have been formed by interpreting the underlying bytes in native-endian order.
+		fn index_of_zero(chunk: usize) -> Option<usize> {
+			let result: usize;
+			unsafe {
+				core::arch::asm!(
+					"orc.b {result}, {chunk}",
+					chunk = in(reg) chunk,
+					result = lateout(reg) result,
+					options(nomem, nostack, pure),
+				);
+			}
+			if result == usize::MAX {
+				None
+			}
+			else {
+				#[cfg(target_endian = "little")]
+				let i = usize::try_from(result.trailing_ones() / 8).expect("u32 -> usize");
+				#[cfg(target_endian = "big")]
+				let i = usize::try_from(result.leading_ones() / 8).expect("u32 -> usize");
+
+				Some(i)
+			}
+		}
+
+		// Note: `s_aligned` elements will have been interpreted from the underlying bytes in native-endian order.
+		let (s_head, s_aligned, s_tail) = unsafe { s.align_to::<usize>() };
+
+		{
+			let chunk = expand_slice_to_usize(s_head);
+
+			if let Some(i) = index_of_zero(chunk ^ C1) {
+				return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
+			}
+		}
+
+		let mut line_end = s_head.len();
+		for &chunk in s_aligned {
+			if let Some(i) = index_of_zero(chunk ^ C1) {
+				let i = line_end + i;
+				return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
+			}
+
+			line_end += core::mem::size_of::<usize>();
+		}
+
+		{
+			let chunk = expand_slice_to_usize(s_tail);
+
+			if let Some(i) = index_of_zero(chunk ^ C1) {
+				let i = line_end + i;
+				return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
+			}
+		}
+
+		(s, b"")
 	}
 
-	let mut line_end = s_head.len();
-	for &chunk in s_aligned {
-		let chunk = chunk ^ C1;
-		if chunk.wrapping_sub(C2) & !chunk & C3 != 0 {
-			let i = chunk.to_ne_bytes().into_iter().position(|b| b == b'\0');
-			let i = unsafe { i.unwrap_unchecked() };
+	/// This is a SWAR implementation used when the Zbb extension is not present.
+	///
+	/// Ref: <https://en.wikipedia.org/w/index.php?title=SWAR&oldid=1276491101#Further_refinements_2>
+	#[cfg(not(target_feature = "zbb"))]
+	pub(super) fn split_line(s: &[u8]) -> (&[u8], &[u8]) {
+		const C1: usize = usize::from_ne_bytes([b'\n'; core::mem::size_of::<usize>()]);
+		const C2: usize = usize::from_ne_bytes([0x01; core::mem::size_of::<usize>()]);
+		const C3: usize = usize::from_ne_bytes([0x80; core::mem::size_of::<usize>()]);
+
+		let (s_head, s_aligned, s_tail) = unsafe { s.align_to::<usize>() };
+
+		if let Some(i) = s_head.iter().position(|&b| b == b'\n') {
+			return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
+		}
+
+		let mut line_end = s_head.len();
+		for &chunk in s_aligned {
+			let chunk = chunk ^ C1;
+			if chunk.wrapping_sub(C2) & !chunk & C3 != 0 {
+				let i = chunk.to_ne_bytes().into_iter().position(|b| b == b'\0');
+				let i = unsafe { i.unwrap_unchecked() };
+				let i = line_end + i;
+				return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
+			}
+
+			line_end += core::mem::size_of::<usize>();
+		}
+
+		if let Some(i) = s_tail.iter().position(|&b| b == b'\n') {
 			let i = line_end + i;
 			return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
 		}
 
-		line_end += core::mem::size_of::<usize>();
+		(s, b"")
 	}
-
-	if let Some(i) = s_tail.iter().position(|&b| b == b'\n') {
-		let i = line_end + i;
-		return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
-	}
-
-	(s, b"")
 }
+use split_line::split_line;

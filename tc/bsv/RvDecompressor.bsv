@@ -112,6 +112,14 @@ function Maybe#(Bit#(30)) decompress(Bool rv64, Bit#(32) in);
 						3'b000: return tagged Valid
 							type_i(OpCode_OpImm, { 2'b01, in[9:7] }, 3'b111, { 2'b01, in[9:7] }, 12'b000011111111);
 
+						// sext.b, sext.h
+						3'b0?1: return tagged Valid
+							type_i(OpCode_OpImm, { 2'b01, in[9:7] }, 3'b001, { 2'b01, in[9:7] }, { 11'b01100000010, in[3] });
+
+						// zext.h
+						3'b010: return tagged Valid
+							type_r(rv64 ? OpCode_Op32 : OpCode_Op, { 2'b01, in[9:7] }, 3'b100, { 2'b01, in[9:7] }, 5'b00000, 7'b0000100);
+
 						// zext.w
 						3'b100 &&& rv64: return tagged Valid
 							type_r(OpCode_Op32, { 2'b01, in[9:7] }, 3'b000, { 2'b01, in[9:7] }, 5'b00000, 7'b0000100);
