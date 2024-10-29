@@ -14,6 +14,7 @@ module mkRvDecoder(RvDecoder);
 			OpCode opcode = unpack(in[6:2]);
 			let funct3 = in[14:12];
 			let funct7 = in[31:25];
+			let funct5 = in[24:20];
 			let rd = in[11:7];
 			let rs1 = in[19:15];
 			let rs2 = in[24:20];
@@ -41,6 +42,14 @@ module mkRvDecoder(RvDecoder);
 						6'b000000: return tagged Valid tagged Binary { op: Sll, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
 						6'b001010: return tagged Valid tagged Binary { op: Bset, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
 						6'b010010: return tagged Valid tagged Binary { op: Bclr, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
+						6'b011000: case (pack(i_imm)[5:0]) matches
+							6'b000000: return tagged Valid tagged Unary { op: Clz, rd: rd, rs: tagged Left rs1 };
+							6'b000001: return tagged Valid tagged Unary { op: Ctz, rd: rd, rs: tagged Left rs1 };
+							6'b000010: return tagged Valid tagged Unary { op: Cpop, rd: rd, rs: tagged Left rs1 };
+							6'b000100: return tagged Valid tagged Unary { op: SextB, rd: rd, rs: tagged Left rs1 };
+							6'b000101: return tagged Valid tagged Unary { op: SextH, rd: rd, rs: tagged Left rs1 };
+							default: return tagged Invalid;
+						endcase
 						6'b011010: return tagged Valid tagged Binary { op: Binv, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
 						default: return tagged Invalid;
 					endcase
@@ -49,8 +58,17 @@ module mkRvDecoder(RvDecoder);
 					3'b100: return tagged Valid tagged Binary { op: Xor, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
 					3'b101: case (pack(i_imm)[11:6]) matches
 						6'b000000: return tagged Valid tagged Binary { op: Srl, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
+						6'b001010: case (pack(i_imm)[5:0]) matches
+							6'b000111: return tagged Valid tagged Unary { op: OrcB, rd: rd, rs: tagged Left rs1 };
+							default: return tagged Invalid;
+						endcase
 						6'b010000: return tagged Valid tagged Binary { op: Sra, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
 						6'b010010: return tagged Valid tagged Binary { op: Bext, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
+						6'b011000: return tagged Valid tagged Binary { op: Ror, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
+						6'b011010: case (pack(i_imm)[5:0]) matches
+							6'b111000: return tagged Valid tagged Unary { op: Rev8, rd: rd, rs: tagged Left rs1 };
+							default: return tagged Invalid;
+						endcase
 						default: return tagged Invalid;
 					endcase
 					3'b110: return tagged Valid tagged Binary { op: Or, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
@@ -64,11 +82,18 @@ module mkRvDecoder(RvDecoder);
 					3'b001: case (pack(i_imm)[11:5]) matches
 						7'b0000000: return tagged Valid tagged Binary { op: Sllw, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
 						7'b000010?: return tagged Valid tagged Binary { op: SllUw, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
+						7'b0110000: case (pack(i_imm)[4:0]) matches
+							5'b00000: return tagged Valid tagged Unary { op: Clzw, rd: rd, rs: tagged Left rs1 };
+							5'b00001: return tagged Valid tagged Unary { op: Ctzw, rd: rd, rs: tagged Left rs1 };
+							5'b00010: return tagged Valid tagged Unary { op: Cpopw, rd: rd, rs: tagged Left rs1 };
+							default: return tagged Invalid;
+						endcase
 						default: return tagged Invalid;
 					endcase
 					3'b101: case (pack(i_imm)[11:5]) matches
 						7'b0000000: return tagged Valid tagged Binary { op: Srlw, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
 						7'b0100000: return tagged Valid tagged Binary { op: Sraw, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
+						7'b0110000: return tagged Valid tagged Binary { op: Rorw, rd: rd, rs1: tagged Left rs1, rs2: tagged Right extend(i_imm) };
 						default: return tagged Invalid;
 					endcase
 					default: return tagged Invalid;
@@ -86,20 +111,29 @@ module mkRvDecoder(RvDecoder);
 					10'b001_0000000: return tagged Valid tagged Binary { op: Sll, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b001_0010100: return tagged Valid tagged Binary { op: Bset, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b001_0100100: return tagged Valid tagged Binary { op: Bclr, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b001_0110000: return tagged Valid tagged Binary { op: Rol, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b001_0110100: return tagged Valid tagged Binary { op: Binv, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b010_0000000: return tagged Valid tagged Binary { op: Slt, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b010_0010000: return tagged Valid tagged Binary { op: Sh1add, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b011_0000000: return tagged Valid tagged Binary { op: Sltu, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b100_0000000: return tagged Valid tagged Binary { op: Xor, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b100_0000101: return tagged Valid tagged Binary { op: Min, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b100_0010000: return tagged Valid tagged Binary { op: Sh2add, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b100_0100000: return tagged Valid tagged Binary { op: Xnor, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b101_0000000: return tagged Valid tagged Binary { op: Srl, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b101_0000101: return tagged Valid tagged Binary { op: Minu, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b101_0000111: return tagged Valid tagged Binary { op: CzeroEqz, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b101_0100000: return tagged Valid tagged Binary { op: Sra, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b101_0100100: return tagged Valid tagged Binary { op: Bext, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b101_0110000: return tagged Valid tagged Binary { op: Ror, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b110_0000000: return tagged Valid tagged Binary { op: Or, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b110_0000101: return tagged Valid tagged Binary { op: Max, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b110_0010000: return tagged Valid tagged Binary { op: Sh3add, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b110_0100000: return tagged Valid tagged Binary { op: Orn, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b111_0000000: return tagged Valid tagged Binary { op: And, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b111_0000101: return tagged Valid tagged Binary { op: Maxu, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b111_0000111: return tagged Valid tagged Binary { op: CzeroNez, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b111_0100000: return tagged Valid tagged Binary { op: Andn, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					default: return tagged Invalid;
 				endcase
 
@@ -110,10 +144,16 @@ module mkRvDecoder(RvDecoder);
 					10'b000_0000100: return tagged Valid tagged Binary { op: AddUw, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b000_0100000: return tagged Valid tagged Binary { op: Subw, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b001_0000000: return tagged Valid tagged Binary { op: Sllw, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b001_0110000: return tagged Valid tagged Binary { op: Rolw, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b010_0010000: return tagged Valid tagged Binary { op: Sh1addUw, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b100_0000100: case (funct5) matches
+						5'b00000: return tagged Valid tagged Unary { op: ZextH, rd: rd, rs: tagged Left rs1 };
+						default: return tagged Invalid;
+					endcase
 					10'b100_0010000: return tagged Valid tagged Binary { op: Sh2addUw, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b101_0000000: return tagged Valid tagged Binary { op: Srlw, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b101_0100000: return tagged Valid tagged Binary { op: Sraw, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
+					10'b101_0110000: return tagged Valid tagged Binary { op: Rorw, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					10'b110_0010000: return tagged Valid tagged Binary { op: Sh3addUw, rd: rd, rs1: tagged Left rs1, rs2: tagged Left rs2 };
 					default: return tagged Invalid;
 				endcase

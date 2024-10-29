@@ -153,6 +153,22 @@ module mkRvDecompressor#(parameter Bool rv64)(RvDecompressor);
 							3'b000: return tagged Valid tagged Compressed
 								type_i(OpCode_OpImm, { 2'b01, in[9:7] }, 3'b111, { 2'b01, in[9:7] }, 12'b000011111111);
 
+							// sext.b
+							3'b001: return tagged Valid tagged Compressed
+								type_i(OpCode_OpImm, { 2'b01, in[9:7] }, 3'b001, { 2'b01, in[9:7] }, 12'b011000000100);
+
+							// zext.h
+							3'b010: if (rv64)
+								return tagged Valid tagged Compressed
+									type_r(OpCode_Op32, { 2'b01, in[9:7] }, 3'b100, { 2'b01, in[9:7] }, 5'b00000, 7'b0000100);
+							else
+								return tagged Valid tagged Compressed
+									type_r(OpCode_Op, { 2'b01, in[9:7] }, 3'b100, { 2'b01, in[9:7] }, 5'b00000, 7'b0000100);
+
+							// sext.h
+							3'b011: return tagged Valid tagged Compressed
+								type_i(OpCode_OpImm, { 2'b01, in[9:7] }, 3'b001, { 2'b01, in[9:7] }, 12'b011000000101);
+
 							3'b100: if (rv64)
 								// zext.w
 								return tagged Valid tagged Compressed

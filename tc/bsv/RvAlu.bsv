@@ -29,7 +29,9 @@ module mkRvAlu(RvAlu);
 	Adder adder <- mkAdder;
 	Cmp cmp <- mkCmp;
 	Logical logical <- mkLogical;
-	Shift shift <- mkShift;
+	OrcB orc_b <- mkOrcB;
+	Popcnt popcnt <- mkPopcnt;
+	ShiftRotate shift_rotate <- mkShiftRotate;
 
 	method ExecuteResult execute(
 		Int#(64) pc,
@@ -68,6 +70,15 @@ module mkRvAlu(RvAlu);
 			tagged Jal { op: tagged XReg { base: .base, offset: .offset } }:
 				return tuple3(base, extend(offset), False);
 
+			tagged Unary { op: .op, rs: .rs }:
+				case (op) matches
+					tagged Clz: return tuple3(unpack(reverseBits(pack(rs))), -1, False);
+					tagged Clzw: return tuple3(unpack(reverseBits(pack(rs))), -1, False);
+					tagged Ctz: return tuple3(rs, -1, False);
+					tagged Ctzw: return tuple3(rs, -1, False);
+					default: return ?;
+				endcase
+
 			default: return ?;
 		endcase;
 		let add_result = adder.run(adder_a, adder_b, adder_cin);
@@ -77,6 +88,10 @@ module mkRvAlu(RvAlu);
 				case (op) matches
 					tagged CzeroEqz: return tuple3(0, rs2, ?);
 					tagged CzeroNez: return tuple3(0, rs2, ?);
+					tagged Max: return tuple3(rs1, rs2, True);
+					tagged Maxu: return tuple3(rs1, rs2, False);
+					tagged Min: return tuple3(rs1, rs2, True);
+					tagged Minu: return tuple3(rs1, rs2, False);
 					tagged Slt: return tuple3(rs1, rs2, True);
 					tagged Sltu: return tuple3(rs1, rs2, False);
 					default: return ?;
@@ -96,54 +111,86 @@ module mkRvAlu(RvAlu);
 		endcase;
 		let cmp_result = cmp.cmp(cmp_a, cmp_b, cmp_signed);
 
-		match { .logical_arg1, .logical_arg2 } = case (inst) matches
+		match { .logical_arg1, .logical_arg2, .logical_invert_arg2 } = case (inst) matches
 			tagged Binary { op: .op, rs1: .rs1, rs2: .rs2 }: begin
 				UInt#(64) rs2u = unpack(pack(rs2));
 				UInt#(6) rs2_shamt = truncate(rs2u);
 				Int#(64) rs2_decoded = 1 << rs2_shamt;
 
 				case (op) matches
-					tagged And: return tuple2(rs1, rs2);
-					tagged Bclr: return tuple2(rs1, ~rs2_decoded);
-					tagged Binv: return tuple2(rs1, rs2_decoded);
-					tagged Bset: return tuple2(rs1, rs2_decoded);
-					tagged Or: return tuple2(rs1, rs2);
-					tagged Xor: return tuple2(rs1, rs2);
+					tagged And: return tuple3(rs1, rs2, False);
+					tagged Andn: return tuple3(rs1, rs2, True);
+					tagged Bclr: return tuple3(rs1, rs2_decoded, True);
+					tagged Binv: return tuple3(rs1, rs2_decoded, False);
+					tagged Bset: return tuple3(rs1, rs2_decoded, False);
+					tagged Or: return tuple3(rs1, rs2, False);
+					tagged Orn: return tuple3(rs1, rs2, True);
+					tagged Xnor: return tuple3(rs1, rs2, True);
+					tagged Xor: return tuple3(rs1, rs2, False);
 					default: return ?;
 				endcase
 			end
 
 			tagged Csr .op:
 				case (op) matches
-					tagged Csrrs { rs1: .rs1, csrs: .csrs }: return tuple2(csrs, rs1);
-					tagged Csrrc { rs1: .rs1, csrs: .csrs }: return tuple2(csrs, ~rs1);
+					tagged Csrrs { rs1: .rs1, csrs: .csrs }: return tuple3(csrs, rs1, False);
+					tagged Csrrc { rs1: .rs1, csrs: .csrs }: return tuple3(csrs, rs1, True);
+					default: return ?;
+				endcase
+
+			tagged Unary { op: .op, rs: .rs }:
+				case (op) matches
+					tagged Clz: return tuple3(add_result.add, unpack(reverseBits(pack(rs))), True);
+					tagged Clzw: return tuple3(add_result.add, unpack(reverseBits(pack(rs))), True);
+					tagged Ctz: return tuple3(add_result.add, rs, True);
+					tagged Ctzw: return tuple3(add_result.add, rs, True);
 					default: return ?;
 				endcase
 
 			default: return ?;
 		endcase;
-		let logical_result = logical.run(logical_arg1, logical_arg2);
+		let logical_result = logical.run(logical_arg1, logical_arg2, logical_invert_arg2);
 
-		match { .shift_value, .shift_shamt, .shift_arithmetic } = case (inst) matches
+		let popcnt_arg = case (inst) matches
+			tagged Unary { op: .op, rs: .rs }:
+				case (op) matches
+					tagged Clz: return logical_result.and_;
+					tagged Clzw: return logical_result.and_;
+					tagged Cpop: return rs;
+					tagged Cpopw: return rs;
+					tagged Ctz: return logical_result.and_;
+					tagged Ctzw: return logical_result.and_;
+					default: return ?;
+				endcase
+
+			default: return ?;
+		endcase;
+		let popcnt_result = popcnt.run(popcnt_arg);
+
+		match { .shift_rotate_value, .shift_rotate_shamt, .shift_rotate_right, .shift_rotate_rotate, .shift_rotate_arithmetic, .shift_rotate_w } = case (inst) matches
 			tagged Binary { op: .op, rs1: .rs1, rs2: .rs2 }: begin
 				Int#(64) rs1uw = unpack(zeroExtend(pack(rs1)[31:0]));
 
 				case (op) matches
-					tagged Bext: return tuple3(rs1, rs2, ?);
-					tagged Sll: return tuple3(rs1, rs2, ?);
-					tagged SllUw: return tuple3(rs1uw, rs2, ?);
-					tagged Sllw: return tuple3(rs1, rs2, ?);
-					tagged Sra: return tuple3(rs1, rs2, True);
-					tagged Sraw: return tuple3(rs1, rs2, True);
-					tagged Srl: return tuple3(rs1, rs2, False);
-					tagged Srlw: return tuple3(rs1, rs2, False);
+					tagged Bext: return tuple6(rs1, rs2, True, ?, ?, ?);
+					tagged Rol: return tuple6(rs1, rs2, False, True, ?, False);
+					tagged Rolw: return tuple6(rs1, rs2, False, True, ?, True);
+					tagged Ror: return tuple6(rs1, rs2, True, True, ?, False);
+					tagged Rorw: return tuple6(rs1, rs2, True, True, ?, True);
+					tagged Sll: return tuple6(rs1, rs2, False, False, ?, False);
+					tagged SllUw: return tuple6(rs1uw, rs2, False, False, ?, False);
+					tagged Sllw: return tuple6(rs1, rs2, False, False, ?, True);
+					tagged Sra: return tuple6(rs1, rs2, True, False, True, False);
+					tagged Sraw: return tuple6(rs1, rs2, True, False, True, True);
+					tagged Srl: return tuple6(rs1, rs2, True, False, False, False);
+					tagged Srlw: return tuple6(rs1, rs2, True, False, False, True);
 					default: return ?;
 				endcase
 			end
 
 			default: return ?;
 		endcase;
-		let shift_result = shift.run(shift_value, shift_shamt, shift_arithmetic);
+		let shift_rotate_result = shift_rotate.run(shift_rotate_value, shift_rotate_shamt, shift_rotate_right, shift_rotate_rotate, shift_rotate_arithmetic, shift_rotate_w);
 
 		case (inst) matches
 			tagged Auipc { rd: .rd }:
@@ -154,7 +201,7 @@ module mkRvAlu(RvAlu);
 					jump_pc: tagged Invalid
 				};
 
-			tagged Binary { op: .op, rd: .rd, rs1: .rs1 }:
+			tagged Binary { op: .op, rd: .rd, rs1: .rs1, rs2: .rs2 }:
 				return tagged Ok ExecuteResultOk {
 					x_regs_rd: rd,
 					x_regs_rd_value: case (op) matches
@@ -162,30 +209,41 @@ module mkRvAlu(RvAlu);
 						tagged AddUw: return add_result.add;
 						tagged Addw: return add_result.addw;
 						tagged And: return logical_result.and_;
+						tagged Andn: return logical_result.and_;
 						tagged Bclr: return logical_result.and_;
-						tagged Bext: return shift_result.sr & 1;
+						tagged Bext: return shift_rotate_result & 1;
 						tagged Binv: return logical_result.xor_;
 						tagged Bset: return logical_result.or_;
 						tagged CzeroEqz: return cmp_result.eq ? 0 : rs1;
 						tagged CzeroNez: return cmp_result.eq ? rs1 : 0;
+						tagged Max: return cmp_result.lt ? rs2 : rs1;
+						tagged Maxu: return cmp_result.lt ? rs2 : rs1;
+						tagged Min: return cmp_result.lt ? rs1 : rs2;
+						tagged Minu: return cmp_result.lt ? rs1 : rs2;
 						tagged Or: return logical_result.or_;
+						tagged Orn: return logical_result.or_;
+						tagged Rol: return shift_rotate_result;
+						tagged Rolw: return shift_rotate_result;
+						tagged Ror: return shift_rotate_result;
+						tagged Rorw: return shift_rotate_result;
 						tagged Sh1add: return add_result.add;
 						tagged Sh1addUw: return add_result.add;
 						tagged Sh2add: return add_result.add;
 						tagged Sh2addUw: return add_result.add;
 						tagged Sh3add: return add_result.add;
 						tagged Sh3addUw: return add_result.add;
-						tagged Sll: return shift_result.sll;
-						tagged SllUw: return shift_result.sll;
-						tagged Sllw: return shift_result.sll;
+						tagged Sll: return shift_rotate_result;
+						tagged SllUw: return shift_rotate_result;
+						tagged Sllw: return shift_rotate_result;
 						tagged Slt: return cmp_result.lt ? 1 : 0;
 						tagged Sltu: return cmp_result.lt ? 1 : 0;
-						tagged Sra: return shift_result.sr;
-						tagged Sraw: return shift_result.sr;
-						tagged Srl: return shift_result.sr;
-						tagged Srlw: return shift_result.sr;
+						tagged Sra: return shift_rotate_result;
+						tagged Sraw: return shift_rotate_result;
+						tagged Srl: return shift_rotate_result;
+						tagged Srlw: return shift_rotate_result;
 						tagged Sub: return add_result.add;
 						tagged Subw: return add_result.addw;
+						tagged Xnor: return logical_result.xor_;
 						tagged Xor: return logical_result.xor_;
 					endcase,
 					csrd: tagged Invalid,
@@ -266,6 +324,47 @@ module mkRvAlu(RvAlu);
 				return tagged Ok ExecuteResultOk {
 					x_regs_rd: rd,
 					x_regs_rd_value: extend(imm) << 12,
+					csrd: tagged Invalid,
+					jump_pc: tagged Invalid
+				};
+
+			tagged Unary { op: .op, rd: .rd, rs: .rs }:
+				return tagged Ok ExecuteResultOk {
+					x_regs_rd: rd,
+					x_regs_rd_value: case (op) matches
+						tagged Clz: return popcnt_result.cpop;
+						tagged Clzw: return popcnt_result.cpopw;
+						tagged Cpop: return popcnt_result.cpop;
+						tagged Cpopw: return popcnt_result.cpopw;
+						tagged Ctz: return popcnt_result.cpop;
+						tagged Ctzw: return popcnt_result.cpopw;
+						tagged OrcB: return orc_b.run(rs);
+						tagged Rev8: begin
+							let rs_bits = pack(rs);
+							return unpack({
+								rs_bits[7:0],
+								rs_bits[15:8],
+								rs_bits[23:16],
+								rs_bits[31:24],
+								rs_bits[39:32],
+								rs_bits[47:40],
+								rs_bits[55:48],
+								rs_bits[63:56]
+							});
+						end
+						tagged SextB: begin
+							Int#(8) rs_ = truncate(rs);
+							return extend(rs_);
+						end
+						tagged SextH: begin
+							Int#(16) rs_ = truncate(rs);
+							return extend(rs_);
+						end
+						tagged ZextH: begin
+							Int#(16) rs_ = truncate(rs);
+							return zeroExtend(rs_);
+						end
+					endcase,
 					csrd: tagged Invalid,
 					jump_pc: tagged Invalid
 				};
@@ -354,7 +453,7 @@ provisos (
 endinstance
 
 interface Logical;
-	method LogicalResult#(64) run(Int#(64) arg1, Int#(64) arg2);
+	method LogicalResult#(64) run(Int#(64) arg1, Int#(64) arg2, Bool invert_arg2);
 endinterface
 
 typedef struct {
@@ -365,14 +464,15 @@ typedef struct {
 
 (* synthesize *)
 module mkLogical(Logical);
-	method LogicalResult#(64) run(Int#(64) arg1, Int#(64) arg2);
-		return logical_inner(arg1, arg2);
+	method LogicalResult#(64) run(Int#(64) arg1, Int#(64) arg2, Bool invert_arg2);
+		return logical_inner(arg1, arg2, invert_arg2);
 	endmethod
 endmodule
 
-function LogicalResult#(width) logical_inner(Int#(width) arg1, Int#(width) arg2);
-	let and_ = arg1 & arg2;
-	let or_ = arg1 | arg2;
+function LogicalResult#(width) logical_inner(Int#(width) arg1, Int#(width) arg2, Bool invert_arg2);
+	let arg2_ = invert_arg2 ? ~arg2 : arg2;
+	let and_ = arg1 & arg2_;
+	let or_ = arg1 | arg2_;
 	return LogicalResult {
 		and_: and_,
 		or_: or_,
@@ -380,66 +480,206 @@ function LogicalResult#(width) logical_inner(Int#(width) arg1, Int#(width) arg2)
 	};
 endfunction
 
-interface Shift;
-	method ShiftResult#(64) run(Int#(64) value, Int#(64) shamt, Bool arithmetic);
+interface OrcB;
+	method Int#(64) run(Int#(64) arg);
+endinterface
+
+(* synthesize *)
+module mkOrcB(OrcB);
+	method Int#(64) run(Int#(64) arg);
+		return unpack(orc_b_inner(pack(arg)));
+	endmethod
+endmodule
+
+function Bit#(width) orc_b_inner(Bit#(width) arg)
+provisos (
+	Add#(a__, 8, width),
+	Div#(width, 8, num_cells),
+	Mul#(num_cells, 8, width)
+);
+	let num_cells = valueOf(num_cells);
+
+	Bit#(width) result = 0;
+
+	for (Integer i = 0; i < num_cells; i = i + 1) begin
+		Bit#(8) cell_ = arg[i * 8 + 7:i * 8];
+		cell_ = signExtend(| cell_);
+		result[i * 8 + 7:i * 8] = cell_;
+	end
+
+	return result;
+endfunction
+
+interface Popcnt;
+	method PopcntResult#(64) run(Int#(64) arg);
 endinterface
 
 typedef struct {
-	Int#(width) sll;
-	Int#(width) sllw;
-	Int#(width) sr;
-	Int#(width) srw;
-} ShiftResult#(numeric type width) deriving(Bits);
+	Int#(width) cpop;
+	Int#(width) cpopw;
+} PopcntResult#(numeric type width) deriving(Bits);
 
 (* synthesize *)
-module mkShift(Shift);
-	method ShiftResult#(64) run(Int#(64) value, Int#(64) shamt, Bool arithmetic);
-		Bit#(5) shamt32 = truncate(pack(shamt));
-		Int#(32) sll_value32 = truncate(value);
-		Bit#(33) sr_value32 = arithmetic ? signExtend(pack(sll_value32)) : zeroExtend(pack(sll_value32));
-		let shift_inner_result32 = shift_inner(sll_value32, unpack(sr_value32), shamt32, 16);
-
-		Bit#(6) shamt64 = truncate(pack(shamt));
-		Bit#(65) sr_value64 = arithmetic ? signExtend(pack(value)) : zeroExtend(pack(value));
-		let shift_inner_result64 = shift_inner(value, unpack(sr_value64), shamt64, 32);
-
-		return ShiftResult {
-			sll: shift_inner_result64.sll,
-			sllw: signExtend(shift_inner_result32.sll),
-			sr: shift_inner_result64.sr,
-			srw: signExtend(shift_inner_result32.sr)
+module mkPopcnt(Popcnt);
+	method PopcntResult#(64) run(Int#(64) arg);
+		Int#(64) cpopw = zeroExtend(unpack(pack(popcnt_inner(pack(arg)[31:0]))));
+		let cpop = cpopw + zeroExtend(unpack(pack(popcnt_inner(pack(arg)[63:31]))));
+		return PopcntResult {
+			cpop: cpop,
+			cpopw: cpopw
 		};
 	endmethod
 endmodule
 
-typeclass Shifter#(numeric type width, numeric type shamt_width);
-	function ShiftInnerResult#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(shamt_width) shamt, Integer offset);
+typeclass PopcntInner#(numeric type width);
+	function UInt#(width) popcnt_inner(Bit#(width) arg);
 endtypeclass
 
-typedef struct {
-	Int#(width) sll;
-	Int#(width) sr;
-} ShiftInnerResult#(numeric type width) deriving(Bits);
-
-instance Shifter#(width, 0);
-	function ShiftInnerResult#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(0) shamt, Integer offset);
-		return ShiftInnerResult {
-			sll: sll,
-			sr: unpack(truncate(pack(sr)))
-		};
+instance PopcntInner#(1);
+	function UInt#(1) popcnt_inner(Bit#(1) arg);
+		return unpack(arg);
 	endfunction
 endinstance
 
-instance Shifter#(width, shamt_width)
+instance PopcntInner#(width)
 provisos (
-	Shifter#(width, TSub#(shamt_width, 1))
+	Div#(width, 2, lo_width),
+	Add#(lo_width, hi_width, width),
+	PopcntInner#(lo_width),
+	PopcntInner#(hi_width)
 );
-	function ShiftInnerResult#(width) shift_inner(Int#(width) sll, Int#(TAdd#(width, 1)) sr, Bit#(shamt_width) shamt, Integer offset);
-		if (shamt[valueOf(TSub#(shamt_width, 1))] != 0) begin
-			sll = sll << offset;
-			sr = sr >> offset;
-		end
-		Bit#(TSub#(shamt_width, 1)) shamt_ = truncate(shamt);
-		return shift_inner(sll, sr, shamt_, offset / 2);
+	function UInt#(width) popcnt_inner(Bit#(width) arg);
+		let width = valueOf(width);
+		let lo_width = valueOf(lo_width);
+		let hi_width = valueOf(hi_width);
+
+		Bit#(lo_width) arg_lo = arg[lo_width - 1:0];
+		UInt#(width) lo = extend(popcnt_inner(arg_lo));
+
+		Bit#(hi_width) arg_hi = arg[width - 1:lo_width];
+		UInt#(width) hi = extend(popcnt_inner(arg_hi));
+
+		return lo + hi;
 	endfunction
 endinstance
+
+interface ShiftRotate;
+	method Int#(64) run(Int#(64) value, Int#(64) shamt, Bool right, Bool rotate, Bool arithmetic, Bool w);
+endinterface
+
+(* synthesize *)
+module mkShiftRotate(ShiftRotate);
+	method Int#(64) run(Int#(64) value, Int#(64) shamt, Bool right, Bool rotate, Bool arithmetic, Bool w);
+		Bit#(6) shamt_ = truncate(pack(shamt));
+		return shift_rotate_inner(value, shamt_, right, rotate, arithmetic, w);
+	endmethod
+endmodule
+
+function Int#(width) shift_rotate_inner(Int#(width) value, Bit#(shamt_width) shamt, Bool right, Bool rotate, Bool arithmetic, Bool w)
+provisos (
+	Add#(a__, 1, width),
+	Add#(b__, 1, TDiv#(width, 2)),
+	Add#(TDiv#(width, 2), TDiv#(width, 2), width),
+	ShiftInnerRound#(width, TSub#(shamt_width, 1))
+);
+	let width = valueOf(width);
+	let shamt_width = valueOf(shamt_width);
+
+	Bit#(width) value_ = pack(value);
+	if (w) begin
+		Bit#(TDiv#(width, 2)) value_lo = truncate(value_);
+		value_ = { value_lo, value_lo };
+	end
+
+	if (!right)
+		shamt = ~shamt;
+
+	Bit#(width) r = right ? value_ : rotateBitsBy(value_, fromInteger(width - 1));
+
+	Bit#(width) p = signExtend(pack(right || rotate));
+	p[width - 1] = 1;
+
+	Bit#(width) result = 0;
+
+	Tuple2#(Bit#(1), Bit#(TSub#(shamt_width, 1))) shamt_parts = split(shamt);
+	match { .shamt_hi, .shamt_lo } = shamt_parts;
+
+	let round_result = shift_rotate_inner_round(shamt_lo, right, rotate, 0, r, p);
+	r = round_result.r;
+	p = round_result.p;
+
+	if (w) begin
+		Bit#(TDiv#(width, 2)) r_lo = truncate(r);
+		Bit#(TDiv#(width, 2)) p_hi = truncateLSB(p);
+
+		let result_lo = (r_lo & p_hi) | ~((signExtend(arithmetic ? 0 : value_[width - 1])) | p_hi);
+		result = signExtend(result_lo);
+
+	end else begin
+		let round_result = shift_rotate_inner_round(shamt_hi, right, rotate, shamt_width - 1, r, p);
+		r = round_result.r;
+		p = round_result.p;
+
+		result = (r & p) | ~(signExtend(arithmetic ? 0 : value_[width - 1]) | p);
+	end
+
+	return unpack(result);
+endfunction
+
+typeclass ShiftInnerRound#(numeric type width, numeric type shamt_width);
+	function ShiftInnerRoundResult#(width) shift_rotate_inner_round(
+		Bit#(shamt_width) shamt,
+		Bool right,
+		Bool rotate,
+		Integer i,
+		Bit#(width) r,
+		Bit#(width) p
+	);
+endtypeclass
+
+instance ShiftInnerRound#(width, 0);
+	function ShiftInnerRoundResult#(width) shift_rotate_inner_round(
+		Bit#(0) shamt,
+		Bool right,
+		Bool rotate,
+		Integer i,
+		Bit#(width) r,
+		Bit#(width) p
+	);
+		return ShiftInnerRoundResult { r: r, p: p };
+	endfunction
+endinstance
+
+instance ShiftInnerRound#(width, shamt_width)
+provisos (
+	Add#(a__, 1, width),
+	ShiftInnerRound#(width, TSub#(shamt_width, 1))
+);
+	function ShiftInnerRoundResult#(width) shift_rotate_inner_round(
+		Bit#(shamt_width) shamt,
+		Bool right,
+		Bool rotate,
+		Integer i,
+		Bit#(width) r,
+		Bit#(width) p
+	);
+		let width = valueOf(width);
+
+		if (unpack(shamt[0])) begin
+			let r_ = r;
+			r = (r_ >> (2 ** i)) | (r_ << (width - 2 ** i));
+
+			let p_ = p;
+			Bit#(width) p__ = signExtend(pack(!right || rotate));
+			p = (p_ >> (2 ** i)) | (p__ << (width - 2 ** i));
+		end
+
+		Bit#(TSub#(shamt_width, 1)) shamt_ = truncateLSB(shamt);
+		return shift_rotate_inner_round(shamt_, right, rotate, i + 1, r, p);
+	endfunction
+endinstance
+
+typedef struct {
+	Bit#(width) r;
+	Bit#(width) p;
+} ShiftInnerRoundResult#(numeric type width) deriving(Bits);

@@ -480,6 +480,50 @@ module rv_decompressing_decoder #(
 								imm_(32'(8'('1)));
 							end
 
+							// sext.b
+							3'b001: begin
+								opcode = OpCode_OpImm;
+								funct3 = 3'b001;
+								funct7 = 7'b0110000;
+
+								rd_({2'b01, in[7+:3]});
+								rs1_({2'b01, in[7+:3]});
+								rs2_(5'b00000);
+								csr_load = '0;
+								csr_store = '0;
+
+								imm_(32'b110000_00100);
+							end
+
+							// zext.h
+							3'b010: begin
+								opcode = rv64 ? OpCode_Op32 : OpCode_Op;
+								funct3 = 3'b100;
+								funct7 = 7'b0000100;
+								funct5 = 5'b00000;
+
+								rd_({2'b01, in[7+:3]});
+								rs1_({2'b01, in[7+:3]});
+								rs2_(5'b00000);
+								csr_load = '0;
+								csr_store = '0;
+							end
+
+							// sext.h
+							3'b011: begin
+								opcode = OpCode_OpImm;
+								funct3 = 3'b001;
+								funct7 = 7'b0110000;
+
+								rd_({2'b01, in[7+:3]});
+								rs1_({2'b01, in[7+:3]});
+								rs2_(5'b00000);
+								csr_load = '0;
+								csr_store = '0;
+
+								imm_(32'b110000_00101);
+							end
+
 							3'b100: if (rv64) begin
 								// zext.w
 								opcode = OpCode_Op32;

@@ -123,6 +123,12 @@ module mkRvCpu(RvCpu);
 						value: fetch_x_reg(x_regs_, value),
 						offset: offset
 					};
+
+					tagged Unary { op: .op, rd: .rd, rs: .rs }: return tagged Unary {
+						op: op,
+						rd: rd,
+						rs: fetch_x_reg(x_regs_, rs)
+					};
 				endcase;
 
 				let next_pc = case (inst_len) matches

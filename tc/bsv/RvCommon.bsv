@@ -45,6 +45,8 @@ typedef union tagged {
 	struct { XReg rd; Int#(20) imm; } Lui;
 
 	struct { StoreOp op; x_reg_src base; x_reg_src value; Int#(12) offset; } Store;
+
+	struct { UnaryOp op; XReg rd; x_reg_src rs; } Unary;
 } Instruction#(type x_reg_src, type csr_dest, type csr_src) deriving(Bits);
 
 typedef enum {
@@ -52,13 +54,23 @@ typedef enum {
 	AddUw,
 	Addw,
 	And,
+	Andn,
 	Bclr,
 	Bext,
 	Binv,
 	Bset,
 	CzeroEqz,
 	CzeroNez,
+	Max,
+	Maxu,
+	Min,
+	Minu,
 	Or,
+	Orn,
+	Rol,
+	Rolw,
+	Ror,
+	Rorw,
 	Sh1add,
 	Sh1addUw,
 	Sh2add,
@@ -76,6 +88,7 @@ typedef enum {
 	Srlw,
 	Sub,
 	Subw,
+	Xnor,
 	Xor
 } BinaryOp deriving(Bits);
 
@@ -117,3 +130,17 @@ typedef enum {
 	Word,
 	DoubleWord
 } StoreOp deriving(Bits);
+
+typedef enum {
+	Clz,
+	Clzw,
+	Cpop,
+	Cpopw,
+	Ctz,
+	Ctzw,
+	OrcB,
+	Rev8,
+	SextB,
+	SextH,
+	ZextH
+} UnaryOp deriving(Bits);
