@@ -54,7 +54,7 @@ extern "C" fn main() {
 fn main_inner(console: &mut Console<'_>, program: &[u8]) -> Result<(), ()> {
 	let program = core::str::from_utf8(program).map_err(|err| { _ = writeln!(console, "{err}"); })?;
 
-	let supported_extensions = riscv::SupportedExtensions::RV64C_ZCB | riscv::SupportedExtensions::ZBA;
+	let supported_extensions = riscv::SupportedExtensions::RV64C_ZCB | riscv::SupportedExtensions::ZBA | riscv::SupportedExtensions::ZBB;
 
 	for instruction in riscv::parse_program(program, supported_extensions) {
 		let instruction = instruction.map_err(|err| { _ = writeln!(console, "{err}"); })?;
