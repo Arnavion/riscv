@@ -133,7 +133,7 @@ module rv_cpu (
 
 	wire alu_sigill;
 	rv_alu alu (
-		opcode, funct3, funct7,
+		opcode, funct3, funct7, funct5,
 		rs1_load_value, rs2_load_value, imm, csrimm,
 		pc, pc + 63'(insts_len_half_minus_one) + 63'b1,
 		ram_load_value, csr_load_value,

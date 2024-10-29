@@ -308,12 +308,20 @@ Zarnavion (produced by MOP fusion)
 | lwu.sh3add rd, (rs1 << 3 + rs2) | 2      | 6      | 4      |        | -> | rs1 << 3          | rs2  | RAM Load Value    | 1    |       | +       |
 +---------------------------------+--------+--------+--------+--------+----+-------------------+------+-------------------+------+-------+---------+
 
++---------------------------------+--------+--------+--------+--------+----+--------------------------+-----------------------------+-------------------+
+|              inst               | opcode | funct3 | funct7 | funct5 | -> |          Adder           |            Misc             |        rd         |
+|                                 |        |        |        |        | -> |        in1        | in2  |      in3      |     in4     |                   |
++=================================+========+========+========+========+====+===================+======+===============+=============+===================+
+| abs rd, rs1                     | 2      | 7      | 0      |        | -> | -rs1              | 0    | rs1           | +           | <s ? + : rs1      |
++---------------------------------+--------+--------+--------+--------+----+-------------------+------+-----------------------------+-------------------+
+
  */
 
 module rv_alu (
 	input bit[4:0] opcode,
 	input bit[2:0] funct3,
 	input bit[6:0] funct7,
+	input bit[4:0] funct5,
 	input logic[63:0] rs1,
 	input logic[63:0] rs2,
 	input logic[32:0] imm_,
@@ -354,6 +362,12 @@ module rv_alu (
 
 	wire[63:0] rs1_sh3 = {rs1[0+:61], 3'b0};
 
+	wire[63:0] rs1sb = unsigned'(64'(signed'(rs1[0+:8])));
+
+	wire[63:0] rs1sh = unsigned'(64'(signed'(rs1[0+:16])));
+
+	wire[63:0] rs1uh = 64'(rs1[0+:16]);
+
 	wire[63:0] rs1uw = 64'(rs1[0+:32]);
 
 	wire[63:0] rs1uw_sh1 = {rs1uw[0+:63], 1'b0};
@@ -368,6 +382,9 @@ module rv_alu (
 
 	wire[63:0] csrimm = 64'(csrimm_);
 
+	wire[63:0] rs1_rev8_b;
+	rev8_b rs1_rev8_b_module (rs1, rs1_rev8_b);
+
 	wire[63:0] rs2_decoded = 64'b1 << rs2[0+:6];
 
 	wire[63:0] imm_decoded = 64'b1 << imm[0+:6];
@@ -376,6 +393,7 @@ module rv_alu (
 	logic[63:0] in2;
 	logic[63:0] in3;
 	logic[63:0] in4;
+	logic[63:0] in5;
 
 	logic add_cin;
 	wire[63:0] add_add;
@@ -389,16 +407,33 @@ module rv_alu (
 	wire cmp_ge;
 	cmp cmp_module (in3, in4, cmp_signed, cmp_lt, cmp_eq, cmp_ne, cmp_ge);
 
+	logic logical_invert_arg2;
 	wire[63:0] logical_and;
 	wire[63:0] logical_or;
 	wire[63:0] logical_xor;
-	logical logical_module (in3, in4, logical_and, logical_or, logical_xor);
+	logical logical_module (in3, in4, logical_invert_arg2, logical_and, logical_or, logical_xor);
 
 	wire[63:0] shift_sll;
 	wire[63:0] shift_sllw;
 	wire[63:0] shift_srl;
 	wire[63:0] shift_sra;
 	shift shift_module (in3, in4[0+:6], shift_sll, shift_sllw, shift_srl, shift_sra);
+
+	wire[63:0] rotate_rol;
+	wire[63:0] rotate_rolw;
+	wire[63:0] rotate_ror;
+	wire[63:0] rotate_rorw;
+	rotate rotate_module (in3, in4[0+:6], rotate_rol, rotate_rolw, rotate_ror, rotate_rorw);
+
+	wire[63:0] popcnt_cpop;
+	wire[63:0] popcnt_cpopw;
+	popcnt popcnt_module (in5, popcnt_cpop, popcnt_cpopw);
+
+	wire[63:0] rs1_orc_b;
+	orc_b orc_b_module (rs1, rs1_orc_b);
+
+	wire[63:0] rs1_rev8;
+	rev8 rev8_module (rs1, rs1_rev8);
 
 	bit jump;
 	assign pcnext_out = jump ? add_add[1+:63] : pcnext_in;
@@ -419,8 +454,10 @@ module rv_alu (
 		in2 = 'x;
 		in3 = 'x;
 		in4 = 'x;
+		in5 = 'x;
 		add_cin = 'x;
 		cmp_signed = 'x;
+		logical_invert_arg2 = 'x;
 
 		jump = '0;
 
@@ -510,6 +547,14 @@ module rv_alu (
 						ram_address = add_add;
 					end
 
+				// abs
+				10'b000_0000101: begin
+					in1 = ~rs1;
+					in2 = '0;
+					add_cin = '1;
+					rd = rs1[63] ? add_add : rs1;
+				end
+
 				default: sigill = '1;
 			endcase
 
@@ -534,20 +579,67 @@ module rv_alu (
 					6'b001010: begin
 						in3 = rs1;
 						in4 = imm_decoded;
+						logical_invert_arg2 = '0;
 						rd = logical_or;
 					end
 
 					// bclri
 					6'b010010: begin
 						in3 = rs1;
-						in4 = ~imm_decoded;
+						in4 = imm_decoded;
+						logical_invert_arg2 = '1;
 						rd = logical_and;
 					end
+
+					6'b011000: unique case (imm[0+:6])
+						// clz
+						6'b000000: begin
+							in1 = rs1_rev8_b;
+							in2 = 64'(-1);
+							add_cin = '0;
+							in3 = add_add;
+							in4 = in1;
+							logical_invert_arg2 = '1;
+							in5 = logical_and;
+							rd = popcnt_cpop;
+						end
+
+						// ctz
+						6'b000001: begin
+							in1 = rs1;
+							in2 = 64'(-1);
+							add_cin = '0;
+							in3 = add_add;
+							in4 = in1;
+							logical_invert_arg2 = '1;
+							in5 = logical_and;
+							rd = popcnt_cpop;
+						end
+
+						// cpop
+						6'b000010: begin
+							in5 = rs1;
+							rd = popcnt_cpop;
+						end
+
+						// sext.b
+						6'b000100: begin
+							rd = rs1sb;
+						end
+
+						// sext.h
+						6'b000101: begin
+							rd = rs1sh;
+						end
+
+						default: sigill = '1;
+					endcase
 
 					// binvi
 					6'b011010: begin
 						in3 = rs1;
 						in4 = imm_decoded;
+						logical_invert_arg2 = '0;
 						rd = logical_xor;
 					end
 
@@ -566,6 +658,7 @@ module rv_alu (
 				3'b100: begin
 					in3 = rs1;
 					in4 = imm;
+					logical_invert_arg2 = '0;
 					rd = logical_xor;
 				end
 
@@ -576,6 +669,15 @@ module rv_alu (
 						in4 = {58'bx, imm[0+:6]};
 						rd = shift_srl;
 					end
+
+					6'b001010: unique case (imm[0+:6])
+						// orc.b
+						6'b000111: begin
+							rd = rs1_orc_b;
+						end
+
+						default: sigill = '1;
+					endcase
 
 					// srai
 					6'b010000: begin
@@ -591,6 +693,22 @@ module rv_alu (
 						rd = 64'(shift_srl[0]);
 					end
 
+					// rori
+					6'b011000: begin
+						in3 = rs1;
+						in4 = {58'bx, imm[0+:6]};
+						rd = rotate_ror;
+					end
+
+					6'b011010: unique case (imm[0+:6])
+						// rev8
+						6'b111000: begin
+							rd = rs1_rev8;
+						end
+
+						default: sigill = '1;
+					endcase
+
 					default: sigill = '1;
 				endcase
 
@@ -598,6 +716,7 @@ module rv_alu (
 				3'b110: begin
 					in3 = rs1;
 					in4 = imm;
+					logical_invert_arg2 = '0;
 					rd = logical_or;
 				end
 
@@ -605,6 +724,7 @@ module rv_alu (
 				3'b111: begin
 					in3 = rs1;
 					in4 = imm;
+					logical_invert_arg2 = '0;
 					rd = logical_and;
 				end
 			endcase
@@ -641,6 +761,40 @@ module rv_alu (
 						rd = shift_sll;
 					end
 
+					7'b0110000: unique case (imm[0+:5])
+						// clzw
+						5'b00000: begin
+							in1 = 64'(rs1_rev8_b[32+:32]);
+							in2 = 64'(-1);
+							add_cin = '0;
+							in3 = add_add;
+							in4 = in1;
+							logical_invert_arg2 = '1;
+							in5 = logical_and;
+							rd = popcnt_cpopw;
+						end
+
+						// ctzw
+						5'b00001: begin
+							in1 = rs1uw;
+							in2 = 64'(-1);
+							add_cin = '0;
+							in3 = add_add;
+							in4 = in1;
+							logical_invert_arg2 = '1;
+							in5 = logical_and;
+							rd = popcnt_cpopw;
+						end
+
+						// cpopw
+						5'b00010: begin
+							in5 = rs1uw;
+							rd = popcnt_cpop;
+						end
+
+						default: sigill = '1;
+					endcase
+
 					default: sigill = '1;
 				endcase
 
@@ -657,6 +811,13 @@ module rv_alu (
 						in3 = rs1w;
 						in4 = {58'bx, imm[0+:6]};
 						rd = shift_sra;
+					end
+
+					// roriw
+					7'b0110000: begin
+						in3 = rs1;
+						in4 = {58'bx, imm[0+:6]};
+						rd = rotate_rorw;
 					end
 
 					default: sigill = '1;
@@ -705,20 +866,30 @@ module rv_alu (
 				10'b001_0010100: begin
 					in3 = rs1;
 					in4 = rs2_decoded;
+					logical_invert_arg2 = '0;
 					rd = logical_or;
 				end
 
 				// bclr
 				10'b001_0100100: begin
 					in3 = rs1;
-					in4 = ~rs2_decoded;
+					in4 = rs2_decoded;
+					logical_invert_arg2 = '1;
 					rd = logical_and;
+				end
+
+				// rol
+				10'b001_0110000: begin
+					in3 = rs1;
+					in4 = {58'bx, rs2[0+:6]};
+					rd = rotate_rol;
 				end
 
 				// binv
 				10'b001_0110100: begin
 					in3 = rs1;
 					in4 = rs2_decoded;
+					logical_invert_arg2 = '0;
 					rd = logical_xor;
 				end
 
@@ -738,11 +909,20 @@ module rv_alu (
 					rd = add_add;
 				end
 
-				// xor
-				10'b100_0000000: begin
+				// xor, xnor
+				10'b100_0?00000: begin
 					in3 = rs1;
 					in4 = rs2;
+					logical_invert_arg2 = funct7[5];
 					rd = logical_xor;
+				end
+
+				// min, minu
+				10'b10?_0000101: begin
+					in3 = rs1;
+					in4 = rs2;
+					cmp_signed = ~funct3[0];
+					rd = cmp_lt ? rs1 : rs2;
 				end
 
 				// sh2add
@@ -781,11 +961,27 @@ module rv_alu (
 					rd = 64'(shift_srl[0]);
 				end
 
-				// or
-				10'b110_0000000: begin
+				// ror
+				10'b101_0110000: begin
+					in3 = rs1;
+					in4 = {58'bx, rs2[0+:6]};
+					rd = rotate_ror;
+				end
+
+				// or, orn
+				10'b110_0?00000: begin
 					in3 = rs1;
 					in4 = rs2;
+					logical_invert_arg2 = funct7[5];
 					rd = logical_or;
+				end
+
+				// max, maxu
+				10'b11?_0000101: begin
+					in3 = rs1;
+					in4 = rs2;
+					cmp_signed = ~funct3[0];
+					rd = cmp_ge ? rs1 : rs2;
 				end
 
 				// sh3add
@@ -796,10 +992,11 @@ module rv_alu (
 					rd = add_add;
 				end
 
-				// and
-				10'b111_0000000: begin
+				// and, andn
+				10'b111_0?00000: begin
 					in3 = rs1;
 					in4 = rs2;
+					logical_invert_arg2 = funct7[5];
 					rd = logical_and;
 				end
 
@@ -850,6 +1047,13 @@ module rv_alu (
 					rd = shift_sllw;
 				end
 
+				// rolw
+				10'b001_0110000: begin
+					in3 = rs1;
+					in4 = {58'bx, 1'b0, rs2[0+:5]};
+					rd = rotate_rolw;
+				end
+
 				// sh1add.uw
 				10'b010_0010000: begin
 					in1 = rs1uw_sh1;
@@ -857,6 +1061,15 @@ module rv_alu (
 					add_cin = '0;
 					rd = add_addw;
 				end
+
+				10'b100_0000100: unique case (funct5)
+					// zext.h
+					5'b00000: begin
+						rd = rs1uh;
+					end
+
+					default: sigill = '1;
+				endcase
 
 				// sh2add.uw
 				10'b100_0010000: begin
@@ -878,6 +1091,13 @@ module rv_alu (
 					in3 = rs1w;
 					in4 = {58'bx, 1'b0, rs2[0+:5]};
 					rd = shift_sra;
+				end
+
+				// rorw
+				10'b101_0110000: begin
+					in3 = rs1;
+					in4 = {58'bx, 1'b0, rs2[0+:5]};
+					rd = rotate_rorw;
 				end
 
 				// sh3add.uw
@@ -966,6 +1186,7 @@ module rv_alu (
 				3'b010: begin
 					in3 = csr_load_value;
 					in4 = rs1;
+					logical_invert_arg2 = '0;
 					rd = csr_load_value;
 					csr_store_value = logical_or;
 				end
@@ -973,7 +1194,8 @@ module rv_alu (
 				// csrrc
 				3'b011: begin
 					in3 = csr_load_value;
-					in4 = ~rs1;
+					in4 = rs1;
+					logical_invert_arg2 = '1;
 					rd = csr_load_value;
 					csr_store_value = logical_and;
 				end
@@ -988,6 +1210,7 @@ module rv_alu (
 				3'b110: begin
 					in3 = csr_load_value;
 					in4 = csrimm;
+					logical_invert_arg2 = '0;
 					rd = csr_load_value;
 					csr_store_value = logical_or;
 				end
@@ -995,7 +1218,8 @@ module rv_alu (
 				// csrrci
 				3'b111: begin
 					in3 = csr_load_value;
-					in4 = ~csrimm;
+					in4 = csrimm;
+					logical_invert_arg2 = '1;
 					rd = csr_load_value;
 					csr_store_value = logical_and;
 				end
@@ -1039,14 +1263,15 @@ endmodule
 module logical (
 	input bit[63:0] arg1,
 	input bit[63:0] arg2,
+	input bit logical_invert_arg2,
 
 	output bit[63:0] out_and,
 	output bit[63:0] out_or,
 	output bit[63:0] out_xor
 );
-	assign out_and = arg1 & arg2;
-	assign out_or = arg1 | arg2;
-	assign out_xor = arg1 ^ arg2;
+	assign out_and = arg1 & ({64{logical_invert_arg2}} ^ arg2);
+	assign out_or = arg1 | ({64{logical_invert_arg2}} ^ arg2);
+	assign out_xor = arg1 ^ ({64{logical_invert_arg2}} ^ arg2);
 endmodule
 
 module shift (
@@ -1062,4 +1287,104 @@ module shift (
 	assign sllw = unsigned'(64'(signed'(sll[0+:32])));
 	assign srl = value >> shamt;
 	assign sra = unsigned'(signed'(value) >>> shamt);
+endmodule
+
+module rotate (
+	input bit[63:0] value,
+	input bit[5:0] shamt,
+
+	output bit[63:0] rol,
+	output bit[63:0] rolw,
+	output bit[63:0] ror,
+	output bit[63:0] rorw
+);
+	wire[63:0] shl = value << shamt;
+	assign rol = shl | (value >> (-shamt));
+	assign rolw = unsigned'(64'(signed'(shl[0+:32] | (value[0+:32] >> (-(shamt[0+:5]))))));
+
+	assign ror = (value >> shamt) | (value << (-shamt));
+	assign rorw = unsigned'(64'(signed'((value[0+:32] >> shamt[0+:5]) | (value[0+:32] << (-(shamt[0+:5]))))));
+endmodule
+
+module popcnt (
+	input bit[63:0] arg,
+
+	output bit[63:0] cpop,
+	output bit[63:0] cpopw
+);
+	wire[5:0] cpopw_;
+	popcntw lo (
+		arg[0+:32],
+		cpopw_
+	);
+	assign cpopw = 64'(cpopw_);
+
+	wire[5:0] cpop_hi;
+	popcntw hi (
+		arg[32+:32],
+		cpop_hi
+	);
+	wire[6:0] cpop_ = cpopw_ + cpop_hi;
+	assign cpop = 64'(cpop_);
+endmodule
+
+module popcntw (
+	input bit[31:0] arg,
+
+	output bit[5:0] cpopw
+);
+	always_comb begin
+		cpopw = '0;
+		for (int i = 0; i < $size(arg); i++) begin
+			cpopw += 6'(arg[i]);
+		end
+	end
+endmodule
+
+module orc_b (
+	input bit[63:0] arg,
+
+	output bit[63:0] out
+);
+	always_comb begin
+		for (int i = 0; i < $size(out); i += 8) begin
+			out[i+:8] = {8{| arg[i+:8]}};
+		end
+	end
+endmodule
+
+module rev8 (
+	input bit[63:0] arg,
+
+	output bit[63:0] out
+);
+	always_comb begin
+		for (int i = 0; i < $size(out); i += 8) begin
+			out[i+:8] = arg[(56 - i)+:8];
+		end
+	end
+endmodule
+
+module rev_b (
+	input bit[63:0] arg,
+
+	output bit[63:0] out
+);
+	always_comb begin
+		for (int i = 0; i < $size(out); i++) begin
+			out[i] = arg[(i / 8) * 8 + 7 - (i % 8)];
+		end
+	end
+endmodule
+
+module rev8_b (
+	input bit[63:0] arg,
+
+	output bit[63:0] out
+);
+	always_comb begin
+		for (int i = 0; i < $size(out); i++) begin
+			out[i] = arg[63 - i];
+		end
+	end
 endmodule
