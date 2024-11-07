@@ -35,6 +35,24 @@ test:
 	cargo machete
 
 
+.PHONY: test-booth_multiplier
+test: test-booth_multiplier
+test-booth_multiplier:
+	src="$$PWD" && \
+	d="$$(mktemp -d)" && \
+	trap "rm -rf '$$d'" EXIT && \
+	(cd "$$d" && iverilog -g2012 -DTESTING -o test "$$src/tc/sv/booth_multiplier.sv" && ./test)
+
+
+.PHONY: test-booth_multiplier_multi_cycle
+test: test-booth_multiplier_multi_cycle
+test-booth_multiplier_multi_cycle:
+	src="$$PWD" && \
+	d="$$(mktemp -d)" && \
+	trap "rm -rf '$$d'" EXIT && \
+	(cd "$$d" && iverilog -g2012 -DTESTING -o test "$$src/tc/sv/booth_multiplier_multi_cycle.sv" && ./test)
+
+
 .PHONY: test-decompressor
 test: test-decompressor
 test-decompressor:
