@@ -92,6 +92,30 @@ test-as:
 	done
 
 
+.PHONY: test-booth_multiplier-sv
+test: test-booth_multiplier-sv
+test-booth_multiplier-sv: tc/sv/booth_multiplier.sv
+	$(test-sv)
+
+
+.PHONY: test-booth_multiplier-bsv
+test: test-booth_multiplier-bsv
+test-booth_multiplier-bsv: tc/bsv/BoothMultiplier.bsv
+	$(test-bsv)
+
+
+.PHONY: test-booth_multiplier_multi_cycle-sv
+test: test-booth_multiplier_multi_cycle-sv
+test-booth_multiplier_multi_cycle-sv: tc/sv/booth_multiplier_multi_cycle.sv
+	$(test-sv)
+
+
+.PHONY: test-booth_multiplier_multi_cycle-bsv
+test: test-booth_multiplier_multi_cycle-bsv
+test-booth_multiplier_multi_cycle-bsv: tc/bsv/BoothMultiplierMultiCycle.bsv
+	$(test-bsv)
+
+
 .PHONY: test-decompressor-sv
 test: test-decompressor-sv
 test-decompressor-sv: tc/sv/rv_decompressor.sv
