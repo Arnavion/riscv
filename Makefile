@@ -35,6 +35,14 @@ test: test-decompressor test-load test-ram_cache
 	cargo machete
 
 
+.PHONY: test-booth-multiplier
+test-booth-multiplier:
+	src="$$PWD" && \
+	d="$$(mktemp -d)" && \
+	trap "rm -rf '$$d'" EXIT && \
+	(cd "$$d" && iverilog -g2012 -DTESTING -o test "$$src/tc/sv/booth_multiplier.sv" && ./test)
+
+
 .PHONY: test-decompressor
 test-decompressor:
 	src="$$PWD" && \
