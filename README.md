@@ -30,7 +30,9 @@ Per the [unprivileged ISA spec version 20240411,](https://github.com/riscv/riscv
 
 - Zicsr 2.0 (CSR instructions)
 
-Further extensions are not supported, notably instructions for hardware multiplication and division (M) and hardware floats (F, D).
+- Zmmul 1.0 (integer multiplication instructions)
+
+Further extensions are not supported, notably instructions for hardware division (M) and hardware floats (F, D).
 
 Compressed instructions are supported in the sense that the assembler will encode regular instructions like `add` and `lbu` into the compressed form when compression is enabled. The mnemonics for the compressed instructions like `c.add` and `c.lbu` are not supported. Instructions that only exist in compressed instruction extensions like `c.lwsp` can be written as `lwsp` or `c.lwsp`.
 
@@ -62,7 +64,7 @@ The assembler does not consider whether the target architecture is 32-bit or 64-
 
 Therefore the assembler also has a `--64` flag to explicitly set the target architecture to RV64I. When combined with the `--compressed` flag it will instruct the assembler to not compress `jal`.
 
-The `*.c` files contain equivalent C solutions that can be put in [Compiler Explorer](https://gcc.godbolt.org/) with compiler set to `RISC-V (32-bits) gcc` or `RISC-V rv32gc clang` or corresponding 64-bit version, and flags set to `--std=c23 -Os -march=rv32id_zba_zbb_zbs_zicond` or `--std=c23 -Os -march=rv64id_zba_zbb_zbs_zicond`. Note that the assembler programs are hand-written and will not exactly match the compiler's output.
+The `*.c` files contain equivalent C solutions that can be put in [Compiler Explorer](https://gcc.godbolt.org/) with compiler set to `RISC-V (32-bits) gcc` or `RISC-V rv32gc clang` or corresponding 64-bit version, and flags set to `--std=c23 -Os -march=rv32id_zba_zbb_zbs_zicond_zmmul` or `--std=c23 -Os -march=rv64id_zba_zbb_zbs_zicond_zmmul`. Note that the assembler programs are hand-written and will not exactly match the compiler's output.
 
 The emulator has the Level Input and Level Output wired up to memory address `2^xlen - 8`, which is why the assembler programs refer to `li fp, -8; l{b,h}u rd, 0(fp)` and the C programs refer to `IO = (volatile uint{8,16}_t*)(intptr_t)-8; x = *IO;`.
 

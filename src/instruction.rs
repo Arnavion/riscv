@@ -1232,6 +1232,21 @@ instructions! {
 		#[r("minu", Op)]
 		Minu { dest: Register, src1: Register, src2: Register },
 
+		#[r("mul", Op)]
+		Mul { dest: Register, src1: Register, src2: Register },
+
+		#[r("mulh", Op)]
+		Mulh { dest: Register, src1: Register, src2: Register },
+
+		#[r("mulhsu", Op)]
+		Mulhsu { dest: Register, src1: Register, src2: Register },
+
+		#[r("mulhu", Op)]
+		Mulhu { dest: Register, src1: Register, src2: Register },
+
+		#[r("mulw", Op32)]
+		Mulw { dest: Register, src1: Register, src2: Register },
+
 		#[r("or", Op)]
 		Or { dest: Register, src1: Register, src2: Register },
 
@@ -1741,6 +1756,19 @@ impl Instruction {
 					imm1,
 					imm2,
 				}
+			},
+
+			Self::Mul { dest, src1: src, src2: other } |
+			Self::Mul { dest, src1: other, src2: src } if
+				supported_extensions.contains(SupportedExtensions::ZCB) &&
+				dest.is_compressible() &&
+				src.is_compressible() &&
+				other == dest
+			=> RawInstruction::Zcb {
+				opcode: OpCodeC::Mul,
+				reg: dest,
+				imm1: src.encode_3b()?,
+				imm2: 0b01,
 			},
 
 			Self::Or { dest, src1: src, src2: other } |
@@ -2627,6 +2655,11 @@ funct! {
 		Maxu = 0b111,
 		Min = 0b100,
 		Minu = 0b101,
+		Mul = 0b000,
+		Mulh = 0b001,
+		Mulhsu = 0b010,
+		Mulhu = 0b011,
+		Mulw = 0b000,
 		Or = 0b110,
 		OrcB = 0b101,
 		Ori = 0b110,
@@ -2703,6 +2736,11 @@ funct! {
 		Maxu = 0b000_0101,
 		Min = 0b000_0101,
 		Minu = 0b000_0101,
+		Mul = 0b000_0001,
+		Mulh = 0b000_0001,
+		Mulhsu = 0b000_0001,
+		Mulhu = 0b000_0001,
+		Mulw = 0b000_0001,
 		Or = 0b000_0000,
 		OrcB = 0b001_0100,
 		Orn = 0b010_0000,
@@ -2890,6 +2928,7 @@ opcodec! {
 		Lui = (C1, 0b011_000),
 		Lw = (C0, 0b010_000),
 		Lwsp = (C2, 0b010_000),
+		Mul = (C1, 0b100_111),
 		Mv = (C2, 0b100_000),
 		Not = (C1, 0b100_111),
 		Or = (C1, 0b100_011),
