@@ -30,6 +30,7 @@ module mkRvAlu(RvAlu);
 	Adder adder <- mkAdder;
 	Cmp cmp <- mkCmp;
 	Logical logical <- mkLogical;
+	Multiplier multiplier <- mkMultiplier;
 	OrcB orc_b <- mkOrcB;
 	Popcnt popcnt <- mkPopcnt;
 	ShiftRotate shift_rotate <- mkShiftRotate;
@@ -704,6 +705,106 @@ module mkRvAlu(RvAlu);
 		result.wset(tagged Ok AluResponseOk {
 			x_regs_rd: rd,
 			x_regs_rd_value: cmp_response.lt ? rs1 : rs2,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// mul
+	rule mul_1(inst matches tagged Binary { op: Mul, rs1: .rs1, rs2: .rs2 });
+		multiplier.request.put(MultiplierRequest {
+			arg1: rs1,
+			arg1_is_signed: True,
+			arg2: rs2,
+			arg2_is_signed: True
+		});
+	endrule
+
+	rule mul_end(inst matches tagged Binary { op: Mul, rd: .rd });
+		let multiplier_response <- multiplier.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: multiplier_response.mul,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// mulh
+	rule mulh_1(inst matches tagged Binary { op: Mulh, rs1: .rs1, rs2: .rs2 });
+		multiplier.request.put(MultiplierRequest {
+			arg1: rs1,
+			arg1_is_signed: True,
+			arg2: rs2,
+			arg2_is_signed: True
+		});
+	endrule
+
+	rule mulh_end(inst matches tagged Binary { op: Mulh, rd: .rd });
+		let multiplier_response <- multiplier.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: multiplier_response.mulh,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// mulhsu
+	rule mulhsu_1(inst matches tagged Binary { op: Mulhsu, rs1: .rs1, rs2: .rs2 });
+		multiplier.request.put(MultiplierRequest {
+			arg1: rs1,
+			arg1_is_signed: True,
+			arg2: rs2,
+			arg2_is_signed: False
+		});
+	endrule
+
+	rule mulhsu_end(inst matches tagged Binary { op: Mulhsu, rd: .rd });
+		let multiplier_response <- multiplier.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: multiplier_response.mulh,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// mulhu
+	rule mulhu_1(inst matches tagged Binary { op: Mulhu, rs1: .rs1, rs2: .rs2 });
+		multiplier.request.put(MultiplierRequest {
+			arg1: rs1,
+			arg1_is_signed: False,
+			arg2: rs2,
+			arg2_is_signed: False
+		});
+	endrule
+
+	rule mulhu_end(inst matches tagged Binary { op: Mulhu, rd: .rd });
+		let multiplier_response <- multiplier.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: multiplier_response.mulh,
+			csrd: tagged Invalid,
+			next_pc: next_pc
+		});
+	endrule
+
+	// mulw
+	rule mulw_1(inst matches tagged Binary { op: Mulw, rs1: .rs1, rs2: .rs2 });
+		multiplier.request.put(MultiplierRequest {
+			arg1: rs1,
+			arg1_is_signed: True,
+			arg2: rs2,
+			arg2_is_signed: True
+		});
+	endrule
+
+	rule mulw_end(inst matches tagged Binary { op: Mulw, rd: .rd });
+		let multiplier_response <- multiplier.response.get;
+		result.wset(tagged Ok AluResponseOk {
+			x_regs_rd: rd,
+			x_regs_rd_value: multiplier_response.mulw,
 			csrd: tagged Invalid,
 			next_pc: next_pc
 		});
@@ -1464,6 +1565,59 @@ function LogicalResponse#(width) logical_inner(Int#(width) arg1, Int#(width) arg
 		or_: or_,
 		xor_: ~(and_ | ~or_)
 	};
+endfunction
+
+typedef Server#(MultiplierRequest#(64), MultiplierResponse#(64)) Multiplier;
+
+typedef struct {
+	Int#(width) arg1;
+	Bool arg1_is_signed;
+	Int#(width) arg2;
+	Bool arg2_is_signed;
+} MultiplierRequest#(numeric type width) deriving(Bits);
+
+typedef struct {
+	Int#(width) mulh;
+	Int#(width) mul;
+	Int#(width) mulw;
+} MultiplierResponse#(numeric type width) deriving(Bits);
+
+(* synthesize *)
+module mkMultiplier(Multiplier);
+	Wire#(Int#(64)) arg1 <- mkWire;
+	Wire#(Bool) arg1_is_signed <- mkWire;
+	Wire#(Int#(64)) arg2 <- mkWire;
+	Wire#(Bool) arg2_is_signed <- mkWire;
+	RWire#(MultiplierResponse#(64)) result <- mkRWire;
+
+	rule run;
+		result.wset(multiplier_inner(arg1, arg1_is_signed, arg2, arg2_is_signed));
+	endrule
+
+	interface Put request;
+		method Action put(MultiplierRequest#(64) request);
+			arg1 <= request.arg1;
+			arg1_is_signed <= request.arg1_is_signed;
+			arg2 <= request.arg2;
+			arg2_is_signed <= request.arg2_is_signed;
+		endmethod
+	endinterface
+
+	interface response = toGet(result);
+endmodule
+
+function MultiplierResponse#(width) multiplier_inner(Int#(width) arg1, Bool arg1_is_signed, Int#(width) arg2, Bool arg2_is_signed)
+provisos (
+	Add#(a__, TDiv#(width, 2), width),
+	Add#(b__, TDiv#(width, 2), TMul#(width, 2)),
+	Add#(c__, width, TMul#(width, 2))
+);
+	Int#(TMul#(width, 2)) arg1_ = arg1_is_signed ? signExtend(arg1) : zeroExtend(arg1);
+	Int#(TMul#(width, 2)) arg2_ = arg2_is_signed ? signExtend(arg2) : zeroExtend(arg2);
+	let product = arg1_ * arg2_;
+	Int#(TDiv#(width, 2)) mulw = truncate(product);
+	match { .mulh, .mul } = split(pack(product));
+	return MultiplierResponse { mulh: unpack(mulh), mul: unpack(mul), mulw: extend(mulw) };
 endfunction
 
 typedef Server#(OrcBRequest#(64), OrcBResponse#(64)) OrcB;

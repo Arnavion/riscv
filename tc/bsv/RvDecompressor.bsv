@@ -143,6 +143,10 @@ function Maybe#(Bit#(30)) decompress(Bool rv64, Bit#(32) in);
 					else
 						return tagged Invalid;
 
+					// mul
+					3'b110: return tagged Valid
+						type_r(OpCode_Op, { 2'b01, in[9:7] }, 3'b000, { 2'b01, in[9:7] }, { 2'b01, in[4:2] }, 7'b0000001);
+
 					3'b111: case (in[4:2]) matches
 						// zext.b
 						3'b000: return tagged Valid
@@ -169,8 +173,6 @@ function Maybe#(Bit#(30)) decompress(Bool rv64, Bit#(32) in);
 
 						default: return tagged Invalid;
 					endcase
-
-					default: return tagged Invalid;
 				endcase
 			endcase
 
