@@ -29,6 +29,7 @@ module mkRvAlu(RvAlu);
 	Adder adder <- mkAdder;
 	Cmp cmp <- mkCmp;
 	Logical logical <- mkLogical;
+	Multiplier multiplier <- mkMultiplier;
 	OrcB orc_b <- mkOrcB;
 	Popcnt popcnt <- mkPopcnt;
 	ShiftRotate shift_rotate <- mkShiftRotate;
@@ -151,6 +152,21 @@ module mkRvAlu(RvAlu);
 		endcase;
 		let logical_result = logical.run(logical_arg1, logical_arg2, logical_invert_arg2);
 
+		match { .multiplier_arg1, .multiplier_arg1_is_signed, .multiplier_arg2, .multiplier_arg2_is_signed } = case (inst) matches
+			tagged Binary { op: .op, rs1: .rs1, rs2: .rs2 }:
+				case (op) matches
+					tagged Mul: return tuple4(rs1, True, rs2, True);
+					tagged Mulh: return tuple4(rs1, True, rs2, True);
+					tagged Mulhsu: return tuple4(rs1, True, rs2, False);
+					tagged Mulhu: return tuple4(rs1, False, rs2, False);
+					tagged Mulw: return tuple4(rs1, True, rs2, True);
+					default: return ?;
+				endcase
+
+			default: return ?;
+		endcase;
+		let multiplier_result = multiplier.run(multiplier_arg1, multiplier_arg1_is_signed, multiplier_arg2, multiplier_arg2_is_signed);
+
 		let popcnt_arg = case (inst) matches
 			tagged Unary { op: .op, rs: .rs }:
 				case (op) matches
@@ -220,6 +236,11 @@ module mkRvAlu(RvAlu);
 						tagged Maxu: return cmp_result.lt ? rs2 : rs1;
 						tagged Min: return cmp_result.lt ? rs1 : rs2;
 						tagged Minu: return cmp_result.lt ? rs1 : rs2;
+						tagged Mul: return multiplier_result.mul;
+						tagged Mulh: return multiplier_result.mulh;
+						tagged Mulhsu: return multiplier_result.mulh;
+						tagged Mulhu: return multiplier_result.mulh;
+						tagged Mulw: return multiplier_result.mulw;
 						tagged Or: return logical_result.or_;
 						tagged Orn: return logical_result.or_;
 						tagged Rol: return shift_rotate_result;
@@ -478,6 +499,37 @@ function LogicalResult#(width) logical_inner(Int#(width) arg1, Int#(width) arg2,
 		or_: or_,
 		xor_: ~(and_ | ~or_)
 	};
+endfunction
+
+interface Multiplier;
+	method MultiplierResult#(64) run(Int#(64) arg1, Bool arg1_is_signed, Int#(64) arg2, Bool arg2_is_signed);
+endinterface
+
+typedef struct {
+	Int#(width) mulh;
+	Int#(width) mul;
+	Int#(width) mulw;
+} MultiplierResult#(numeric type width) deriving(Bits);
+
+(* synthesize *)
+module mkMultiplier(Multiplier);
+	method MultiplierResult#(64) run(Int#(64) arg1, Bool arg1_is_signed, Int#(64) arg2, Bool arg2_is_signed);
+		return multiplier_inner(arg1, arg1_is_signed, arg2, arg2_is_signed);
+	endmethod
+endmodule
+
+function MultiplierResult#(width) multiplier_inner(Int#(width) arg1, Bool arg1_is_signed, Int#(width) arg2, Bool arg2_is_signed)
+provisos (
+	Add#(a__, TDiv#(width, 2), width),
+	Add#(b__, TDiv#(width, 2), TMul#(width, 2)),
+	Add#(c__, width, TMul#(width, 2))
+);
+	Int#(TMul#(width, 2)) arg1_ = arg1_is_signed ? signExtend(arg1) : zeroExtend(arg1);
+	Int#(TMul#(width, 2)) arg2_ = arg2_is_signed ? signExtend(arg2) : zeroExtend(arg2);
+	let product = arg1_ * arg2_;
+	Int#(TDiv#(width, 2)) mulw = truncate(product);
+	match { .mulh, .mul } = split(pack(product));
+	return MultiplierResult { mulh: unpack(mulh), mul: unpack(mul), mulw: extend(mulw) };
 endfunction
 
 interface OrcB;
