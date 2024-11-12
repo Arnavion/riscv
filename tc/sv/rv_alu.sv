@@ -385,6 +385,8 @@ module rv_alu (
 
 	wire[63:0] rs1_rev8_b = {<<{rs1}};
 
+	wire[63:0] rs2w = unsigned'(64'(signed'(rs2[0+:32])));
+
 	wire[63:0] rs2_decoded = 64'b1 << rs2[0+:6];
 
 	wire[63:0] imm_decoded = 64'b1 << imm[0+:6];
@@ -418,6 +420,16 @@ module rv_alu (
 	logical #(.width(64)) logical_module (
 		.arg1(in3), .arg2(in4), .invert_arg2(logical_invert_arg2),
 		.out_and(logical_and), .out_or(logical_or), .out_xor(logical_xor)
+	);
+
+	logic mul_arg1_is_signed;
+	logic mul_arg2_is_signed;
+	wire[63:0] mul_mulw;
+	wire[63:0] mul_mul;
+	wire[63:0] mul_mulh;
+	multiplier #(.width(64)) multiplier_module (
+		.arg1(in3), .arg1_is_signed(mul_arg1_is_signed), .arg2(in4), .arg2_is_signed(mul_arg2_is_signed),
+		.mulw(mul_mulw), .mul(mul_mul), .mulh(mul_mulh)
 	);
 
 	wire[63:0] rs1_orc_b;
@@ -470,6 +482,8 @@ module rv_alu (
 		add_cin = 'x;
 		cmp_signed = 'x;
 		logical_invert_arg2 = 'x;
+		mul_arg1_is_signed = 'x;
+		mul_arg2_is_signed = 'x;
 		shift_rotate_right = 'x;
 		shift_rotate_rotate = 'x;
 		shift_rotate_arithmetic = 'x;
@@ -879,6 +893,15 @@ module rv_alu (
 					rd = add_add;
 				end
 
+				// mul, mulh, mulhsu, mulhu
+				10'b0??_0000001: begin
+					in3 = rs1;
+					mul_arg1_is_signed = ~& funct3[0+:2];
+					in4 = rs2;
+					mul_arg2_is_signed = ~funct3[1];
+					rd = | funct3[0+:2] ? mul_mulh : mul_mul;
+				end
+
 				// sll
 				10'b001_0000000: begin
 					in3 = rs1;
@@ -1055,6 +1078,15 @@ module rv_alu (
 					in2 = funct7[5] ? ~rs2 : rs2;
 					add_cin = funct7[5];
 					rd = add_addw;
+				end
+
+				// mulw
+				10'b000_0000001: begin
+					in3 = rs1w;
+					mul_arg1_is_signed = '1;
+					in4 = rs2w;
+					mul_arg2_is_signed = '1;
+					rd = mul_mulw;
 				end
 
 				// add.uw
@@ -1314,6 +1346,26 @@ module logical #(
 	assign out_and = arg1 & ({width{invert_arg2}} ^ arg2);
 	assign out_or = arg1 | ({width{invert_arg2}} ^ arg2);
 	assign out_xor = ~(out_and | ~out_or);
+endmodule
+
+module multiplier #(
+	parameter width = 8
+) (
+	input bit[width - 1:0] arg1,
+	input bit arg1_is_signed,
+	input bit[width - 1:0] arg2,
+	input bit arg2_is_signed,
+	output bit[width - 1:0] mulw,
+	output bit[width - 1:0] mul,
+	output bit[width - 1:0] mulh
+);
+	wire signed[width * 2 - 1:0] arg1_extended = arg1_is_signed ? (width * 2)'(signed'(arg1)) : signed'((width * 2)'(arg1));
+	wire signed[width * 2 - 1:0] arg2_extended = arg2_is_signed ? (width * 2)'(signed'(arg2)) : signed'((width * 2)'(arg2));
+	wire signed[width * 2 - 1:0] product = arg1_extended * arg2_extended;
+
+	assign mulw = unsigned'(width'(signed'(product[0+:width / 2])));
+	assign mul = product[0+:width];
+	assign mulh = product[width+:width];
 endmodule
 
 module orc_b #(

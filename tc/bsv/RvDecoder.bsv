@@ -131,15 +131,19 @@ function Maybe#(Instruction#(XReg, Either#(XReg, Int#(12)), Csr)) decode(Bit#(32
 
 			OpCode_Op: case ({ funct3, funct7 }) matches
 				10'b000_0000000: return tagged Valid tagged Binary { op: Add, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
+				10'b000_0000001: return tagged Valid tagged Binary { op: Mul, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b000_0100000: return tagged Valid tagged Binary { op: Sub, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b001_0000000: return tagged Valid tagged Binary { op: Sll, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
+				10'b001_0000001: return tagged Valid tagged Binary { op: Mulh, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b001_0010100: return tagged Valid tagged Binary { op: Bset, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b001_0100100: return tagged Valid tagged Binary { op: Bclr, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b001_0110000: return tagged Valid tagged Binary { op: Rol, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b001_0110100: return tagged Valid tagged Binary { op: Binv, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b010_0000000: return tagged Valid tagged Binary { op: Slt, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
+				10'b010_0000001: return tagged Valid tagged Binary { op: Mulhsu, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b010_0010000: return tagged Valid tagged Binary { op: Sh1add, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b011_0000000: return tagged Valid tagged Binary { op: Sltu, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
+				10'b011_0000001: return tagged Valid tagged Binary { op: Mulhu, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b100_0000000: return tagged Valid tagged Binary { op: Xor, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b100_0000101: return tagged Valid tagged Binary { op: Min, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b100_0010000: return tagged Valid tagged Binary { op: Sh2add, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
@@ -165,6 +169,7 @@ function Maybe#(Instruction#(XReg, Either#(XReg, Int#(12)), Csr)) decode(Bit#(32
 
 			OpCode_Op32: case ({ funct3, funct7 }) matches
 				10'b000_0000000: return tagged Valid tagged Binary { op: Addw, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
+				10'b000_0000001: return tagged Valid tagged Binary { op: Mulw, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b000_0000100: return tagged Valid tagged Binary { op: AddUw, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b000_0100000: return tagged Valid tagged Binary { op: Subw, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
 				10'b001_0000000: return tagged Valid tagged Binary { op: Sllw, rd: rd, rs1: rs1, rs2: tagged Left rs2 };
