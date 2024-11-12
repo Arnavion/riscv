@@ -95,6 +95,7 @@ match [12:10] {
 	111 => match [6:5] {
 		00 => c.subw,
 		01 => c.addw,
+		10 => c.mul,
 		11 => match [4:2] {
 			000 => c.zext.b,
 			001 => c.sext.b,
@@ -307,6 +308,9 @@ module rv_decompressor #(
 							is_compressed = 'x;
 						end
 
+						// mul
+						2'b10: `type_r(out, OpCode_Op, {2'b01, in[7+:3]}, 3'b000, {2'b01, in[7+:3]}, {2'b01, in[2+:3]}, 7'b0000001)
+
 						2'b11: unique case (in[2+:3])
 							// zext.b
 							3'b000: `type_i(out, OpCode_OpImm, {2'b01, in[7+:3]}, 3'b111, {2'b01, in[7+:3]}, 12'b000011111111)
@@ -339,11 +343,6 @@ module rv_decompressor #(
 								is_compressed = 'x;
 							end
 						endcase
-
-						default: begin
-							sigill = '1;
-							is_compressed = 'x;
-						end
 					endcase
 
 					default: begin
@@ -530,8 +529,8 @@ module test_rv_decompressor32;
 		// addw
 		`test_err(32'b100_111_010_01_010_01)
 
-		// Reserved
-		`test_err(32'b100_111_010_10_010_01)
+		// mul
+		`test_ok(32'b100_111_010_10_010_01, 32'b0000001_01010_01010_000_01010_01100_11)
 
 		// zext.b
 		`test_ok(32'b100_111_010_11_000_01, 32'b000011111111_01010_111_01010_00100_11)
@@ -699,8 +698,8 @@ module test_rv_decompressor64;
 		// addw
 		`test_ok(32'b100_111_010_01_010_01, 32'b0000000_01010_01010_000_01010_01110_11)
 
-		// Reserved
-		`test_err(32'b100_111_010_10_010_01)
+		// mul
+		`test_ok(32'b100_111_010_10_010_01, 32'b0000001_01010_01010_000_01010_01100_11)
 
 		// zext.b
 		`test_ok(32'b100_111_010_11_000_01, 32'b000011111111_01010_111_01010_00100_11)
