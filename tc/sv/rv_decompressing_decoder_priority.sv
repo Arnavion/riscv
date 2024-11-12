@@ -347,6 +347,19 @@ module rv_decompressing_decoder_priority #(
 				is_compressed = 'x;
 			end
 
+			// mul
+			16'b100_1_11_???_10_???_01: begin
+				opcode = OpCode_Op;
+				funct3 = 3'b000;
+				funct7 = 7'b0000001;
+
+				rd_({2'b01, in[7+:3]});
+				rs1_({2'b01, in[7+:3]});
+				rs2_({2'b01, in[2+:3]});
+				csr_load = '0;
+				csr_store = '0;
+			end
+
 			// zext.b
 			16'b100_1_11_???_11_000_01: begin
 				opcode = OpCode_OpImm;
@@ -420,7 +433,7 @@ module rv_decompressing_decoder_priority #(
 				imm_(32'('1));
 			end
 
-			16'b100_1_11_???_??_???_01: begin
+			16'b100_1_11_???_11_???_01: begin
 				sigill = '1;
 				is_compressed = 'x;
 			end

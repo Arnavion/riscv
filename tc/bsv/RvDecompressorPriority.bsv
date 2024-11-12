@@ -170,6 +170,17 @@ module mkRvDecompressorPriority#(parameter Bool rv64)(RvDecompressor);
 		);
 	endrule
 
+	rule mul(in[15:0] matches 16'b100_111_???_10_???_01);
+		out <= type_r_(
+			OpCode_Op,
+			{ 2'b01, in[9:7] },
+			3'b000,
+			{ 2'b01, in[9:7] },
+			{ 2'b01, in[4:2] },
+			7'b0000001
+		);
+	endrule
+
 	rule zext_b(in[15:0] matches 16'b100_111_???_11_000_01);
 		out <= type_i_(
 			OpCode_OpImm,
