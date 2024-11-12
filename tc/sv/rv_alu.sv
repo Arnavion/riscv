@@ -385,6 +385,8 @@ module rv_alu (
 	wire[63:0] rs1_rev8_b;
 	rev8_b rs1_rev8_b_module (rs1, rs1_rev8_b);
 
+	wire[63:0] rs2w = unsigned'(64'(signed'(rs2[0+:32])));
+
 	wire[63:0] rs2_decoded = 64'b1 << rs2[0+:6];
 
 	wire[63:0] imm_decoded = 64'b1 << imm[0+:6];
@@ -435,6 +437,13 @@ module rv_alu (
 	wire[63:0] rs1_rev8;
 	rev8 rev8_module (rs1, rs1_rev8);
 
+	logic mul_arg1_is_signed;
+	logic mul_arg2_is_signed;
+	wire[63:0] mul_mulw;
+	wire[63:0] mul_mul;
+	wire[63:0] mul_mulh;
+	multiplier multiplier_module (in3, mul_arg1_is_signed, in4, mul_arg2_is_signed, mul_mulw, mul_mul, mul_mulh);
+
 	bit jump;
 	assign pcnext_out = jump ? add_add[1+:63] : pcnext_in;
 
@@ -458,6 +467,8 @@ module rv_alu (
 		add_cin = 'x;
 		cmp_signed = 'x;
 		logical_invert_arg2 = 'x;
+		mul_arg1_is_signed = 'x;
+		mul_arg2_is_signed = 'x;
 
 		jump = '0;
 
@@ -847,6 +858,15 @@ module rv_alu (
 					rd = add_add;
 				end
 
+				// mul, mulh, mulhsu, mulhu
+				10'b0??_0000001: begin
+					in3 = rs1;
+					mul_arg1_is_signed = ~& funct3[0+:2];
+					in4 = rs2;
+					mul_arg2_is_signed = ~funct3[1];
+					rd = | funct3[0+:2] ? mul_mulh : mul_mul;
+				end
+
 				// sub
 				10'b000_0100000: begin
 					in1 = rs1;
@@ -1022,6 +1042,15 @@ module rv_alu (
 					in2 = rs2;
 					add_cin = '0;
 					rd = add_addw;
+				end
+
+				// mulw
+				10'b000_0000001: begin
+					in3 = rs1w;
+					mul_arg1_is_signed = '1;
+					in4 = rs2w;
+					mul_arg2_is_signed = '1;
+					rd = mul_mulw;
 				end
 
 				// add.uw
@@ -1387,4 +1416,22 @@ module rev8_b (
 			out[i] = arg[63 - i];
 		end
 	end
+endmodule
+
+module multiplier (
+	input bit[63:0] arg1,
+	input bit arg1_is_signed,
+	input bit[63:0] arg2,
+	input bit arg2_is_signed,
+	output bit[63:0] mulw,
+	output bit[63:0] mul,
+	output bit[63:0] mulh
+);
+	wire signed[127:0] arg1_extended = signed'(arg1_is_signed ? unsigned'(128'(signed'(arg1))) : 128'(arg1));
+	wire signed[127:0] arg2_extended = signed'(arg2_is_signed ? unsigned'(128'(signed'(arg2))) : 128'(arg2));
+	wire signed[127:0] product = arg1_extended * arg2_extended;
+
+	assign mulw = unsigned'(64'(signed'(product[0+:32])));
+	assign mul = product[0+:64];
+	assign mulh = product[64+:64];
 endmodule
