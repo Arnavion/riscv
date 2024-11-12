@@ -436,6 +436,19 @@ module rv_decompressing_decoder #(
 							rs2_decoded = rs2_decoded_raw;
 						end
 
+						// mul
+						3'b110: begin
+							opcode = 5'b01100;
+							funct3 = 3'b000;
+							funct7 = 7'b0000001;
+							rd = {2'b01, in[7+:3]};
+							rd_decoded = rd_decoded_raw;
+							rs1 = {2'b01, in[7+:3]};
+							rs1_decoded = rs1_decoded_raw;
+							rs2 = {2'b01, in[2+:3]};
+							rs2_decoded = rs2_decoded_raw;
+						end
+
 						3'b111: unique case (in[2+:3])
 							// zext.b
 							3'b000: begin
@@ -518,11 +531,6 @@ module rv_decompressing_decoder #(
 								is_compressed = 'x;
 							end
 						endcase
-
-						default: begin
-							sigill = '1;
-							is_compressed = 'x;
-						end
 					endcase
 				endcase
 
