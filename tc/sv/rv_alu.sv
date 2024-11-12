@@ -372,6 +372,8 @@ module rv_alu (
 	wire[63:0] rs1uw_rev8_b;
 	rev8_b rs1uw_rev8_b_module (rs1uw, rs1uw_rev8_b);
 
+	wire[63:0] rs2w = {{32{rs2[31]}}, rs2[0+:32]};
+
 	wire[63:0] rs2_decoded = 64'b1 << rs2[0+:6];
 
 	wire[63:0] imm_decoded = 64'b1 << imm[0+:6];
@@ -421,6 +423,12 @@ module rv_alu (
 	wire[63:0] rs1_rev8;
 	rev8 rev8_module (rs1, rs1_rev8);
 
+	logic mul_arg1_is_signed;
+	logic mul_arg2_is_signed;
+	wire[63:0] mul;
+	wire[63:0] mulh;
+	multiplier multiplier_module (in3, mul_arg1_is_signed, in4, mul_arg2_is_signed, mul, mulh);
+
 	always_comb begin
 		sigill = '0;
 
@@ -444,6 +452,8 @@ module rv_alu (
 		in5 = 'x;
 		adder_cin = '0;
 		cmp_signed = 'x;
+		mul_arg1_is_signed = 'x;
+		mul_arg2_is_signed = 'x;
 
 		unique casez ({ opcode, funct3, funct7, funct5 })
 			// I
@@ -1140,6 +1150,54 @@ module rv_alu (
 			end
 
 
+			// Zmmul
+
+			// mul
+			{20'b01100_000_0000001_?????}: begin
+				in3 = rs1;
+				mul_arg1_is_signed = '1;
+				in4 = rs2;
+				mul_arg2_is_signed = '1;
+				rd = mul;
+			end
+
+			// mulw
+			{20'b01110_000_0000001_?????}: begin
+				in3 = rs1w;
+				mul_arg1_is_signed = '1;
+				in4 = rs2w;
+				mul_arg2_is_signed = '1;
+				rd = mul;
+			end
+
+			// mulh
+			{20'b01100_001_0000001_?????}: begin
+				in3 = rs1;
+				mul_arg1_is_signed = '1;
+				in4 = rs2;
+				mul_arg2_is_signed = '1;
+				rd = mulh;
+			end
+
+			// mulhsu
+			{20'b01100_010_0000001_?????}: begin
+				in3 = rs1;
+				mul_arg1_is_signed = '1;
+				in4 = rs2;
+				mul_arg2_is_signed = '0;
+				rd = mulh;
+			end
+
+			// mulhu
+			{20'b01100_011_0000001_?????}: begin
+				in3 = rs1;
+				mul_arg1_is_signed = '0;
+				in4 = rs2;
+				mul_arg2_is_signed = '0;
+				rd = mulh;
+			end
+
+
 			// Zarnavion
 
 			{20'b00010_000_0000000_?????}, // lb.pc
@@ -1376,4 +1434,20 @@ module rev8_b (
 			out[i] = arg[63 - i];
 		end
 	end
+endmodule
+
+module multiplier (
+	input bit[63:0] arg1,
+	input bit arg1_is_signed,
+	input bit[63:0] arg2,
+	input bit arg2_is_signed,
+	output bit[63:0] mul,
+	output bit[63:0] mulh
+);
+	wire signed[127:0] arg1_extended = signed'(arg1_is_signed ? {{64{arg1[63]}}, arg1} : {64'b0, arg1});
+	wire signed[127:0] arg2_extended = signed'(arg2_is_signed ? {{64{arg2[63]}}, arg2} : {64'b0, arg2});
+	wire signed[127:0] product = arg1_extended * arg2_extended;
+
+	assign mul = product[0+:64];
+	assign mulh = product[64+:64];
 endmodule
