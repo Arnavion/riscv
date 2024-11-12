@@ -93,6 +93,7 @@ match [11:10] {
 		011 => c.and,
 		100 => c.subw,
 		101 => c.addw,
+		110 => c.mul,
 		111 => match [4:2] {
 			000 => c.zext.b,
 			001 => c.sext.b,
@@ -390,6 +391,16 @@ module rv_decompressor #(
 						is_compressed = 'x;
 					end
 
+					// mul
+					3'b110: begin
+						out[0+:7] = 7'b0110011;
+						out[7+:5] = {2'b01, in[7+:3]};
+						out[12+:3] = 3'b000;
+						out[15+:5] = {2'b01, in[7+:3]};
+						out[20+:5] = {2'b01, in[2+:3]};
+						out[25+:7] = 7'b0000001;
+					end
+
 					3'b111: unique case (in[2+:3])
 						// zext.b
 						3'b000: begin
@@ -462,11 +473,6 @@ module rv_decompressor #(
 							is_compressed = 'x;
 						end
 					endcase
-
-					default: begin
-						sigill = '1;
-						is_compressed = 'x;
-					end
 				endcase
 			endcase
 
