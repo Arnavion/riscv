@@ -45,22 +45,22 @@ module booth_multiplier #(
 				end
 				3'b001,
 				3'b010: begin
-					p[width + 1 + 1+:1 + width + 1] += a;
+					p[width + 1 + 1+:width + 2] += a;
 					p = unsigned'(signed'(p) >>> 2);
 				end
 				3'b011: begin
 					p = unsigned'(signed'(p) >>> 1);
-					p[width + 1 + 1+:1 + width + 1] += a;
+					p[width + 1 + 1+:width + 2] += a;
 					p = unsigned'(signed'(p) >>> 1);
 				end
 				3'b100: begin
 					p = unsigned'(signed'(p) >>> 1);
-					p[width + 1 + 1+:1 + width + 1] -= a;
+					p[width + 1 + 1+:width + 2] -= a;
 					p = unsigned'(signed'(p) >>> 1);
 				end
 				3'b101,
 				3'b110: begin
-					p[width + 1 + 1+:1 + width + 1] -= a;
+					p[width + 1 + 1+:width + 2] -= a;
 					p = unsigned'(signed'(p) >>> 2);
 				end
 				3'b111: begin
