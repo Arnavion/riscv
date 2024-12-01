@@ -19,7 +19,7 @@ print:
 
 
 .PHONY: test
-test: test-decompressor test-load test-ram_cache
+test: test-bww test-decompressor test-load test-ram_cache
 	cargo test --workspace
 	for bitness in '--32' '--64'; do \
 		for compressed in 'false' 'true' 'Zcb'; do \
@@ -41,6 +41,24 @@ test-booth-multiplier:
 	d="$$(mktemp -d)" && \
 	trap "rm -rf '$$d'" EXIT && \
 	(cd "$$d" && iverilog -g2012 -DTESTING -o test "$$src/tc/sv/booth_multiplier.sv" && ./test)
+
+
+.PHONY: test-bww-multiplier-generator
+test-bww-multiplier-generator:
+	cargo run -p bww-multiplier-generator -- --mulh 8 >tc/sv/bww_multiplier.sv
+	src="$$PWD" && \
+	d="$$(mktemp -d)" && \
+	trap "rm -rf '$$d'" EXIT && \
+	(cd "$$d" && iverilog -g2012 -DTESTING -o test "$$src/tc/sv/bww_multiplier.sv" && ./test); \
+
+	d="$$(mktemp -d)" && \
+	trap "rm -rf '$$d'" EXIT && \
+	for fma in '' '--fma'; do \
+		for mulh in '' '--mulh'; do \
+			cargo run -p bww-multiplier-generator -- $$fma $$mulh 8 >"$$d/bww_multiplier.sv" && \
+			(cd "$$d" && iverilog -g2012 -DTESTING -o test bww_multiplier.sv && ./test) || exit 1; \
+		done; \
+	done
 
 
 .PHONY: test-decompressor
