@@ -91,7 +91,7 @@ module multiplier_round #(
 	//    ab ^ c = a(b ^ c) + a'c = a ? (b ^ c) : c
 	// => m_sext = (m_is_signed & m[width - 1]) ^ p_sub = ...
 	wire m_sext = m_is_signed ? m_maybe_neg[width - 1] : p_sub;
-	wire[1 + width + 1 - 1:0] p_plus;
+	wire[width + 2 - 1:0] p_plus;
 	wire[width - 1:0] p_plus_inner_sum;
 	wire p_plus_inner_cout;
 	adder #(.width(width)) p_plus_inner_module (
