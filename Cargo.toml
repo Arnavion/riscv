@@ -21,12 +21,22 @@ panic = "abort"
 strip = "symbols"
 
 
-[lints.rust]
+[lints]
+workspace = true
+
+
+[workspace]
+members = [
+	"bww-multiplier-generator",
+]
+
+
+[workspace.lints.rust]
 rust_2018_idioms = "deny"
 warnings = "deny"
 
 
-[lints.clippy]
+[workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
 pedantic = { level = "deny", priority = -1 }
 missing_errors_doc = "allow"
