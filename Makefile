@@ -192,7 +192,12 @@ EMULATOR_IN_FILE = ./tc/solutions/tower-of-alloy.S
 
 .PHONY: freestanding-install
 freestanding-install: freestanding
-	cp ./freestanding/target/riscv64-arnavion-none-elf/release/freestanding ~/non-oss-root/steam/program
-	cp ./freestanding/target/riscv64-arnavion-none-elf/release/freestanding $(EMULATOR_SAVE_DIR)/program
+	rm -f $(EMULATOR_SAVE_DIR)/sandbox/new_program.asm
+	src="$$PWD" && \
+	d="$$(mktemp -d)" && \
+	trap "rm -rf '$$d'" EXIT && \
+	objcopy ./freestanding/target/riscv64-arnavion-none-elf/release/freestanding -O binary "$$d/flat" && \
+	od --address-radix=none --format=x8 --output-duplicates --width=8 "$$d/flat" | \
+		sed -Ee 's/^\s*0*(.*)/<U64>0x\1/;s/0x$$/0/' >>$(EMULATOR_SAVE_DIR)/sandbox/new_program.asm
 	cp $(EMULATOR_IN_FILE) ~/non-oss-root/steam/in_file
 	cp $(EMULATOR_IN_FILE) $(EMULATOR_SAVE_DIR)/in_file
