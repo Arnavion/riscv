@@ -1,7 +1,7 @@
 MEMORY {
 	ram (rw) :        ORIGIN = 0x0000000000000000, LENGTH = 4M
 	console (w) :     ORIGIN = 0x0000000000400000, LENGTH = 8K
-	program (rx) :    ORIGIN = 0x8000000000001000, LENGTH = 1M
+	program (rx) :    ORIGIN = 0x8000000000000000, LENGTH = 1M
 	in_file (r) :     ORIGIN = 0xffffffffffe00000, LENGTH = 1M
 	in_file_len (r) : ORIGIN = 0xffffffffffdffff8, LENGTH = 8
 }
