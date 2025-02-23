@@ -1,30 +1,25 @@
 /*
 
-+---------+------+-------+-------+-----------------+------+----+---------+-----------------+------+-----------------+-------+-----------------+------+-------+-----------------+
-| Current | Load | Store | Flush |     Address     | Slow | -> |  Next   |  Next Address   | Busy |   Load Value    | Fast  |      Fast       | Slow | Slow  |      Slow       |
-|  State  |      |       |       |                 | Busy | -> |  State  |                 |      |                 | Store |   Store Value   | Load | Store |     Address     |
-+=========+======+=======+=======+=================+======+====+=========+=================+======+=================+=======+=================+======+=======+=================+
-| Clean   | 0    | 0     |       |                 |      | -> | Clean   | Current Address | 0    |                 | 0     |                 | 0    | 0     |                 |
-| Clean   | 1    | 0     | 0     | Current Address |      | -> | Clean   | Current Address | 0    | Fast Load Value | 0     |                 | 0    | 0     |                 |
-| Clean   | 1    | 0     | 0     | New Address     |      | -> | Reading | New Address     | 1    |                 | 0     |                 | 1    | 0     | New Address     |
-| Clean   | 0    | 1     | 0     | Current Address |      | -> | Dirty   | Current Address | 0    | Fast Load Value | 1     | Store Value     | 0    | 0     |                 |
-| Clean   | 0    | 1     | 0     | New Address     |      | -> | Reading | New Address     | 1    |                 | 0     |                 | 1    | 0     | New Address     |
-+---------+------+-------+-------+-----------------+------+----+---------+-----------------+------+-----------------+-------+-----------------+------+-------+-----------------+
-| Dirty   | 0    | 0     | 0     |                 |      | -> | Dirty   | Current Address | 0    |                 | 0     |                 | 0    | 0     |                 |
-| Dirty   | 1    | 0     | 0     | Current Address |      | -> | Dirty   | Current Address | 0    | Fast Load Value | 0     |                 | 0    | 0     |                 |
-| Dirty   | 1    | 0     | 0     | New Address     |      | -> | Writing | New Address     | 1    |                 | 0     |                 | 0    | 1     | Current Address |
-| Dirty   | 0    | 1     | 0     | Current Address |      | -> | Dirty   | Current Address | 0    | Fast Load Value | 1     | Store Value     | 0    | 0     |                 |
-| Dirty   | 0    | 1     | 0     | New Address     |      | -> | Writing | New Address     | 1    |                 | 0     |                 | 0    | 1     | Current Address |
-| Dirty   | 0    | 0     | 1     |                 |      | -> | Writing | Current Address | 1    |                 | 0     |                 | 0    | 1     | Current Address |
-+---------+------+-------+-------+-----------------+------+----+---------+-----------------+------+-----------------+-------+-----------------+------+-------+-----------------+
-| Writing |      |       |       |                 | 1    | -> | Writing | Current Address | 1    |                 | 0     |                 | 0    | 0     |                 |
-| Writing | 1    | 0     | 0     |                 | 0    | -> | Reading | Current Address | 1    |                 | 0     |                 | 1    | 0     | Current Address |
-| Writing | 0    | 1     | 0     |                 | 0    | -> | Reading | Current Address | 1    |                 | 0     |                 | 1    | 0     | Current Address |
-| Writing | 0    | 0     | 1     |                 | 0    | -> | Reading | Current Address | 1    |                 | 0     |                 | 0    | 0     |                 |
-+---------+------+-------+-------+-----------------+------+----+---------+-----------------+------+-----------------+-------+-----------------+------+-------+-----------------+
-| Reading |      |       |       |                 | 1    | -> | Reading | Current Address | 1    |                 | 0     |                 | 0    | 0     |                 |
-| Reading |      |       |       |                 | 0    | -> | Clean   | Current Address | 1    |                 | 1     | Slow Load Value | 0    | 0     |                 |
-+---------+------+-------+-------+-----------------+------+----+---------+-----------------+------+-----------------+-------+-----------------+------+-------+-----------------+
++---------+------+-------+-------+-----------------+-------+----+-------+-----------------+------+-----------------+-------+-----------------+------+-------+-----------------+-----------------+
+| Current | Load | Store | Flush |     Address     | Slow  | -> | Next  |  Next Address   | Busy |   Load Value    | Fast  |      Fast       | Slow | Slow  |    Slow Load    |   Slow Store    |
+|  State  |      |       |       |                 | Ready | -> | State |                 |      |                 | Store |   Store Value   | Load | Store |     Address     |     Address     |
++=========+======+=======+=======+=================+=======+====+=======+=================+======+=================+=======+=================+======+=======+=================+=================+
+| Clean   | 0    | 0     |       |                 |       | -> | Clean | Current Address | 0    |                 | 0     |                 | 0    | 0     |                 |                 |
+| Clean   | 1    | 0     | 0     | Current Address |       | -> | Clean | Current Address | 0    | Fast Load Value | 0     |                 | 0    | 0     |                 |                 |
+| Clean   | 1    | 0     | 0     | New Address     |       | -> | Xfer  | New Address     | 1    |                 | 0     |                 | 1    | 0     | New Address     |                 |
+| Clean   | 0    | 1     | 0     | Current Address |       | -> | Dirty | Current Address | 0    | Fast Load Value | 1     | Store Value     | 0    | 0     |                 |                 |
+| Clean   | 0    | 1     | 0     | New Address     |       | -> | Xfer  | New Address     | 1    |                 | 0     |                 | 1    | 0     | New Address     |                 |
++---------+------+-------+-------+-----------------+-------+----+-------+-----------------+------+-----------------+-------+-----------------+------+-------+-----------------+-----------------+
+| Dirty   | 0    | 0     | 0     |                 |       | -> | Dirty | Current Address | 0    |                 | 0     |                 | 0    | 0     |                 |                 |
+| Dirty   | 1    | 0     | 0     | Current Address |       | -> | Dirty | Current Address | 0    | Fast Load Value | 0     |                 | 0    | 0     |                 |                 |
+| Dirty   | 1    | 0     | 0     | New Address     |       | -> | Xfer  | New Address     | 1    |                 | 0     |                 | 1    | 1     | New Address     | Current Address |
+| Dirty   | 0    | 1     | 0     | Current Address |       | -> | Dirty | Current Address | 0    | Fast Load Value | 1     | Store Value     | 0    | 0     |                 |                 |
+| Dirty   | 0    | 1     | 0     | New Address     |       | -> | Xfer  | New Address     | 1    |                 | 0     |                 | 1    | 1     | New Address     | Current Address |
+| Dirty   | 0    | 0     | 1     |                 |       | -> | Xfer  | Current Address | 1    |                 | 0     |                 | 0    | 1     |                 | Current Address |
++---------+------+-------+-------+-----------------+-------+----+-------+-----------------+------+-----------------+-------+-----------------+------+-------+-----------------+-----------------+
+| Xfer    |      |       |       |                 | 0     | -> | Xfer  | Current Address | 1    |                 | 0     |                 | 0    | 0     |                 |                 |
+| Xfer    |      |       |       |                 | 1     | -> | Clean | Current Address | 1    |                 | 1     | Slow Load Value | 0    | 0     |                 |                 |
++---------+------+-------+-------+-----------------+-------+----+-------+-----------------+------+-----------------+-------+-----------------+------+-------+-----------------+-----------------+
 
  */
 
@@ -67,13 +62,14 @@ module ram_cache #(
 
 	input logic[ram_block_width - 1:0] fast_load_value,
 
-	input bit slow_busy,
+	input bit slow_load_ready,
 	input logic[ram_block_width - 1:0] slow_load_value,
+
+	input bit slow_store_ready,
 
 	output bit[ram_block_address_width - 1:0] inspect_cached_ram_block_address,
 	output bit inspect_state_is_dirty,
-	output bit inspect_state_is_writing,
-	output bit inspect_state_is_reading,
+	output bit inspect_state_is_xfer,
 
 	output bit busy,
 
@@ -83,14 +79,14 @@ module ram_cache #(
 	output logic[ram_block_width - 1:0] fast_store_value,
 
 	output bit slow_load,
+	output logic[ram_block_address_width - 1:0] slow_load_address,
 	output bit slow_store,
-	output logic[ram_block_address_width - 1:0] slow_address
+	output logic[ram_block_address_width - 1:0] slow_store_address
 );
 	typedef enum bit[1:0] {
 		State_Clean = 2'b00,
 		State_Dirty = 2'b01,
-		State_Writing = 2'b11,
-		State_Reading = 2'b10
+		State_Xfer = 2'b10
 	} State;
 
 	State state;
@@ -101,8 +97,7 @@ module ram_cache #(
 
 	assign inspect_cached_ram_block_address = cached_ram_block_address;
 	assign inspect_state_is_dirty = state == State_Dirty;
-	assign inspect_state_is_writing = state == State_Writing;
-	assign inspect_state_is_reading = state == State_Reading;
+	assign inspect_state_is_xfer = state == State_Xfer;
 
 	wire[isa_block_address_width - 1:0] isa_block_address = address[isa_byte_address+:isa_block_address_width];
 	wire[ram_block_address_width - 1:0] ram_block_address = address[isa_byte_address + isa_block_address_width+:ram_block_address_width];
@@ -127,7 +122,8 @@ module ram_cache #(
 		fast_store_value = 'x;
 		slow_load = '0;
 		slow_store = '0;
-		slow_address = 'x;
+		slow_load_address = 'x;
+		slow_store_address = 'x;
 
 		unique case (state)
 			State_Clean: unique case (ram_input)
@@ -136,11 +132,11 @@ module ram_cache #(
 				RamInput_Load: if (ram_block_address == cached_ram_block_address) begin
 					load_value = fast_load_value[{isa_block_address, $clog2(xlen)'('0)}+:xlen];
 				end else begin
-					next_state = State_Reading;
+					next_state = State_Xfer;
 					next_cached_ram_block_address = ram_block_address;
 					busy = '1;
 					slow_load = '1;
-					slow_address = ram_block_address;
+					slow_load_address = ram_block_address;
 				end
 
 				RamInput_Store: if (ram_block_address == cached_ram_block_address) begin
@@ -150,11 +146,11 @@ module ram_cache #(
 					fast_store_value = fast_load_value;
 					fast_store_value[{isa_block_address, $clog2(xlen)'('0)}+:xlen] = store_value;
 				end else begin
-					next_state = State_Reading;
+					next_state = State_Xfer;
 					next_cached_ram_block_address = ram_block_address;
 					busy = '1;
 					slow_load = '1;
-					slow_address = ram_block_address;
+					slow_load_address = ram_block_address;
 				end
 			endcase
 
@@ -164,11 +160,13 @@ module ram_cache #(
 				RamInput_Load: if (ram_block_address == cached_ram_block_address) begin
 					load_value = fast_load_value[{isa_block_address, $clog2(xlen)'('0)}+:xlen];
 				end else begin
-					next_state = State_Writing;
+					next_state = State_Xfer;
 					next_cached_ram_block_address = ram_block_address;
 					busy = '1;
+					slow_load = '1;
+					slow_load_address = ram_block_address;
 					slow_store = '1;
-					slow_address = cached_ram_block_address;
+					slow_store_address = cached_ram_block_address;
 				end
 
 				RamInput_Store: if (ram_block_address == cached_ram_block_address) begin
@@ -177,37 +175,30 @@ module ram_cache #(
 					fast_store_value = fast_load_value;
 					fast_store_value[{isa_block_address, $clog2(xlen)'('0)}+:xlen] = store_value;
 				end else begin
-					next_state = State_Writing;
+					next_state = State_Xfer;
 					next_cached_ram_block_address = ram_block_address;
 					busy = '1;
+					slow_load = '1;
+					slow_load_address = ram_block_address;
 					slow_store = '1;
-					slow_address = cached_ram_block_address;
+					slow_store_address = cached_ram_block_address;
 				end
 
 				RamInput_Flush: begin
-					next_state = State_Writing;
+					next_state = State_Xfer;
 					busy = '1;
 					slow_store = '1;
-					slow_address = cached_ram_block_address;
+					slow_store_address = cached_ram_block_address;
 				end
 			endcase
 
-			State_Writing: if (slow_busy) begin
-				busy = '1;
-			end else begin
-				next_state = State_Reading;
-				busy = '1;
-				slow_load = '1;
-				slow_address = cached_ram_block_address;
-			end
-
-			State_Reading: if (slow_busy) begin
-				busy = '1;
-			end else begin
+			State_Xfer: if (slow_load_ready | slow_store_ready) begin
 				next_state = State_Clean;
 				busy = '1;
-				fast_store = '1;
+				fast_store = slow_load_ready;
 				fast_store_value = slow_load_value;
+			end else begin
+				busy = '1;
 			end
 		endcase
 	end
@@ -243,13 +234,14 @@ module test_ram_cache #(
 
 	logic[ram_block_width - 1:0] fast_load_value;
 
-	bit slow_busy;
+	bit slow_load_ready;
 	logic[ram_block_width - 1:0] slow_load_value;
+
+	bit slow_store_ready;
 
 	wire[ram_block_address_width - 1:0] inspect_cached_ram_block_address;
 	wire inspect_state_is_dirty;
-	wire inspect_state_is_writing;
-	wire inspect_state_is_reading;
+	wire inspect_state_is_xfer;
 
 	wire busy;
 
@@ -259,20 +251,23 @@ module test_ram_cache #(
 	wire[ram_block_width - 1:0] fast_store_value;
 
 	wire slow_load;
+	wire[ram_block_address_width - 1:0] slow_load_address;
 	wire slow_store;
-	wire[ram_block_address_width - 1:0] slow_address;
+	wire[ram_block_address_width - 1:0] slow_store_address;
 
 	ram_cache #(.rv64(rv64), .ram_block_width(ram_block_width)) ram_cache_module (
 		.clock(clock), .reset(reset),
 		.address(address), .ram_input(ram_input), .store_value(store_value),
 		.fast_load_value(fast_load_value),
-		.slow_busy(slow_busy), .slow_load_value(slow_load_value),
+		.slow_load_ready(slow_load_ready), .slow_load_value(slow_load_value),
 
-		.inspect_cached_ram_block_address(inspect_cached_ram_block_address), .inspect_state_is_dirty(inspect_state_is_dirty), .inspect_state_is_writing(inspect_state_is_writing), .inspect_state_is_reading(inspect_state_is_reading),
+		.slow_store_ready(slow_store_ready),
+
+		.inspect_cached_ram_block_address(inspect_cached_ram_block_address), .inspect_state_is_dirty(inspect_state_is_dirty), .inspect_state_is_xfer(inspect_state_is_xfer),
 		.busy(busy),
 		.load_value(load_value),
 		.fast_store(fast_store), .fast_store_value(fast_store_value),
-		.slow_load(slow_load), .slow_store(slow_store), .slow_address(slow_address)
+		.slow_load(slow_load), .slow_load_address(slow_load_address), .slow_store(slow_store), .slow_store_address(slow_store_address)
 	);
 
 	initial begin
@@ -284,6 +279,9 @@ module test_ram_cache #(
 			fast_load_value = 128'h0123456701234567_89abcdef89abcdef;
 		else
 			fast_load_value = 64'h01234567_89abcdef;
+
+		slow_load_ready = '0;
+		slow_store_ready = '0;
 
 		reset = '1;
 		#1
@@ -298,8 +296,7 @@ module test_ram_cache #(
 		// Initial (cached, clean) -> (cached, clean)
 		assert(inspect_cached_ram_block_address == 0) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
-		assert(inspect_state_is_writing == '0) else $fatal;
-		assert(inspect_state_is_reading == '0) else $fatal;
+		assert(inspect_state_is_xfer == '0) else $fatal;
 		assert(busy == '0) else $fatal;
 		assert(fast_store == '0) else $fatal;
 		assert(slow_load == '0) else $fatal;
@@ -309,8 +306,7 @@ module test_ram_cache #(
 		#1
 		assert(inspect_cached_ram_block_address == 0) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
-		assert(inspect_state_is_writing == '0) else $fatal;
-		assert(inspect_state_is_reading == '0) else $fatal;
+		assert(inspect_state_is_xfer == '0) else $fatal;
 		assert(busy == '0) else $fatal;
 		assert(fast_store == '0) else $fatal;
 		assert(slow_load == '0) else $fatal;
@@ -336,8 +332,7 @@ module test_ram_cache #(
 		#1
 		assert(inspect_cached_ram_block_address == 0) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
-		assert(inspect_state_is_writing == '0) else $fatal;
-		assert(inspect_state_is_reading == '0) else $fatal;
+		assert(inspect_state_is_xfer == '0) else $fatal;
 
 
 		// Load from 1 (cached, clean) -> (cached, clean)
@@ -359,8 +354,7 @@ module test_ram_cache #(
 		#1
 		assert(inspect_cached_ram_block_address == 0) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
-		assert(inspect_state_is_writing == '0) else $fatal;
-		assert(inspect_state_is_reading == '0) else $fatal;
+		assert(inspect_state_is_xfer == '0) else $fatal;
 
 
 		// Store to 0 (cached, clean) -> (cached, dirty)
@@ -390,8 +384,7 @@ module test_ram_cache #(
 		#1
 		assert(inspect_cached_ram_block_address == 0) else $fatal;
 		assert(inspect_state_is_dirty == '1) else $fatal;
-		assert(inspect_state_is_writing == '0) else $fatal;
-		assert(inspect_state_is_reading == '0) else $fatal;
+		assert(inspect_state_is_xfer == '0) else $fatal;
 		#1
 		if (rv64)
 			fast_load_value = 128'h0123456701234567_ffffffffffffffff;
@@ -415,8 +408,7 @@ module test_ram_cache #(
 		#1
 		assert(inspect_cached_ram_block_address == 0) else $fatal;
 		assert(inspect_state_is_dirty == '1) else $fatal;
-		assert(inspect_state_is_writing == '0) else $fatal;
-		assert(inspect_state_is_reading == '0) else $fatal;
+		assert(inspect_state_is_xfer == '0) else $fatal;
 
 
 		// Load from 5 (uncached, dirty) -> (cached, clean)
@@ -427,69 +419,33 @@ module test_ram_cache #(
 		#1
 		assert(busy == '1) else $fatal;
 		assert(fast_store == '0) else $fatal;
-		assert(slow_load == '0) else $fatal;
-		assert(slow_store == '1) else $fatal;
-		assert(slow_address == 0) else $fatal;
-		if (rv64)
-			fast_load_value = 128'h0123456701234567_ffffffffffffffff;
-		else
-			fast_load_value = 64'h01234567_ffffffff;
-		#1
-		clock = '1;
-		#1
-		assert(inspect_cached_ram_block_address == 2) else $fatal;
-		assert(inspect_state_is_dirty == '0) else $fatal;
-		assert(inspect_state_is_writing == '1) else $fatal;
-		assert(inspect_state_is_reading == '0) else $fatal;
-		if (rv64)
-			fast_load_value = 128'h0123456701234567_ffffffffffffffff;
-		else
-			fast_load_value = 64'h01234567_ffffffff;
-		slow_busy = '1;
-		#1
-		clock = '0;
-		assert(busy == '1) else $fatal;
-		assert(fast_store == '0) else $fatal;
-		assert(slow_load == '0) else $fatal;
-		assert(slow_store == '0) else $fatal;
-		#1
-		clock = '1;
-		assert(inspect_cached_ram_block_address == 2) else $fatal;
-		assert(inspect_state_is_dirty == '0) else $fatal;
-		assert(inspect_state_is_writing == '1) else $fatal;
-		assert(inspect_state_is_reading == '0) else $fatal;
-		slow_busy = '0;
-		#1
-		clock = '0;
-		#1
-		assert(busy == '1) else $fatal;
-		assert(fast_store == '0) else $fatal;
 		assert(slow_load == '1) else $fatal;
-		assert(slow_store == '0) else $fatal;
-		assert(slow_address == 2) else $fatal;
+		assert(slow_load_address == 2) else $fatal;
+		assert(slow_store == '1) else $fatal;
+		assert(slow_store_address == 0) else $fatal;
+		if (rv64)
+			fast_load_value = 128'h0123456701234567_ffffffffffffffff;
+		else
+			fast_load_value = 64'h01234567_ffffffff;
 		#1
 		clock = '1;
 		#1
 		assert(inspect_cached_ram_block_address == 2) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
-		assert(inspect_state_is_writing == '0) else $fatal;
-		assert(inspect_state_is_reading == '1) else $fatal;
-		slow_busy = '1;
+		assert(inspect_state_is_xfer == '1) else $fatal;
 		#1
 		clock = '0;
-		#1
 		assert(busy == '1) else $fatal;
 		assert(fast_store == '0) else $fatal;
 		assert(slow_load == '0) else $fatal;
 		assert(slow_store == '0) else $fatal;
 		#1
 		clock = '1;
-		#1
 		assert(inspect_cached_ram_block_address == 2) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
-		assert(inspect_state_is_writing == '0) else $fatal;
-		assert(inspect_state_is_reading == '1) else $fatal;
-		slow_busy = '0;
+		assert(inspect_state_is_xfer == '1) else $fatal;
+		slow_load_ready = '1;
+		slow_store_ready = '1;
 		if (rv64)
 			slow_load_value = 128'hfedcba9876543210_fedcba9876543210;
 		else
@@ -511,11 +467,12 @@ module test_ram_cache #(
 			fast_load_value = 128'hfedcba9876543210_fedcba9876543210;
 		else
 			fast_load_value = 64'hba987654_ba987654;
+		slow_load_ready = '0;
+		slow_store_ready = '0;
 		#1
 		assert(inspect_cached_ram_block_address == 2) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
-		assert(inspect_state_is_writing == '0) else $fatal;
-		assert(inspect_state_is_reading == '0) else $fatal;
+		assert(inspect_state_is_xfer == '0) else $fatal;
 		#1
 		clock = '0;
 		#1
@@ -553,8 +510,7 @@ module test_ram_cache #(
 		#1
 		assert(inspect_cached_ram_block_address == 2) else $fatal;
 		assert(inspect_state_is_dirty == '1) else $fatal;
-		assert(inspect_state_is_writing == '0) else $fatal;
-		assert(inspect_state_is_reading == '0) else $fatal;
+		assert(inspect_state_is_xfer == '0) else $fatal;
 		#1
 		if (rv64)
 			fast_load_value = 128'hffffffffffffffff_fedcba9876543210;
@@ -571,9 +527,10 @@ module test_ram_cache #(
 		#1
 		assert(busy == '1) else $fatal;
 		assert(fast_store == '0) else $fatal;
-		assert(slow_load == '0) else $fatal;
+		assert(slow_load == '1) else $fatal;
+		assert(slow_load_address == 4) else $fatal;
 		assert(slow_store == '1) else $fatal;
-		assert(slow_address == 2) else $fatal;
+		assert(slow_store_address == 2) else $fatal;
 		if (rv64)
 			assert(fast_load_value == 128'hffffffffffffffff_fedcba9876543210) else $fatal;
 		else
@@ -583,9 +540,7 @@ module test_ram_cache #(
 		#1
 		assert(inspect_cached_ram_block_address == 4) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
-		assert(inspect_state_is_writing == '1) else $fatal;
-		assert(inspect_state_is_reading == '0) else $fatal;
-		slow_busy = '1;
+		assert(inspect_state_is_xfer == '1) else $fatal;
 		#1
 		clock = '0;
 		assert(busy == '1) else $fatal;
@@ -596,40 +551,9 @@ module test_ram_cache #(
 		clock = '1;
 		assert(inspect_cached_ram_block_address == 4) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
-		assert(inspect_state_is_writing == '1) else $fatal;
-		assert(inspect_state_is_reading == '0) else $fatal;
-		slow_busy = '0;
-		#1
-		clock = '0;
-		#1
-		assert(busy == '1) else $fatal;
-		assert(fast_store == '0) else $fatal;
-		assert(slow_load == '1) else $fatal;
-		assert(slow_store == '0) else $fatal;
-		assert(slow_address == 4) else $fatal;
-		#1
-		clock = '1;
-		#1
-		assert(inspect_cached_ram_block_address == 4) else $fatal;
-		assert(inspect_state_is_dirty == '0) else $fatal;
-		assert(inspect_state_is_writing == '0) else $fatal;
-		assert(inspect_state_is_reading == '1) else $fatal;
-		slow_busy = '1;
-		#1
-		clock = '0;
-		#1
-		assert(busy == '1) else $fatal;
-		assert(fast_store == '0) else $fatal;
-		assert(slow_load == '0) else $fatal;
-		assert(slow_store == '0) else $fatal;
-		#1
-		clock = '1;
-		#1
-		assert(inspect_cached_ram_block_address == 4) else $fatal;
-		assert(inspect_state_is_dirty == '0) else $fatal;
-		assert(inspect_state_is_writing == '0) else $fatal;
-		assert(inspect_state_is_reading == '1) else $fatal;
-		slow_busy = '0;
+		assert(inspect_state_is_xfer == '1) else $fatal;
+		slow_load_ready = '1;
+		slow_store_ready = '1;
 		if (rv64)
 			slow_load_value = 128'h0123456789abcdef_0123456789abcdef;
 		else
@@ -651,11 +575,12 @@ module test_ram_cache #(
 			fast_load_value = 128'h0123456789abcdef_0123456789abcdef;
 		else
 			fast_load_value = 64'h456789ab_456789ab;
+		slow_load_ready = '0;
+		slow_store_ready = '0;
 		#1
 		assert(inspect_cached_ram_block_address == 4) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
-		assert(inspect_state_is_writing == '0) else $fatal;
-		assert(inspect_state_is_reading == '0) else $fatal;
+		assert(inspect_state_is_xfer == '0) else $fatal;
 		#1
 		clock = '0;
 		#1
