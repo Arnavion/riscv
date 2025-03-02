@@ -188,7 +188,7 @@ freestanding-inspect: freestanding
 
 
 EMULATOR_SAVE_DIR = ~/non-oss-root/steam/.local/share/godot/app_userdata/Turing\ Complete/schematics/architecture/RISC-V
-EMULATOR_IN_FILE = ./tc/solutions/tower-of-alloy.S
+EMULATOR_IN_FILE = ./tc/solutions/calibrating-laser-cannons-2.S
 
 .PHONY: freestanding-install
 freestanding-install: freestanding

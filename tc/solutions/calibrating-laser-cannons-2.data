@@ -1,0 +1,40 @@
+; cjump
+
+; 0x00
+<U8>20   ; 0x00: end
+<U56>0
+
+; 0x10
+<U64>0
+
+; 0x20
+<U24>0
+<U8>60   ; 0x26: op_and
+<U8>0
+<U8>72   ; 0x2b: op_add
+<U8>84   ; 0x2d: hyphen
+<U8>0
+
+; 0x30
+<U8>24   ; 0x30, 0x31: parse_int
+<U8>24   ; 0x32, 0x33: parse_int
+<U8>24   ; 0x34, 0x35: parse_int
+<U8>24   ; 0x36, 0x37: parse_int
+<U8>24   ; 0x38, 0x39: parse_int
+<U8>0
+<U8>104  ; 0x3c: op_lsl
+<U8>120  ; 0x3e: op_lsr
+
+; 0x40
+<U64>0
+
+; 0x50
+<U56>0
+<U8>136  ; 0x5e: op_xor
+
+; 0x60
+<U64>0
+
+; 0x70
+<U48>0
+<U8>148  ; 0x7c: op_or
