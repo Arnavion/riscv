@@ -2,7 +2,6 @@
 
 #![feature(
 	maybe_uninit_write_slice,
-	ptr_sub_ptr,
 )]
 
 #![no_main]
@@ -44,13 +43,14 @@ fn main_inner(console: &mut Console<'_>) -> Result<(), ()> {
 	let program = {
 		extern "C" {
 			static mut _IN_FILE_PTR: u8;
-			static _IN_FILE_LEN_PTR: usize;
+			static mut _IN_FILE_END_PTR: u8;
 		}
 
 		let in_file_ptr = &raw const _IN_FILE_PTR;
-		let in_file_len_ptr = &raw const _IN_FILE_LEN_PTR;
+		let in_file_end_ptr = &raw const _IN_FILE_END_PTR;
+		let in_file_max_len = unsafe { in_file_end_ptr.byte_offset_from_unsigned(in_file_ptr) };
 
-		let mut in_file = unsafe { core::slice::from_raw_parts(in_file_ptr, *in_file_len_ptr) };
+		let mut in_file = unsafe { core::slice::from_raw_parts(in_file_ptr, in_file_max_len) };
 
 		core::iter::from_fn(move || {
 			if in_file.is_empty() {
@@ -156,7 +156,7 @@ impl Console<'static> {
 
 		let console_ptr: *mut core::mem::MaybeUninit<u8> = &raw mut _CONSOLE_PTR;
 		let console_end_ptr: *mut core::mem::MaybeUninit<u8> = &raw mut _CONSOLE_END_PTR;
-		let console_len: usize = unsafe { console_end_ptr.sub_ptr(console_ptr) };
+		let console_len: usize = unsafe { console_end_ptr.byte_offset_from_unsigned(console_ptr) };
 
 		Console {
 			region: unsafe { core::slice::from_raw_parts_mut(console_ptr, console_len) },
@@ -228,10 +228,10 @@ fn halt() -> ! {
 	}
 }
 
-/// Returns `(line, rest)`, where `line` ends at `b'\n'` or
+/// Returns `(line, rest)`, where `line` ends at either a `b'\0'` or a `b'\n'` or
 /// reached the end of the given slice.
 ///
-/// If `rest` is empty then `line` reached the end of the given slice,
+/// If `rest` is empty then `line` ended at a `b'\0'` or reached the end of the given slice,
 /// and is thus the last line.
 mod split_line {
 	/// This is a SWAR implementation based on the Zbb extension.
@@ -244,8 +244,8 @@ mod split_line {
 
 			// `s` is guaranteed to be contained within an aligned usize-sized chunk.
 			// We can read that chunk, then shift it so that the bytes of `s` are the first,
-			// then set the excess bytes to 0xff. This result will then only contain a `b'\n'`
-			// at the index that `s` contains a `b'\n'`.
+			// then set the excess bytes to 0xff. This result will then only contain a `b'\0'` or `b'\n'`
+			// at the index that `s` contains a `b'\0'` or `b'\n'`.
 			//
 			// We can't dereference the chunk pointer in Rust code because there is no guarantee that
 			// all `size_of::<usize>()` bytes are in the same allocation as `s`,
@@ -322,6 +322,10 @@ mod split_line {
 			if let Some(i) = index_of_zero(chunk ^ C1) {
 				return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
 			}
+
+			if let Some(i) = index_of_zero(chunk) {
+				return (unsafe { s.get_unchecked(..i) }, b"");
+			}
 		}
 
 		let mut line_end = s_head.len();
@@ -329,6 +333,11 @@ mod split_line {
 			if let Some(i) = index_of_zero(chunk ^ C1) {
 				let i = line_end + i;
 				return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
+			}
+
+			if let Some(i) = index_of_zero(chunk) {
+				let i = line_end + i;
+				return (unsafe { s.get_unchecked(..i) }, b"");
 			}
 
 			line_end += core::mem::size_of::<usize>();
@@ -340,6 +349,11 @@ mod split_line {
 			if let Some(i) = index_of_zero(chunk ^ C1) {
 				let i = line_end + i;
 				return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
+			}
+
+			if let Some(i) = index_of_zero(chunk) {
+				let i = line_end + i;
+				return (unsafe { s.get_unchecked(..i) }, b"");
 			}
 		}
 
@@ -357,26 +371,45 @@ mod split_line {
 
 		let (s_head, s_aligned, s_tail) = unsafe { s.align_to::<usize>() };
 
-		if let Some(i) = s_head.iter().position(|&b| b == b'\n') {
-			return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
+		for (i, &b) in s_head.iter().enumerate() {
+			if b == b'\n' {
+				return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
+			}
+			if b == b'\0' {
+				return (unsafe { s.get_unchecked(..i) }, b"");
+			}
 		}
 
 		let mut line_end = s_head.len();
 		for &chunk in s_aligned {
-			let chunk = chunk ^ C1;
+			{
+				let chunk = chunk ^ C1;
+				if chunk.wrapping_sub(C2) & !chunk & C3 != 0 {
+					let i = chunk.to_ne_bytes().into_iter().position(|b| b == b'\0');
+					let i = unsafe { i.unwrap_unchecked() };
+					let i = line_end + i;
+					return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
+				}
+			}
+
 			if chunk.wrapping_sub(C2) & !chunk & C3 != 0 {
 				let i = chunk.to_ne_bytes().into_iter().position(|b| b == b'\0');
 				let i = unsafe { i.unwrap_unchecked() };
 				let i = line_end + i;
-				return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
+				return (unsafe { s.get_unchecked(..i) }, b"");
 			}
 
 			line_end += core::mem::size_of::<usize>();
 		}
 
-		if let Some(i) = s_tail.iter().position(|&b| b == b'\n') {
+		for (i, &b) in s_tail.iter().enumerate() {
 			let i = line_end + i;
-			return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
+			if b == b'\n' {
+				return (unsafe { s.get_unchecked(..i) }, unsafe { s.get_unchecked(i + 1..) });
+			}
+			if b == b'\0' {
+				return (unsafe { s.get_unchecked(..i) }, b"");
+			}
 		}
 
 		(s, b"")
