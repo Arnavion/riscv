@@ -40,7 +40,7 @@ The assembler also only partially implements the full syntax supported by GNU / 
 
 ---
 
-The assembler can be compiled as a freestanding binary that runs on the emulator. In this case the input file is read from the game's File Loader component, and the output is written to a memory address range that is expected to be present in a RAM linked to a Console.
+The assembler can be compiled as a freestanding binary that runs on the emulator. In this case the input file is read from a RAM with "Initial data" set to "File", and the output is written to a memory address range that is expected to be present in a RAM linked to a Console.
 
 `make freestanding` will compile the binary, `make freestanding-install` will install it along with the input file, and `make freestanding-inspect` will run `llvm-objdump` on the binary.
 
