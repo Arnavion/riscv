@@ -15,7 +15,6 @@ core::arch::global_asm!("
 	.extern _CONSOLE_PTR
 	.extern _CONSOLE_LEN
 	.extern _IN_FILE_PTR
-	.extern _IN_FILE_LEN_PTR
 
 	.section .text.boot
 
@@ -43,20 +42,13 @@ fn main() {
 }
 
 fn main_inner(console: &mut Console<'_>) -> Result<(), ()> {
-	let in_file_ptr: *const u8;
-	let in_file_len_ptr: *const u64;
+	let in_file_ptr: *const core::ffi::c_char;
 	unsafe {
-		core::arch::asm!("
-			lga {}, _IN_FILE_PTR
-			lga {}, _IN_FILE_LEN_PTR
-			",
-			out(reg) in_file_ptr,
-			out(reg) in_file_len_ptr,
-		);
+		core::arch::asm!("lga {}, _IN_FILE_PTR", out(reg) in_file_ptr);
 	}
 
-	let program = unsafe { core::slice::from_raw_parts(in_file_ptr, (*in_file_len_ptr).try_into().expect("u64 -> usize")) };
-	let program = core::str::from_utf8(program).map_err(|err| { _ = writeln!(console, "{err}"); })?;
+	let program = unsafe { core::ffi::CStr::from_ptr(in_file_ptr) };
+	let program = program.to_str().map_err(|err| { _ = writeln!(console, "{err}"); })?;
 
 	let supported_extensions = riscv::SupportedExtensions::RV64C_ZCB | riscv::SupportedExtensions::ZBA | riscv::SupportedExtensions::ZBB;
 
@@ -205,4 +197,60 @@ fn panic(panic: &core::panic::PanicInfo<'_>) -> ! {
 	}
 
 	unsafe { core::arch::asm!("j _halt", options(noreturn)); }
+}
+
+/// SWAR implementation of `strlen()` for RISC-V.
+///
+/// This impl overrides `compiler_builtins`' naive impl for RISC-V,
+/// that checks only one byte at a time and is thus much slower.
+/// The override happens by exporting the same symbol as the `compiler_builtins` intrinsic;
+/// this is the documented way to replace a `compiler_builtins` impl.
+///
+/// This is the standard SWAR method of testing for zeros on a little-endian system,
+/// which is also what `compiler_builtins`' SWAR impl for x86-64 uses.
+/// Ref: <https://en.wikipedia.org/w/index.php?title=SWAR&oldid=1276491101#Further_refinements_2>
+/// The `compiler_builtins` impl for x86-64 additionally has a check for a zero in the first eight bytes
+/// to optimize for short strings, which this impl does not have because it would not be particularly useful
+/// for this particular freestanding assembler binary's use case.
+///
+/// # Safety
+///
+/// Same requirements as [`core::ffi::CStr::from_ptr`]
+#[cfg(target_endian = "little")] // This method is only valid for little-endian systems.
+#[unsafe(no_mangle)] // Export the same symbol as the `compiler_builtins` intrinsic
+unsafe extern "C" fn strlen(c: *const core::ffi::c_char) -> usize {
+	let c_aligned = c.map_addr(|addr| addr.next_multiple_of(core::mem::size_of::<u64>()));
+
+	let mut ptr = c;
+	while ptr != c_aligned {
+		if *ptr == 0 {
+			return unsafe { ptr.offset_from_unsigned(c) };
+		}
+		ptr = ptr.wrapping_add(1);
+	}
+
+	#[allow(clippy::cast_ptr_alignment)]
+	let mut ptr = c_aligned.cast::<u64>();
+	loop {
+		// Doing `let mut chunk = *ptr;` may read past the end of the allocation pointed at by c and ptr,
+		// which is UB. miri confirms this.
+		//
+		// Using inline assembly to perform the load is apparently the right way to do it.
+		// This can't be verified with miri because miri can't test inline asm,
+		// but `compiler_builtins`' SWAR impl for x86-64 does this too with the same justification.
+		let mut chunk: u64;
+		core::arch::asm!("ld {}, ({})", out(reg) chunk, in(reg) ptr);
+
+		if chunk.wrapping_sub(0x0101_0101_0101_0101) & !chunk & 0x8080_8080_8080_8080 == 0 {
+			ptr = ptr.add(1);
+			continue;
+		}
+
+		let mut result = ptr.cast::<core::ffi::c_char>().offset_from_unsigned(c);
+		while chunk & 0xff != 0 {
+			chunk >>= 8;
+			result += 1;
+		}
+		break result;
+	}
 }
