@@ -9,7 +9,6 @@ use crate::{
 	SupportedExtensions,
 };
 
-#[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 pub(crate) fn parse(
 	line: &[u8],
 	supported_extensions: SupportedExtensions,
@@ -1061,9 +1060,8 @@ pub(crate) fn parse(
 	})
 }
 
-#[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 fn hi_lo(imm: i32) -> (i32, i32) {
-	let mut imm1 = bit_slice::<12, 32>(imm) as i32;
+	let mut imm1 = bit_slice::<12, 32>(imm).cast_signed();
 	let imm2 = (imm << (32 - 12)) >> (32 - 12);
 	if imm2 < 0 {
 		imm1 = imm1.wrapping_add(1) & 0xfffff;
