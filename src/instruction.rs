@@ -1,5 +1,3 @@
-#![allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-
 use crate::{Csr, EncodeError, ParseError, Register, SupportedExtensions};
 
 macro_rules! instructions {
@@ -259,7 +257,7 @@ macro_rules! instructions {
 					rd: Register::X0,
 					funct3: Funct3::$variant,
 					rs1: Register::X0,
-					imm: Func12::$variant.encode() as _,
+					imm: Func12::$variant.encode().cast_signed(),
 				},
 			}
 			{
@@ -377,7 +375,7 @@ macro_rules! instructions {
 						rd: dest,
 						funct3: Funct3::$variant,
 						rs1: src,
-						imm: (shamt as u32 | (Funct7::$variant.encode() << 5)) as i32,
+						imm: (shamt.cast_unsigned() | (Funct7::$variant.encode() << 5)).cast_signed(),
 					}
 				},
 			}
@@ -555,7 +553,7 @@ macro_rules! instructions {
 					opcode: OpCode::$opcode,
 					rd: dest,
 					funct3: Funct3::$variant,
-					src: imm as u32,
+					src: imm.cast_unsigned(),
 					csr,
 				},
 			}
@@ -2133,7 +2131,7 @@ impl<'a> TryFrom<&'a [u8]> for Imm {
 				let buf = Buf::<64>::new(token_)?;
 				let token_ = core::str::from_utf8(buf.as_ref()).map_err(|_| ParseError::InvalidUtf8 { token })?;
 				// gas requires being able to parse a negative integer specified as positive hex
-				u32::from_str_radix(token_, 16).map_err(|_| ParseError::MalformedImmediate { token })? as _
+				u32::from_str_radix(token_, 16).map_err(|_| ParseError::MalformedImmediate { token })?.cast_signed()
 			}
 			else if let Some(token_) = token.strip_prefix(b"-0x") {
 				let buf = Buf::<64>::new(token_)?;
@@ -2403,7 +2401,7 @@ impl RawInstruction {
 
 			Self::U { opcode, rd, imm } => {
 				let imm =
-					if can_truncate_high::<20>(imm) || (imm as u32 & 0xfff0_0000) == 0 {
+					if can_truncate_high::<20>(imm) || (imm.cast_unsigned() & 0xfff0_0000) == 0 {
 						bit_slice::<0, 20>(imm) << 12
 					}
 					else {
@@ -2973,9 +2971,9 @@ pub(crate) const fn can_truncate_low<const N: u8>(i: i32) -> bool {
 
 pub(crate) const fn bit_slice<const L: u8, const H: u8>(i: i32) -> u32 {
 	if H < 32 {
-		(i as u32 & ((1 << H) - (1 << L))) >> L
+		(i.cast_unsigned() & ((1 << H) - (1 << L))) >> L
 	}
 	else {
-		(i as u32 & (!((1 << L) - 1))) >> L
+		(i.cast_unsigned() & (!((1 << L) - 1))) >> L
 	}
 }
