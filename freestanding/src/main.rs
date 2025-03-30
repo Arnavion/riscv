@@ -41,9 +41,9 @@ fn main() -> ! {
 
 fn main_inner(console: &mut Console<'_>) -> Result<(), ()> {
 	let program = {
-		extern "C" {
-			static mut _IN_FILE_PTR: u8;
-			static mut _IN_FILE_END_PTR: u8;
+		unsafe extern "C" {
+			safe static mut _IN_FILE_PTR: u8;
+			safe static mut _IN_FILE_END_PTR: u8;
 		}
 
 		let in_file_ptr = &raw const _IN_FILE_PTR;
@@ -100,8 +100,8 @@ struct HardwareTimer {
 
 impl HardwareTimer {
 	fn new() -> Self {
-		extern "C" {
-			static _TIMER_TICK_NS: core::ffi::c_void;
+		unsafe extern "C" {
+			safe static _TIMER_TICK_NS: core::ffi::c_void;
 		}
 
 		let (cycles, time, instret) = Self::read();
@@ -149,9 +149,9 @@ struct Console<'a> {
 
 impl Console<'static> {
 	fn new() -> Self {
-		extern "C" {
-			static mut _CONSOLE_PTR: core::mem::MaybeUninit<u8>;
-			static mut _CONSOLE_END_PTR: core::mem::MaybeUninit<u8>;
+		unsafe extern "C" {
+			safe static mut _CONSOLE_PTR: core::mem::MaybeUninit<u8>;
+			safe static mut _CONSOLE_END_PTR: core::mem::MaybeUninit<u8>;
 		}
 
 		let console_ptr: *mut core::mem::MaybeUninit<u8> = &raw mut _CONSOLE_PTR;

@@ -3,7 +3,7 @@ name = "bww-multiplier-generator"
 version = "0.1.0"
 license = "AGPL-3.0-only"
 authors = ["Arnav Singh <me@arnavion.dev>"]
-edition = "2021"
+edition = "2024"
 publish = false
 
 
