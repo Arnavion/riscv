@@ -76,6 +76,10 @@ The `tc/vis.sh` script in that directory can be used to generate an HTML file th
 
 ---
 
+The `simulator/` directory contains a simulator with the same behavior and cycle timings as the in-game emulator.
+
+---
+
 # License
 
 AGPL-3.0-only
