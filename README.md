@@ -70,6 +70,10 @@ The emulator has the Level Input and Level Output wired up to memory address `2^
 
 ---
 
+The `simulator/` directory contains a simulator with the same behavior and cycle timings as the in-game emulator.
+
+---
+
 # License
 
 AGPL-3.0-only
