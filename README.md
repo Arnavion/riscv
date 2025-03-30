@@ -74,6 +74,10 @@ The `tc/sv/` directory contains SystemVerilog definitions for various components
 
 ---
 
+The `simulator/` directory contains a simulator with the same behavior and cycle timings as the in-game emulator.
+
+---
+
 # License
 
 AGPL-3.0-only
