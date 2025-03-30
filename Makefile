@@ -201,3 +201,12 @@ freestanding-install: freestanding
 		sed -Ee 's/^\s*0*(.*)/<U64>0x\1/;s/0x$$/0/' >>$(EMULATOR_SAVE_DIR)/sandbox/new_program.asm
 	cp $(EMULATOR_IN_FILE) ~/non-oss-root/steam/in_file
 	cp $(EMULATOR_IN_FILE) $(EMULATOR_SAVE_DIR)/in_file
+
+
+.PHONY: simulator
+test: simulator
+simulator: freestanding
+	d="$$(mktemp -d)" && \
+	trap "rm -rf '$$d'" EXIT && \
+	objcopy ./freestanding/target/riscv64-arnavion-none-elf/release/freestanding -O binary "$$d/flat" && \
+	cargo run --release -p simulator -- -- "$$d/flat" $(EMULATOR_IN_FILE)
