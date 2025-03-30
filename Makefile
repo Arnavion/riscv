@@ -177,6 +177,12 @@ test-ram_cache: tc/sv/ram_cache.sv
 	$(test-sv)
 
 
+.PHONY: test-ram_cache_tree_plru
+test: test-ram_cache_tree_plru
+test-ram_cache_tree_plru: tc/sv/ram_cache_tree_plru.sv
+	$(test-sv)
+
+
 .PHONY: freestanding
 freestanding:
 	cd freestanding && cargo build --release --target riscv64-arnavion-none-elf.json -Z build-std=core
