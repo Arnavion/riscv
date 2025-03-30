@@ -70,6 +70,7 @@ module ram_cache #(
 	output bit[ram_block_address_width - 1:0] inspect_cached_ram_block_address,
 	output bit inspect_state_is_dirty,
 	output bit inspect_state_is_xfer,
+	output bit address_in_cache,
 
 	output bit busy,
 
@@ -101,6 +102,8 @@ module ram_cache #(
 
 	wire[isa_block_address_width - 1:0] isa_block_address = address[isa_byte_address+:isa_block_address_width];
 	wire[ram_block_address_width - 1:0] ram_block_address = address[isa_byte_address + isa_block_address_width+:ram_block_address_width];
+
+	assign address_in_cache = ram_block_address == cached_ram_block_address;
 
 	always_ff @(posedge clock) begin
 		if (reset) begin
@@ -242,6 +245,7 @@ module test_ram_cache #(
 	wire[ram_block_address_width - 1:0] inspect_cached_ram_block_address;
 	wire inspect_state_is_dirty;
 	wire inspect_state_is_xfer;
+	wire address_in_cache;
 
 	wire busy;
 
@@ -263,7 +267,7 @@ module test_ram_cache #(
 
 		slow_store_ready,
 
-		inspect_cached_ram_block_address, inspect_state_is_dirty, inspect_state_is_xfer,
+		inspect_cached_ram_block_address, inspect_state_is_dirty, inspect_state_is_xfer, address_in_cache,
 		busy,
 		load_value,
 		fast_store, fast_store_value,
