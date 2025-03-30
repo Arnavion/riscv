@@ -70,6 +70,7 @@ module ram_cache #(
 	output bit[ram_block_address_width - 1:0] inspect_cached_ram_block_address,
 	output bit inspect_state_is_dirty,
 	output bit inspect_state_is_xfer,
+	output bit address_in_cache,
 
 	output bit busy,
 
@@ -101,6 +102,8 @@ module ram_cache #(
 
 	wire[isa_block_address_width - 1:0] isa_block_address = address[isa_byte_address+:isa_block_address_width];
 	wire[ram_block_address_width - 1:0] ram_block_address = address[isa_byte_address + isa_block_address_width+:ram_block_address_width];
+
+	assign address_in_cache = ram_block_address == cached_ram_block_address;
 
 	always_ff @(posedge clock) begin
 		if (reset) begin
@@ -242,6 +245,7 @@ module test_ram_cache #(
 	wire[ram_block_address_width - 1:0] inspect_cached_ram_block_address;
 	wire inspect_state_is_dirty;
 	wire inspect_state_is_xfer;
+	wire address_in_cache;
 
 	wire busy;
 
@@ -263,7 +267,7 @@ module test_ram_cache #(
 
 		.slow_store_ready(slow_store_ready),
 
-		.inspect_cached_ram_block_address(inspect_cached_ram_block_address), .inspect_state_is_dirty(inspect_state_is_dirty), .inspect_state_is_xfer(inspect_state_is_xfer),
+		.inspect_cached_ram_block_address(inspect_cached_ram_block_address), .inspect_state_is_dirty(inspect_state_is_dirty), .inspect_state_is_xfer(inspect_state_is_xfer), .address_in_cache(address_in_cache),
 		.busy(busy),
 		.load_value(load_value),
 		.fast_store(fast_store), .fast_store_value(fast_store_value),
@@ -297,6 +301,7 @@ module test_ram_cache #(
 		assert(inspect_cached_ram_block_address == 0) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
 		assert(inspect_state_is_xfer == '0) else $fatal;
+		assert(address_in_cache == '0) else $fatal;
 		assert(busy == '0) else $fatal;
 		assert(fast_store == '0) else $fatal;
 		assert(slow_load == '0) else $fatal;
@@ -307,6 +312,7 @@ module test_ram_cache #(
 		assert(inspect_cached_ram_block_address == 0) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
 		assert(inspect_state_is_xfer == '0) else $fatal;
+		assert(address_in_cache == '0) else $fatal;
 		assert(busy == '0) else $fatal;
 		assert(fast_store == '0) else $fatal;
 		assert(slow_load == '0) else $fatal;
@@ -333,6 +339,7 @@ module test_ram_cache #(
 		assert(inspect_cached_ram_block_address == 0) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
 		assert(inspect_state_is_xfer == '0) else $fatal;
+		assert(address_in_cache == '1) else $fatal;
 
 
 		// Load from 1 (cached, clean) -> (cached, clean)
@@ -355,6 +362,7 @@ module test_ram_cache #(
 		assert(inspect_cached_ram_block_address == 0) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
 		assert(inspect_state_is_xfer == '0) else $fatal;
+		assert(address_in_cache == '1) else $fatal;
 
 
 		// Store to 0 (cached, clean) -> (cached, dirty)
@@ -385,6 +393,7 @@ module test_ram_cache #(
 		assert(inspect_cached_ram_block_address == 0) else $fatal;
 		assert(inspect_state_is_dirty == '1) else $fatal;
 		assert(inspect_state_is_xfer == '0) else $fatal;
+		assert(address_in_cache == '1) else $fatal;
 		#1
 		if (rv64)
 			fast_load_value = 128'h0123456701234567_ffffffffffffffff;
@@ -409,6 +418,7 @@ module test_ram_cache #(
 		assert(inspect_cached_ram_block_address == 0) else $fatal;
 		assert(inspect_state_is_dirty == '1) else $fatal;
 		assert(inspect_state_is_xfer == '0) else $fatal;
+		assert(address_in_cache == '1) else $fatal;
 
 
 		// Load from 5 (uncached, dirty) -> (cached, clean)
@@ -433,6 +443,7 @@ module test_ram_cache #(
 		assert(inspect_cached_ram_block_address == 2) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
 		assert(inspect_state_is_xfer == '1) else $fatal;
+		assert(address_in_cache == '1) else $fatal;
 		#1
 		clock = '0;
 		assert(busy == '1) else $fatal;
@@ -444,6 +455,7 @@ module test_ram_cache #(
 		assert(inspect_cached_ram_block_address == 2) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
 		assert(inspect_state_is_xfer == '1) else $fatal;
+		assert(address_in_cache == '1) else $fatal;
 		slow_load_ready = '1;
 		slow_store_ready = '1;
 		if (rv64)
@@ -473,6 +485,7 @@ module test_ram_cache #(
 		assert(inspect_cached_ram_block_address == 2) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
 		assert(inspect_state_is_xfer == '0) else $fatal;
+		assert(address_in_cache == '1) else $fatal;
 		#1
 		clock = '0;
 		#1
@@ -511,6 +524,7 @@ module test_ram_cache #(
 		assert(inspect_cached_ram_block_address == 2) else $fatal;
 		assert(inspect_state_is_dirty == '1) else $fatal;
 		assert(inspect_state_is_xfer == '0) else $fatal;
+		assert(address_in_cache == '1) else $fatal;
 		#1
 		if (rv64)
 			fast_load_value = 128'hffffffffffffffff_fedcba9876543210;
@@ -541,6 +555,7 @@ module test_ram_cache #(
 		assert(inspect_cached_ram_block_address == 4) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
 		assert(inspect_state_is_xfer == '1) else $fatal;
+		assert(address_in_cache == '1) else $fatal;
 		#1
 		clock = '0;
 		assert(busy == '1) else $fatal;
@@ -552,6 +567,7 @@ module test_ram_cache #(
 		assert(inspect_cached_ram_block_address == 4) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
 		assert(inspect_state_is_xfer == '1) else $fatal;
+		assert(address_in_cache == '1) else $fatal;
 		slow_load_ready = '1;
 		slow_store_ready = '1;
 		if (rv64)
@@ -581,6 +597,7 @@ module test_ram_cache #(
 		assert(inspect_cached_ram_block_address == 4) else $fatal;
 		assert(inspect_state_is_dirty == '0) else $fatal;
 		assert(inspect_state_is_xfer == '0) else $fatal;
+		assert(address_in_cache == '1) else $fatal;
 		#1
 		clock = '0;
 		#1
