@@ -1,3 +1,5 @@
+use crate::{RegisterValue, Tag};
+
 #[derive(Debug)]
 pub(crate) struct Csrs {
 	cycle: i64,
@@ -13,22 +15,38 @@ pub(crate) enum Csr {
 }
 
 impl Csrs {
-	pub(crate) fn load(&self, csr: Csr) -> i64 {
+	pub(crate) fn load(&self, csr: Csr) -> RegisterValue {
 		match csr {
-			Csr::Cycle => self.cycle,
-			Csr::Instret => self.instret,
-			Csr::Time => self.time,
+			Csr::Cycle => RegisterValue::Value(self.cycle),
+			Csr::Instret => RegisterValue::Value(self.instret),
+			Csr::Time => RegisterValue::Value(self.time),
 		}
 	}
 
 	#[allow(clippy::unused_self)]
-	pub(crate) fn store(&mut self, csr: Csr, _value: i64) {
+	pub(crate) fn rename(&mut self, csr: Csr, _tag: Tag) -> bool {
+		#[allow(clippy::match_same_arms)]
+		match csr {
+			Csr::Cycle => false,
+			Csr::Instret => false,
+			Csr::Time => false,
+		}
+	}
+
+	#[allow(clippy::unused_self)]
+	pub(crate) fn store(&mut self, csr: Csr, _tag: Tag, _value: i64) {
 		match csr {
 			Csr::Cycle => panic!("cycle CSR is read-only"),
 			Csr::Instret => panic!("instret CSR is read-only"),
 			Csr::Time => panic!("time CSR is read-only"),
 		}
 	}
+
+	#[allow(clippy::unused_self)]
+	pub(crate) fn reset_all_tags(
+		&mut self,
+		_tags: impl IntoIterator<Item = (Csr, Tag, Option<i64>)>,
+	) {}
 
 	pub(crate) fn cycle(&self) -> i64 {
 		self.cycle

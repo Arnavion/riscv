@@ -1,6 +1,8 @@
+use crate::{RegisterValue, Tag};
+
 #[derive(Debug, Default)]
 pub(crate) struct XRegs {
-	inner: [i64; 32],
+	inner: [(i64, Option<Tag>); 32],
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -40,15 +42,52 @@ pub(crate) enum XReg {
 }
 
 impl XRegs {
-	pub(crate) fn load(&self, x_reg: XReg) -> i64 {
+	pub(crate) fn load(&self, x_reg: XReg) -> RegisterValue {
 		let i = usize::from(x_reg);
-		self.inner[i]
+		let reg = self.inner[i];
+		if let Some(tag) = reg.1 {
+			RegisterValue::Tag(tag)
+		}
+		else {
+			RegisterValue::Value(reg.0)
+		}
 	}
 
-	pub(crate) fn store(&mut self, x_reg: XReg, value: i64) {
+	pub(crate) fn rename(&mut self, x_reg: XReg, tag: Tag) -> bool {
+		let i = usize::from(x_reg);
+		if i == 0 {
+			false
+		}
+		else {
+			self.inner[i].1 = Some(tag);
+			true
+		}
+	}
+
+	pub(crate) fn store(&mut self, x_reg: XReg, tag: Tag, value: i64) {
 		let i = usize::from(x_reg);
 		if i != 0 {
-			self.inner[i] = value;
+			let reg = &mut self.inner[i];
+			reg.0 = value;
+			if reg.1 == Some(tag) {
+				reg.1 = None;
+			}
+		}
+	}
+
+	pub(crate) fn reset_all_tags(
+		&mut self,
+		tags: impl IntoIterator<Item = (XReg, Tag, Option<i64>)>,
+	) {
+		for reg in &mut self.inner {
+			reg.1 = None;
+		}
+
+		for (x_reg, tag, _) in tags {
+			let i = usize::from(x_reg);
+			if i != 0 {
+				self.inner[i].1 = Some(tag);
+			}
 		}
 	}
 }
@@ -66,8 +105,12 @@ impl std::fmt::Display for XRegs {
 				}
 
 				let i = row + col * 8;
-				let value = self.inner[i];
+				let (value, tag) = self.inner[i];
 				write!(f, "x{i:<2}: 0x{value:016x}")?;
+				match tag {
+					Some(tag) => write!(f, " # {tag:3} #")?,
+					None => write!(f, " #     #")?,
+				}
 			}
 		}
 

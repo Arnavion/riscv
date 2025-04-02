@@ -48,9 +48,9 @@ impl LoadOp {
 
 		match self {
 			Self::Byte | Self::ByteUnsigned => (),
-			Self::HalfWord | Self::HalfWordUnsigned => assert!(address % 2 == 0, "0x{address:016x} is not aligned for reading a halfword"),
-			Self::Word | Self::WordUnsigned => assert!(address % 4 == 0, "0x{address:016x} is not aligned for reading a word"),
-			Self::DoubleWord => assert!(address % 8 == 0, "0x{address:016x} is not aligned for reading a doubleword"),
+			Self::HalfWord | Self::HalfWordUnsigned => assert!(address.is_multiple_of(2), "0x{address:016x} is not aligned for reading a halfword"),
+			Self::Word | Self::WordUnsigned => assert!(address.is_multiple_of(4), "0x{address:016x} is not aligned for reading a word"),
+			Self::DoubleWord => assert!(address.is_multiple_of(8), "0x{address:016x} is not aligned for reading a doubleword"),
 		}
 
 		let data = match address {
@@ -137,9 +137,9 @@ impl StoreOp {
 
 		match self {
 			Self::Byte => (),
-			Self::HalfWord => assert!(address % 2 == 0, "0x{address:016x} is not aligned for writing a halfword"),
-			Self::Word => assert!(address % 4 == 0, "0x{address:016x} is not aligned for writing a word"),
-			Self::DoubleWord => assert!(address % 8 == 0, "0x{address:016x} is not aligned for writing a doubleword"),
+			Self::HalfWord => assert!(address.is_multiple_of(2), "0x{address:016x} is not aligned for writing a halfword"),
+			Self::Word => assert!(address.is_multiple_of(4), "0x{address:016x} is not aligned for writing a word"),
+			Self::DoubleWord => assert!(address.is_multiple_of(8), "0x{address:016x} is not aligned for writing a doubleword"),
 		}
 
 		let data: &mut [u8; 8] = match address {

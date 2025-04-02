@@ -76,7 +76,7 @@ The `tc/vis.sh` script in that directory can be used to generate an HTML file th
 
 ---
 
-The `simulator/` directory contains a simulator with the same behavior and cycle timings as the in-game emulator.
+The `simulator/` directory contains a simulator with the same behavior and cycle timings as the in-game in-order emulator. It also contains a microcoded in-order implementation, and an out-of-order implementation with multiple functional units and multiple branch speculation.
 
 ---
 
