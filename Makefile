@@ -108,3 +108,10 @@ simulator: freestanding
 	trap "rm -rf '$$d'" EXIT && \
 	objcopy ./freestanding/target/riscv64-arnavion-none-elf/release/freestanding -O binary "$$d/flat" && \
 	cargo run --release -p simulator -- "$$d/flat" $(EMULATOR_IN_FILE)
+
+
+simulator-ooo: freestanding
+	d="$$(mktemp -d)" && \
+	trap "rm -rf '$$d'" EXIT && \
+	objcopy ./freestanding/target/riscv64-arnavion-none-elf/release/freestanding -O binary "$$d/flat" && \
+	cargo run --release -p simulator -- --ooo "$$d/flat" $(EMULATOR_IN_FILE)

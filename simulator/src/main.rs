@@ -14,13 +14,17 @@ use instruction::{
 mod memory;
 use memory::Memory;
 
+mod out_of_order;
+
 mod x_regs;
 use x_regs::{XReg, XRegs};
+
+mod ucode;
 
 fn main() {
 	let mut args = std::env::args_os();
 	let argv0 = args.next().unwrap_or_else(|| env!("CARGO_BIN_NAME").into());
-	let (program_path, in_file_path) = parse_args(args, &argv0);
+	let (out_of_order, program_path, in_file_path) = parse_args(args, &argv0);
 
 	let mut memory = Memory::new(program_path, in_file_path);
 
@@ -32,13 +36,24 @@ fn main() {
 
 	let pc = 0x8000_0000_0000_0000_u64.cast_signed();
 
-	in_order::run(
-		&mut memory,
-		&mut x_regs,
-		&mut csrs,
-		&mut statistics,
-		pc,
-	);
+	if out_of_order {
+		out_of_order::run(
+			&mut memory,
+			&mut x_regs,
+			&mut csrs,
+			&mut statistics,
+			pc,
+		);
+	}
+	else {
+		in_order::run(
+			&mut memory,
+			&mut x_regs,
+			&mut csrs,
+			&mut statistics,
+			pc,
+		);
+	}
 
 	memory.dump_console();
 
@@ -206,16 +221,78 @@ fn macro_op_fuse(
 #[derive(Default)]
 struct Statistics {
 	fusions: std::collections::BTreeMap<&'static str, usize>,
+	num_ticks_where_instructions_retired: usize,
+	num_ticks_where_instructions_not_retired: usize,
+	branch_predictions: usize,
+	branch_mispredictions: usize,
+	jal_predictions: usize,
+	jal_mispredictions: usize,
 }
 
 impl std::fmt::Display for Statistics {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		writeln!(f, "fusions: {:#?}", self.fusions)?;
+		writeln!(f, "num ticks where instructions retired: {}", self.num_ticks_where_instructions_retired)?;
+		writeln!(f, "num ticks where instructions not retired: {}", self.num_ticks_where_instructions_not_retired)?;
+		writeln!(f, "B* predictions: {}", self.branch_predictions)?;
+		writeln!(f, "B* mispredictions: {}", self.branch_mispredictions)?;
+		writeln!(f, "JAL* predictions: {}", self.jal_predictions)?;
+		writeln!(f, "JAL* mispredictions: {}", self.jal_mispredictions)?;
 		Ok(())
 	}
 }
 
-fn parse_args(mut args: impl Iterator<Item = std::ffi::OsString>, argv0: &std::ffi::OsStr) -> (std::path::PathBuf, std::path::PathBuf) {
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct Tag(usize);
+
+impl Tag {
+	fn allocate(&mut self) -> Self {
+		let result = *self;
+		self.0 += 1;
+		result
+	}
+
+	fn allocate_if(&mut self, f: impl FnOnce(Self) -> bool) -> Option<Self> {
+		let result = *self;
+		if f(result) {
+			self.0 += 1;
+			Some(result)
+		}
+		else {
+			None
+		}
+	}
+}
+
+impl std::fmt::Display for Tag {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		self.0.fmt(f)
+	}
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RegisterValue {
+	Value(i64),
+	Tag(Tag),
+}
+
+impl RegisterValue {
+	fn update(&mut self, tag: Tag, value: i64) {
+		if matches!(self, Self::Tag(tag_) if *tag_ == tag) {
+			*self = Self::Value(value);
+		}
+	}
+
+	fn in_order(self) -> i64 {
+		match self {
+			Self::Value(value) => value,
+			Self::Tag(_) => unreachable!(),
+		}
+	}
+}
+
+fn parse_args(mut args: impl Iterator<Item = std::ffi::OsString>, argv0: &std::ffi::OsStr) -> (bool, std::path::PathBuf, std::path::PathBuf) {
+	let mut out_of_order = false;
 	let mut program_path = None;
 	let mut in_file_path = None;
 
@@ -225,6 +302,8 @@ fn parse_args(mut args: impl Iterator<Item = std::ffi::OsString>, argv0: &std::f
 				write_usage(std::io::stdout(), argv0);
 				std::process::exit(0);
 			},
+
+			Some("--ooo") => out_of_order = true,
 
 			Some("--") => {
 				program_path = args.next();
@@ -244,7 +323,7 @@ fn parse_args(mut args: impl Iterator<Item = std::ffi::OsString>, argv0: &std::f
 
 	let Some(program_path) = program_path else { write_usage_and_crash(argv0); };
 	let Some(in_file_path) = in_file_path else { write_usage_and_crash(argv0); };
-	(program_path.into(), in_file_path.into())
+	(out_of_order, program_path.into(), in_file_path.into())
 }
 
 fn write_usage_and_crash(argv0: &std::ffi::OsStr) -> ! {
@@ -253,5 +332,5 @@ fn write_usage_and_crash(argv0: &std::ffi::OsStr) -> ! {
 }
 
 fn write_usage(mut w: impl std::io::Write, argv0: &std::ffi::OsStr) {
-	_ = writeln!(w, "Usage: {} [ -- ] <program.bin> <in_file.S>", argv0.to_string_lossy());
+	_ = writeln!(w, "Usage: {} [--ooo] [ -- ] <program.bin> <in_file.S>", argv0.to_string_lossy());
 }
