@@ -74,7 +74,7 @@ The `tc/sv/` directory contains SystemVerilog definitions for various components
 
 ---
 
-The `simulator/` directory contains a simulator with the same behavior and cycle timings as the in-game emulator.
+The `simulator/` directory contains a simulator with the same behavior and cycle timings as the in-game in-order emulator. It also contains a microcoded in-order implementation, and an out-of-order implementation with multiple functional units and multiple branch speculation.
 
 ---
 
