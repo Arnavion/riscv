@@ -70,7 +70,7 @@ The emulator has the Level Input and Level Output wired up to memory address `2^
 
 ---
 
-The `simulator/` directory contains a simulator with the same behavior and cycle timings as the in-game emulator.
+The `simulator/` directory contains a simulator with the same behavior and cycle timings as the in-game in-order emulator. It also contains a microcoded in-order implementation, and an out-of-order implementation with multiple functional units and multiple branch speculation.
 
 ---
 
