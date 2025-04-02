@@ -8,6 +8,7 @@ publish = false
 
 
 [dependencies]
+awint = { workspace = true }
 
 
 [lints]
