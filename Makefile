@@ -215,4 +215,22 @@ simulator: freestanding
 	d="$$(mktemp -d)" && \
 	trap "rm -rf '$$d'" EXIT && \
 	objcopy ./freestanding/target/riscv64-arnavion-none-elf/release/freestanding -O binary "$$d/flat" && \
-	cargo run --release -p simulator -- -- "$$d/flat" $(EMULATOR_IN_FILE)
+	cargo run --release -p simulator -- --mode in-order -- "$$d/flat" $(EMULATOR_IN_FILE)
+
+
+.PHONY: simulator-ucode
+test: simulator-ucode
+simulator-ucode: freestanding
+	d="$$(mktemp -d)" && \
+	trap "rm -rf '$$d'" EXIT && \
+	objcopy ./freestanding/target/riscv64-arnavion-none-elf/release/freestanding -O binary "$$d/flat" && \
+	cargo run --release -p simulator -- --mode in-order-ucode -- "$$d/flat" $(EMULATOR_IN_FILE)
+
+
+.PHONY: simulator-ooo
+test: simulator-ooo
+simulator-ooo: freestanding
+	d="$$(mktemp -d)" && \
+	trap "rm -rf '$$d'" EXIT && \
+	objcopy ./freestanding/target/riscv64-arnavion-none-elf/release/freestanding -O binary "$$d/flat" && \
+	cargo run --release -p simulator -- --mode out-of-order --ooo-max-retire-per-cycle 4 -- "$$d/flat" $(EMULATOR_IN_FILE)
