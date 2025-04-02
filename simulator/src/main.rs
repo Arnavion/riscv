@@ -14,8 +14,12 @@ use instruction::{
 mod memory;
 use memory::{Memory, LoadOp};
 
+mod out_of_order;
+
 mod x_regs;
 use x_regs::{XReg, XRegs};
+
+mod ucode;
 
 fn main() {
 	let log_level = match std::env::var_os("SIMULATOR_LOG") {
@@ -26,7 +30,7 @@ fn main() {
 
 	let mut args = std::env::args_os();
 	let argv0 = args.next().unwrap_or_else(|| env!("CARGO_BIN_NAME").into());
-	let (program_path, in_file_path) = parse_args(args, &argv0);
+	let (out_of_order_max_retire_per_cycle, program_path, in_file_path) = parse_args(args, &argv0);
 
 	let mut memory = Memory::new(program_path, in_file_path);
 
@@ -38,14 +42,27 @@ fn main() {
 
 	let pc = 0x8000_0000_0000_0000_u64.cast_signed();
 
-	in_order::run(
-		&mut memory,
-		&mut x_regs,
-		&mut csrs,
-		&mut statistics,
-		pc,
-		log_level,
-	);
+	if let Some(out_of_order_max_retire_per_cycle) = out_of_order_max_retire_per_cycle {
+		out_of_order::run(
+			&mut memory,
+			&mut x_regs,
+			&mut csrs,
+			&mut statistics,
+			pc,
+			out_of_order_max_retire_per_cycle,
+			log_level,
+		);
+	}
+	else {
+		in_order::run(
+			&mut memory,
+			&mut x_regs,
+			&mut csrs,
+			&mut statistics,
+			pc,
+			log_level,
+		);
+	}
 
 	memory.dump_console();
 
@@ -228,24 +245,104 @@ enum LogLevel {
 #[derive(Default)]
 struct Statistics {
 	fusions: std::collections::BTreeMap<&'static str, usize>,
+	fu_utilization: std::collections::BTreeMap<&'static str, usize>,
+	num_ticks_where_instructions_retired: usize,
+	num_ticks_where_instructions_not_retired: usize,
+	jump_predictions: usize,
+	jump_mispredictions: usize,
 }
 
 impl std::fmt::Display for Statistics {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		#[allow(clippy::cast_precision_loss)]
+		let fu_utilization: std::collections::BTreeMap<_, _> =
+			self.fu_utilization.iter()
+			.map(|(&key, &value)| (
+				key,
+				format!(
+					"{:.9}",
+					(value as f64) * 100. / ((self.num_ticks_where_instructions_retired + self.num_ticks_where_instructions_not_retired) as f64),
+				),
+			))
+			.collect();
 		writeln!(f, "fusions: {:#?}", self.fusions)?;
+		writeln!(f, "FU utilization: {fu_utilization:#?}")?;
+		writeln!(f, "num ticks where instructions retired: {}", self.num_ticks_where_instructions_retired)?;
+		writeln!(f, "num ticks where instructions not retired: {}", self.num_ticks_where_instructions_not_retired)?;
+		writeln!(f, "jump predictions: {}", self.jump_predictions)?;
+		writeln!(f, "jump mispredictions: {}", self.jump_mispredictions)?;
 		Ok(())
 	}
 }
 
-fn parse_args(mut args: impl Iterator<Item = std::ffi::OsString>, argv0: &std::ffi::OsStr) -> (std::path::PathBuf, std::path::PathBuf) {
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+struct Tag(usize);
+
+impl Tag {
+	fn allocate(&mut self) -> Self {
+		let result = *self;
+		self.0 += 1;
+		result
+	}
+
+	fn allocate_if(&mut self, f: impl FnOnce(Self) -> bool) -> Option<Self> {
+		let result = *self;
+		if f(result) {
+			self.0 += 1;
+			Some(result)
+		}
+		else {
+			None
+		}
+	}
+}
+
+impl std::fmt::Display for Tag {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		self.0.fmt(f)
+	}
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RegisterValue {
+	Value(i64),
+	Tag(Tag),
+}
+
+impl RegisterValue {
+	fn update(&mut self, tag: Tag, value: i64) {
+		if matches!(self, Self::Tag(tag_) if *tag_ == tag) {
+			*self = Self::Value(value);
+		}
+	}
+
+	fn in_order(self) -> i64 {
+		match self {
+			Self::Value(value) => value,
+			Self::Tag(_) => unreachable!(),
+		}
+	}
+}
+
+fn parse_args(mut args: impl Iterator<Item = std::ffi::OsString>, argv0: &std::ffi::OsStr) -> (
+	Option<std::num::NonZero<usize>>,
+	std::path::PathBuf,
+	std::path::PathBuf,
+) {
+	let mut out_of_order_max_retire_per_cycle = None;
 	let mut program_path = None;
 	let mut in_file_path = None;
 
-	for opt in &mut args {
+	while let Some(opt) = args.next() {
 		match opt.to_str() {
 			Some("--help") => {
 				write_usage(std::io::stdout(), argv0);
 				std::process::exit(0);
+			},
+
+			Some("--ooo") if out_of_order_max_retire_per_cycle.is_none() => {
+				let Some(arg) = args.next() else { write_usage_and_crash(argv0); };
+				out_of_order_max_retire_per_cycle = Some(arg);
 			},
 
 			Some("--") => {
@@ -264,9 +361,19 @@ fn parse_args(mut args: impl Iterator<Item = std::ffi::OsString>, argv0: &std::f
 
 	let None = args.next() else { write_usage_and_crash(argv0); };
 
+	let out_of_order_max_retire_per_cycle =
+		if let Some(out_of_order_max_retire_per_cycle) = out_of_order_max_retire_per_cycle {
+			let Some(out_of_order_max_retire_per_cycle) = out_of_order_max_retire_per_cycle.to_str() else { write_usage_and_crash(argv0); };
+			let Ok(out_of_order_max_retire_per_cycle) = out_of_order_max_retire_per_cycle.parse() else { write_usage_and_crash(argv0); };
+			let Some(out_of_order_max_retire_per_cycle) = std::num::NonZero::new(out_of_order_max_retire_per_cycle) else { write_usage_and_crash(argv0); };
+			Some(out_of_order_max_retire_per_cycle)
+		}
+		else {
+			None
+		};
 	let Some(program_path) = program_path else { write_usage_and_crash(argv0); };
 	let Some(in_file_path) = in_file_path else { write_usage_and_crash(argv0); };
-	(program_path.into(), in_file_path.into())
+	(out_of_order_max_retire_per_cycle, program_path.into(), in_file_path.into())
 }
 
 fn write_usage_and_crash(argv0: &std::ffi::OsStr) -> ! {
@@ -275,5 +382,5 @@ fn write_usage_and_crash(argv0: &std::ffi::OsStr) -> ! {
 }
 
 fn write_usage(mut w: impl std::io::Write, argv0: &std::ffi::OsStr) {
-	_ = writeln!(w, "Usage: {} [ -- ] <program.bin> <in_file.S>", argv0.to_string_lossy());
+	_ = writeln!(w, "Usage: {} [--ooo <max retire per cycle>] [ -- ] <program.bin> <in_file.S>", argv0.to_string_lossy());
 }

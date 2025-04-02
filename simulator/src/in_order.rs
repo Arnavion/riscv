@@ -68,7 +68,7 @@ pub(crate) fn run(
 
 		pc = next_pc;
 
-		let cycles = match inst {
+		let cycles: u8 = match inst {
 			Instruction::Op { op: OpOp::Mul | OpOp::Mulh | OpOp::Mulhsu | OpOp::Mulhu, .. } |
 			Instruction::Op32 { op: Op32Op::Mulw, .. }
 				=> 34,
@@ -81,7 +81,10 @@ pub(crate) fn run(
 				=> 1,
 		};
 
-		csrs.tick(cycles, instret);
+		statistics.num_ticks_where_instructions_retired += 1;
+		statistics.num_ticks_where_instructions_not_retired += usize::from(cycles) - 1;
+
+		csrs.tick(cycles.into(), instret);
 
 		if log_level >= LogLevel::Trace {
 			eprintln!("->");
@@ -100,17 +103,17 @@ fn execute(
 ) {
 	match inst {
 		Instruction::Abs { rd, rs } => {
-			let arg = x_regs.load(rs);
-			x_regs.store(rd, arg.unsigned_abs().cast_signed());
+			let arg = x_regs.load(rs).in_order();
+			x_regs.store(rd, Default::default(), arg.unsigned_abs().cast_signed());
 		},
 
 		Instruction::Auipc { rd, imm } => {
-			x_regs.store(rd, pc.wrapping_add(imm));
+			x_regs.store(rd, Default::default(), pc.wrapping_add(imm));
 		},
 
 		Instruction::Branch { op, rs1, rs2, imm } => {
-			let arg1 = x_regs.load(rs1);
-			let arg2 = x_regs.load(rs2);
+			let arg1 = x_regs.load(rs1).in_order();
+			let arg2 = x_regs.load(rs2).in_order();
 			if op.exec(arg1, arg2) {
 				*next_pc = pc.wrapping_add(imm);
 			}
@@ -118,72 +121,72 @@ fn execute(
 
 		Instruction::Csrrw { rd, rs1, csr } =>
 			if rd == XReg::X0 {
-				let new = x_regs.load(rs1);
-				csrs.store(csr, new);
+				let new = x_regs.load(rs1).in_order();
+				csrs.store(csr, Default::default(), new);
 			}
 			else {
-				let previous = csrs.load(csr);
-				let new = x_regs.load(rs1);
-				x_regs.store(rd, previous);
-				csrs.store(csr, new);
+				let previous = csrs.load(csr).in_order();
+				let new = x_regs.load(rs1).in_order();
+				x_regs.store(rd, Default::default(), previous);
+				csrs.store(csr, Default::default(), new);
 			},
 
 		Instruction::Csrrwi { rd, imm, csr } =>
 			if rd == XReg::X0 {
-				csrs.store(csr, imm);
+				csrs.store(csr, Default::default(), imm);
 			}
 			else {
-				let previous = csrs.load(csr);
-				x_regs.store(rd, previous);
-				csrs.store(csr, imm);
+				let previous = csrs.load(csr).in_order();
+				x_regs.store(rd, Default::default(), previous);
+				csrs.store(csr, Default::default(), imm);
 			},
 
 		Instruction::Csrrs { rd, rs1, csr } =>
 			if rs1 == XReg::X0 {
-				let previous = csrs.load(csr);
-				x_regs.store(rd, previous);
+				let previous = csrs.load(csr).in_order();
+				x_regs.store(rd, Default::default(), previous);
 			}
 			else {
-				let previous = csrs.load(csr);
-				let new = previous | x_regs.load(rs1);
-				x_regs.store(rd, previous);
-				csrs.store(csr, new);
+				let previous = csrs.load(csr).in_order();
+				let new = previous | x_regs.load(rs1).in_order();
+				x_regs.store(rd, Default::default(), previous);
+				csrs.store(csr, Default::default(), new);
 			},
 
 		Instruction::Csrrsi { rd, imm, csr } =>
 			if imm == 0 {
-				let previous = csrs.load(csr);
-				x_regs.store(rd, previous);
+				let previous = csrs.load(csr).in_order();
+				x_regs.store(rd, Default::default(), previous);
 			}
 			else {
-				let previous = csrs.load(csr);
+				let previous = csrs.load(csr).in_order();
 				let new = previous | imm;
-				x_regs.store(rd, previous);
-				csrs.store(csr, new);
+				x_regs.store(rd, Default::default(), previous);
+				csrs.store(csr, Default::default(), new);
 			},
 
 		Instruction::Csrrc { rd, rs1, csr } =>
 			if rs1 == XReg::X0 {
-				let previous = csrs.load(csr);
-				x_regs.store(rd, previous);
+				let previous = csrs.load(csr).in_order();
+				x_regs.store(rd, Default::default(), previous);
 			}
 			else {
-				let previous = csrs.load(csr);
-				let new = previous & !x_regs.load(rs1);
-				x_regs.store(rd, previous);
-				csrs.store(csr, new);
+				let previous = csrs.load(csr).in_order();
+				let new = previous & !x_regs.load(rs1).in_order();
+				x_regs.store(rd, Default::default(), previous);
+				csrs.store(csr, Default::default(), new);
 			},
 
 		Instruction::Csrrci { rd, imm, csr } =>
 			if imm == 0 {
-				let previous = csrs.load(csr);
-				x_regs.store(rd, previous);
+				let previous = csrs.load(csr).in_order();
+				x_regs.store(rd, Default::default(), previous);
 			}
 			else {
-				let previous = csrs.load(csr);
+				let previous = csrs.load(csr).in_order();
 				let new = previous & !imm;
-				x_regs.store(rd, previous);
-				csrs.store(csr, new);
+				x_regs.store(rd, Default::default(), previous);
+				csrs.store(csr, Default::default(), new);
 			},
 
 		Instruction::Ebreak => panic!("EBREAK"),
@@ -191,40 +194,40 @@ fn execute(
 		Instruction::Fence => (),
 
 		Instruction::Jal { rd, imm } => {
-			x_regs.store(rd, *next_pc);
+			x_regs.store(rd, Default::default(), *next_pc);
 			*next_pc = pc.wrapping_add(imm);
 		},
 
 		Instruction::Jalr { rd, rs1, imm } => {
-			let arg1 = x_regs.load(rs1);
-			x_regs.store(rd, *next_pc);
+			let arg1 = x_regs.load(rs1).in_order();
+			x_regs.store(rd, Default::default(), *next_pc);
 			*next_pc = arg1.wrapping_add(imm) & 0xffff_ffff_ffff_fffe_u64.cast_signed();
 		},
 
 		Instruction::Load { op, rd, base, offset } => {
 			let base = match base {
-				MemoryBase::XReg(rs1) => x_regs.load(rs1),
-				MemoryBase::XRegSh1(rs1) => x_regs.load(rs1) << 1,
-				MemoryBase::XRegSh2(rs1) => x_regs.load(rs1) << 2,
-				MemoryBase::XRegSh3(rs1) => x_regs.load(rs1) << 3,
+				MemoryBase::XReg(rs1) => x_regs.load(rs1).in_order(),
+				MemoryBase::XRegSh1(rs1) => x_regs.load(rs1).in_order() << 1,
+				MemoryBase::XRegSh2(rs1) => x_regs.load(rs1).in_order() << 2,
+				MemoryBase::XRegSh3(rs1) => x_regs.load(rs1).in_order() << 3,
 				MemoryBase::Pc => pc,
 			};
 			let offset = match offset {
 				MemoryOffset::Imm(imm) => imm,
-				MemoryOffset::XReg(rs2) => x_regs.load(rs2),
+				MemoryOffset::XReg(rs2) => x_regs.load(rs2).in_order(),
 			};
 			let address = base.wrapping_add(offset);
 			let value = op.exec(memory, address);
-			x_regs.store(rd, value);
+			x_regs.store(rd, Default::default(), value);
 		},
 
 		Instruction::Lui { rd, imm } => {
-			x_regs.store(rd, imm);
+			x_regs.store(rd, Default::default(), imm);
 		},
 
 		Instruction::Op { op, rd, rs1, rs2 } => {
-			let arg1 = x_regs.load(rs1);
-			let arg2 = x_regs.load(rs2);
+			let arg1 = x_regs.load(rs1).in_order();
+			let arg2 = x_regs.load(rs2).in_order();
 			let value = match op {
 				OpOp::Add => arg1.wrapping_add(arg2),
 				OpOp::And => arg1 & arg2,
@@ -259,13 +262,13 @@ fn execute(
 				OpOp::Xnor => !(arg1 ^ arg2),
 				OpOp::Xor => arg1 ^ arg2,
 			};
-			x_regs.store(rd, value);
+			x_regs.store(rd, Default::default(), value);
 		},
 
 		#[allow(clippy::cast_possible_truncation)]
 		Instruction::Op32 { op, rd, rs1, rs2 } => {
-			let arg1 = x_regs.load(rs1);
-			let arg2 = x_regs.load(rs2);
+			let arg1 = x_regs.load(rs1).in_order();
+			let arg2 = x_regs.load(rs2).in_order();
 			let value = match op {
 				Op32Op::AddUw => i64::from((arg1 as i32).cast_unsigned()).wrapping_add(arg2),
 				Op32Op::Addw => (arg1 as i32).wrapping_add(arg2 as i32).into(),
@@ -281,11 +284,11 @@ fn execute(
 				Op32Op::Subw => (arg1 as i32).wrapping_sub(arg2 as i32).into(),
 				Op32Op::ZextH => i64::from(arg1.cast_unsigned() as u16),
 			};
-			x_regs.store(rd, value);
+			x_regs.store(rd, Default::default(), value);
 		},
 
 		Instruction::OpImm { op, rd, rs1, imm } => {
-			let arg1 = x_regs.load(rs1);
+			let arg1 = x_regs.load(rs1).in_order();
 			let value = match op {
 				OpImmOp::Addi => arg1.wrapping_add(imm),
 				OpImmOp::Andi => arg1 & imm,
@@ -311,12 +314,12 @@ fn execute(
 				OpImmOp::Srli => (arg1.cast_unsigned() >> (imm & 0x3f)).cast_signed(),
 				OpImmOp::Xori => arg1 ^ imm,
 			};
-			x_regs.store(rd, value);
+			x_regs.store(rd, Default::default(), value);
 		},
 
 		#[allow(clippy::cast_possible_truncation)]
 		Instruction::OpImm32 { op, rd, rs1, imm } => {
-			let arg1 = x_regs.load(rs1) as i32;
+			let arg1 = x_regs.load(rs1).in_order() as i32;
 			let imm = imm as i32;
 			let value = match op {
 				OpImm32Op::Addiw => arg1.wrapping_add(imm).into(),
@@ -329,12 +332,12 @@ fn execute(
 				OpImm32Op::Sraiw => (arg1 >> (imm & 0x1f)).into(),
 				OpImm32Op::Srliw => (arg1.cast_unsigned() >> (imm & 0x1f)).cast_signed().into(),
 			};
-			x_regs.store(rd, value);
+			x_regs.store(rd, Default::default(), value);
 		},
 
 		Instruction::Store { op, rs1, rs2, imm } => {
-			let address = x_regs.load(rs1).wrapping_add(imm);
-			let value = x_regs.load(rs2);
+			let address = x_regs.load(rs1).in_order().wrapping_add(imm);
+			let value = x_regs.load(rs2).in_order();
 			op.exec(memory, address, value);
 		},
 	}
