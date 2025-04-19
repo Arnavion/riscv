@@ -233,8 +233,73 @@ fn halt() -> ! {
 /// If `rest` is empty then `line` ended at a `b'\0'` or reached the end of the given slice,
 /// and is thus the last line.
 mod split_line {
+	/// This is a vector implementation based on the V extension.
+	#[cfg(target_feature = "v")]
+	pub(super) fn split_line(mut s: &[u8]) -> (&[u8], &[u8]) {
+		let s_orig = s;
+		let mut line_end = 0;
+
+		loop {
+			unsafe {
+				let read: usize;
+				core::arch::asm!(
+					"vsetvli zero, {len}, e8, m8, ta, ma",
+					"vle8ff.v v8, ({ptr})",
+					"csrr {read}, vl",
+					len = in(reg) s.len(),
+					ptr = in(reg) s.as_ptr(),
+					read = lateout(reg) read,
+					out("v8") _,
+					out("v9") _,
+					out("v10") _,
+					out("v11") _,
+					out("v12") _,
+					out("v13") _,
+					out("v14") _,
+					out("v15") _,
+					options(nostack),
+				);
+
+				{
+					let i: usize;
+					core::arch::asm!(
+						"vmseq.vi v0, v8, {c}",
+						"vfirst.m {i}, v0",
+						lateout("v0") _,
+						c = const b'\n',
+						i = lateout(reg) i,
+						options(nostack),
+					);
+					if i.cast_signed() >= 0 {
+						let i = line_end + i;
+						return (s_orig.get_unchecked(..i), s_orig.get_unchecked(i + 1..));
+					}
+				}
+
+				{
+					let i: usize;
+					core::arch::asm!(
+						"vmseq.vi v0, v8, {c}",
+						"vfirst.m {i}, v0",
+						lateout("v0") _,
+						c = const b'\0',
+						i = lateout(reg) i,
+						options(nostack),
+					);
+					if i.cast_signed() >= 0 {
+						let i = line_end + i;
+						return (s_orig.get_unchecked(..i), b"");
+					}
+				}
+
+				s = s.get_unchecked(read..);
+				line_end += read;
+			}
+		}
+	}
+
 	/// This is a SWAR implementation based on the Zbb extension.
-	#[cfg(target_feature = "zbb")]
+	#[cfg(all(not(target_feature = "v"), target_feature = "zbb"))]
 	pub(super) fn split_line(s: &[u8]) -> (&[u8], &[u8]) {
 		const C1: usize = usize::from_ne_bytes([b'\n'; core::mem::size_of::<usize>()]);
 
@@ -362,7 +427,7 @@ mod split_line {
 	/// This is a SWAR implementation used when the Zbb extension is not present.
 	///
 	/// Ref: <https://en.wikipedia.org/w/index.php?title=SWAR&oldid=1276491101#Further_refinements_2>
-	#[cfg(not(target_feature = "zbb"))]
+	#[cfg(all(not(target_feature = "v"), not(target_feature = "zbb")))]
 	pub(super) fn split_line(s: &[u8]) -> (&[u8], &[u8]) {
 		const C1: usize = usize::from_ne_bytes([b'\n'; core::mem::size_of::<usize>()]);
 		const C2: usize = usize::from_ne_bytes([0x01; core::mem::size_of::<usize>()]);
@@ -415,3 +480,142 @@ mod split_line {
 	}
 }
 use split_line::split_line;
+
+/// This is a vector implementation based on the V extension.
+#[cfg(target_feature = "v")]
+#[unsafe(no_mangle)]
+extern "C" fn memcmp(mut s1: *const u8, mut s2: *const u8, mut n: usize) -> i32 {
+	while n > 0 {
+		unsafe {
+			let read: usize;
+			let index_ne: usize;
+			core::arch::asm!(
+				"vsetvli {read}, {n}, e8, m8, ta, ma",
+				"vle8.v v8, ({s1})",
+				"vle8.v v16, ({s2})",
+				"vmsne.vv v0, v8, v16",
+				"vfirst.m {index_ne}, v0",
+				n = in(reg) n,
+				s1 = in(reg) s1,
+				s2 = in(reg) s2,
+				read = out(reg) read,
+				index_ne = lateout(reg) index_ne,
+				out("v0") _,
+				out("v8") _,
+				out("v9") _,
+				out("v10") _,
+				out("v11") _,
+				out("v12") _,
+				out("v13") _,
+				out("v14") _,
+				out("v15") _,
+				out("v16") _,
+				out("v17") _,
+				out("v18") _,
+				out("v19") _,
+				out("v20") _,
+				out("v21") _,
+				out("v22") _,
+				out("v23") _,
+				options(nostack),
+			);
+
+			if index_ne.cast_signed() >= 0 {
+				let e1 = s1.add(index_ne);
+				let e2 = s2.add(index_ne);
+				return i32::from(*e1) - i32::from(*e2);
+			}
+
+			n -= read;
+			s1 = s1.add(read);
+			s2 = s2.add(read);
+		}
+	}
+
+	0
+}
+
+/// This is a vector implementation based on the V extension.
+#[cfg(target_feature = "v")]
+#[unsafe(no_mangle)]
+extern "C" fn memcpy(mut dest: *mut u8, mut src: *const u8, mut n: usize) -> *mut u8 {
+	let result = dest;
+
+	while n > 0 {
+		unsafe {
+			let read: usize;
+			core::arch::asm!(
+				"vsetvli {read}, {n}, e8, m8, ta, ma",
+				"vle8.v v8, ({src})",
+				"vse8.v v8, ({dest})",
+				n = in(reg) n,
+				src = in(reg) src,
+				read = out(reg) read,
+				dest = in(reg) dest,
+				out("v8") _,
+				out("v9") _,
+				out("v10") _,
+				out("v11") _,
+				out("v12") _,
+				out("v13") _,
+				out("v14") _,
+				out("v15") _,
+				options(nostack),
+			);
+
+			n -= read;
+			dest = dest.add(read);
+			src = src.add(read);
+		}
+	}
+
+	result
+}
+
+/// This is a vector implementation based on the V extension.
+#[cfg(target_feature = "v")]
+#[unsafe(no_mangle)]
+extern "C" fn memmove(dest: *mut u8, src: *const u8, mut n: usize) -> *mut u8 {
+	if dest.addr().wrapping_sub(src.addr()) >= n {
+		// Either dest < src, or src and dest don't overlap.
+		// In the former case we want to copy forwards like memcpy does.
+		// In the latter case the copy direction doesn't matter, so forwards
+		// is fine.
+		return memcpy(dest, src, n);
+	}
+
+	let result = dest;
+
+	let mut src = unsafe { src.add(n) };
+	let mut dest = unsafe { dest.add(n) };
+
+	while n > 0 {
+		unsafe {
+			let read: usize;
+			core::arch::asm!(
+				"vsetvli {read}, {n}, e8, m8, ta, ma",
+				"sub {src}, {src}, {read}",
+				"sub {dest}, {dest}, {read}",
+				"vle8.v v8, ({src})",
+				"vse8.v v8, ({dest})",
+				n = in(reg) n,
+				src = inout(reg) src,
+				read = out(reg) read,
+				dest = inout(reg) dest,
+				out("v8") _,
+				out("v9") _,
+				out("v10") _,
+				out("v11") _,
+				out("v12") _,
+				out("v13") _,
+				out("v14") _,
+				out("v15") _,
+				options(nostack),
+			);
+
+			n -= read;
+		}
+	}
+
+	result
+}
