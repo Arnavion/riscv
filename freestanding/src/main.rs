@@ -1,6 +1,7 @@
 #![cfg(target_arch = "riscv64")]
 
 #![feature(
+	abi_custom,
 	maybe_uninit_write_slice,
 )]
 
@@ -9,16 +10,15 @@
 
 use core::fmt::Write;
 
-core::arch::global_asm!("
-	.global _start
-	.extern _STACK_PTR
-
-	.section .text._start
-
-_start:
-	lga sp, _STACK_PTR
-	j {main}
-", main = sym main);
+#[unsafe(naked)]
+#[unsafe(no_mangle)]
+pub unsafe extern "custom" fn _start() {
+	core::arch::naked_asm!("
+		.extern _STACK_PTR
+		lga sp, _STACK_PTR
+		j {main}
+	", main = sym main);
+}
 
 fn main() -> ! {
 	{
