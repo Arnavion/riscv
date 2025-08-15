@@ -159,6 +159,70 @@ test-decompressor_priority-bsv: tc/bsv/RvDecompressorPriority.bsv
 	$(test-bsv)
 
 
+.PHONY: test-fpu-bsv
+test: test-fpu-bsv
+test-fpu-bsv: test-fpu-bsv-manual
+test-fpu-bsv: test-fpu-bsv-convert-H-S-Rne
+test-fpu-bsv: test-fpu-bsv-convert-H-S-Rtz
+test-fpu-bsv: test-fpu-bsv-convert-H-S-Rdn
+test-fpu-bsv: test-fpu-bsv-convert-H-S-Rup
+test-fpu-bsv: test-fpu-bsv-convert-H-S-Rmm
+test-fpu-bsv: test-fpu-bsv-convert-H-D-Rne
+test-fpu-bsv: test-fpu-bsv-convert-H-D-Rtz
+test-fpu-bsv: test-fpu-bsv-convert-H-D-Rdn
+test-fpu-bsv: test-fpu-bsv-convert-H-D-Rup
+test-fpu-bsv: test-fpu-bsv-convert-H-D-Rmm
+test-fpu-bsv: test-fpu-bsv-convert-S-H-Rne
+test-fpu-bsv: test-fpu-bsv-convert-S-H-Rtz
+test-fpu-bsv: test-fpu-bsv-convert-S-H-Rdn
+test-fpu-bsv: test-fpu-bsv-convert-S-H-Rup
+test-fpu-bsv: test-fpu-bsv-convert-S-H-Rmm
+test-fpu-bsv: test-fpu-bsv-convert-S-D-Rne
+test-fpu-bsv: test-fpu-bsv-convert-S-D-Rtz
+test-fpu-bsv: test-fpu-bsv-convert-S-D-Rdn
+test-fpu-bsv: test-fpu-bsv-convert-S-D-Rup
+test-fpu-bsv: test-fpu-bsv-convert-S-D-Rmm
+test-fpu-bsv: test-fpu-bsv-convert-D-H-Rne
+test-fpu-bsv: test-fpu-bsv-convert-D-H-Rtz
+test-fpu-bsv: test-fpu-bsv-convert-D-H-Rdn
+test-fpu-bsv: test-fpu-bsv-convert-D-H-Rup
+test-fpu-bsv: test-fpu-bsv-convert-D-H-Rmm
+test-fpu-bsv: test-fpu-bsv-convert-D-S-Rne
+test-fpu-bsv: test-fpu-bsv-convert-D-S-Rtz
+test-fpu-bsv: test-fpu-bsv-convert-D-S-Rdn
+test-fpu-bsv: test-fpu-bsv-convert-D-S-Rup
+test-fpu-bsv: test-fpu-bsv-convert-D-S-Rmm
+# test-fpu-bsv: test-fpu-bsv-multiply-H-Rne
+# test-fpu-bsv: test-fpu-bsv-multiply-H-Rtz
+# test-fpu-bsv: test-fpu-bsv-multiply-H-Rdn
+# test-fpu-bsv: test-fpu-bsv-multiply-H-Rup
+# test-fpu-bsv: test-fpu-bsv-multiply-H-Rmm
+# test-fpu-bsv: test-fpu-bsv-multiply-S-Rne
+# test-fpu-bsv: test-fpu-bsv-multiply-S-Rtz
+# test-fpu-bsv: test-fpu-bsv-multiply-S-Rdn
+# test-fpu-bsv: test-fpu-bsv-multiply-S-Rup
+# test-fpu-bsv: test-fpu-bsv-multiply-S-Rmm
+# test-fpu-bsv: test-fpu-bsv-multiply-D-Rne
+# test-fpu-bsv: test-fpu-bsv-multiply-D-Rtz
+# test-fpu-bsv: test-fpu-bsv-multiply-D-Rdn
+# test-fpu-bsv: test-fpu-bsv-multiply-D-Rup
+# test-fpu-bsv: test-fpu-bsv-multiply-D-Rmm
+
+
+.PHONY: test-fpu-bsv-manual
+test-fpu-bsv-manual: tc/bsv/RvFpuTestManual.bsv
+	$(test-bsv)
+
+
+.PHONY: test-fpu-bsv-%
+test-fpu-bsv-%: target/bsv/RvFpuTest-%.bsv
+	$(test-bsv)
+
+
+target/bsv/RvFpuTest-%.bsv:
+	tc/bsv/generate-testfloat.sh '$*'
+
+
 .PHONY: test-load_store32
 test: test-load_store32
 test-load_store32: tc/sv/load_store32.sv
