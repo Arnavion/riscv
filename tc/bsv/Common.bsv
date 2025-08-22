@@ -64,7 +64,7 @@ function Action assert_eq(t a, t b, ActionValue#(m) message)
 provisos(
 	Bits#(t, a__),
 	Eq#(t),
-	Bits#(m, 2048)
+	Bits#(m, 4096)
 ) = action
 	if (a != b) begin
 		$display("Assertion failed: 0x%h != 0x%h: %s", a, b, message);
