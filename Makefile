@@ -6,6 +6,8 @@ default:
 .PHONY: clean
 clean:
 	rm -rf Cargo.lock target/ freestanding/Cargo.lock freestanding/target/
+	$(MAKE) -C submodules/berkeley-softfloat-3/build/Linux-x86_64-GCC/ clean
+	$(MAKE) -C submodules/berkeley-testfloat-3/build/Linux-x86_64-GCC/ clean
 
 
 .PHONY: outdated
@@ -42,6 +44,7 @@ define test-bsv =
 		-u \
 		-D TESTING=1 \
 		"$$src/$<" && \
+	if [ -f "$$src/$<.c" ]; then extra_c_file="$$src/$<.c"; fi && \
 	bsc \
 		-aggressive-conditions \
 		-e mkTest \
@@ -55,7 +58,7 @@ define test-bsv =
 		-suppress-warnings P0102 \
 		-u \
 		-D TESTING=1 \
-		"$$d/b/"*.ba && \
+		"$$d/b/"*.ba $${extra_c_file:-} && \
 	output="$$("$$d/test" | tee /dev/stderr)" && \
 	grep -q 'Test passed' <<< "$$output"
 endef
@@ -157,6 +160,132 @@ test-decompressor_priority-sv: tc/sv/rv_decompressor_priority.sv
 test: test-decompressor_priority-bsv
 test-decompressor_priority-bsv: tc/bsv/RvDecompressorPriority.bsv
 	$(test-bsv)
+
+
+.PHONY: test-fpu-bsv
+test: test-fpu-bsv
+test-fpu-bsv: test-fpu-generate-testfloat
+test-fpu-bsv: test-fpu-bsv-manual
+test-fpu-bsv: test-fpu-bsv-add-H-Rne
+test-fpu-bsv: test-fpu-bsv-add-H-Rtz
+test-fpu-bsv: test-fpu-bsv-add-H-Rdn
+test-fpu-bsv: test-fpu-bsv-add-H-Rup
+test-fpu-bsv: test-fpu-bsv-add-H-Rmm
+test-fpu-bsv: test-fpu-bsv-add-S-Rne
+test-fpu-bsv: test-fpu-bsv-add-S-Rtz
+test-fpu-bsv: test-fpu-bsv-add-S-Rdn
+test-fpu-bsv: test-fpu-bsv-add-S-Rup
+test-fpu-bsv: test-fpu-bsv-add-S-Rmm
+test-fpu-bsv: test-fpu-bsv-add-D-Rne
+test-fpu-bsv: test-fpu-bsv-add-D-Rtz
+test-fpu-bsv: test-fpu-bsv-add-D-Rdn
+test-fpu-bsv: test-fpu-bsv-add-D-Rup
+test-fpu-bsv: test-fpu-bsv-add-D-Rmm
+test-fpu-bsv: test-fpu-bsv-cvt-H-S-Rne
+test-fpu-bsv: test-fpu-bsv-cvt-H-S-Rtz
+test-fpu-bsv: test-fpu-bsv-cvt-H-S-Rdn
+test-fpu-bsv: test-fpu-bsv-cvt-H-S-Rup
+test-fpu-bsv: test-fpu-bsv-cvt-H-S-Rmm
+test-fpu-bsv: test-fpu-bsv-cvt-H-D-Rne
+test-fpu-bsv: test-fpu-bsv-cvt-H-D-Rtz
+test-fpu-bsv: test-fpu-bsv-cvt-H-D-Rdn
+test-fpu-bsv: test-fpu-bsv-cvt-H-D-Rup
+test-fpu-bsv: test-fpu-bsv-cvt-H-D-Rmm
+test-fpu-bsv: test-fpu-bsv-cvt-S-H-Rne
+test-fpu-bsv: test-fpu-bsv-cvt-S-H-Rtz
+test-fpu-bsv: test-fpu-bsv-cvt-S-H-Rdn
+test-fpu-bsv: test-fpu-bsv-cvt-S-H-Rup
+test-fpu-bsv: test-fpu-bsv-cvt-S-H-Rmm
+test-fpu-bsv: test-fpu-bsv-cvt-S-D-Rne
+test-fpu-bsv: test-fpu-bsv-cvt-S-D-Rtz
+test-fpu-bsv: test-fpu-bsv-cvt-S-D-Rdn
+test-fpu-bsv: test-fpu-bsv-cvt-S-D-Rup
+test-fpu-bsv: test-fpu-bsv-cvt-S-D-Rmm
+test-fpu-bsv: test-fpu-bsv-cvt-D-H-Rne
+test-fpu-bsv: test-fpu-bsv-cvt-D-H-Rtz
+test-fpu-bsv: test-fpu-bsv-cvt-D-H-Rdn
+test-fpu-bsv: test-fpu-bsv-cvt-D-H-Rup
+test-fpu-bsv: test-fpu-bsv-cvt-D-H-Rmm
+test-fpu-bsv: test-fpu-bsv-cvt-D-S-Rne
+test-fpu-bsv: test-fpu-bsv-cvt-D-S-Rtz
+test-fpu-bsv: test-fpu-bsv-cvt-D-S-Rdn
+test-fpu-bsv: test-fpu-bsv-cvt-D-S-Rup
+test-fpu-bsv: test-fpu-bsv-cvt-D-S-Rmm
+test-fpu-bsv: test-fpu-bsv-mul-H-Rne
+test-fpu-bsv: test-fpu-bsv-mul-H-Rtz
+test-fpu-bsv: test-fpu-bsv-mul-H-Rdn
+test-fpu-bsv: test-fpu-bsv-mul-H-Rup
+test-fpu-bsv: test-fpu-bsv-mul-H-Rmm
+test-fpu-bsv: test-fpu-bsv-mul-S-Rne
+test-fpu-bsv: test-fpu-bsv-mul-S-Rtz
+test-fpu-bsv: test-fpu-bsv-mul-S-Rdn
+test-fpu-bsv: test-fpu-bsv-mul-S-Rup
+test-fpu-bsv: test-fpu-bsv-mul-S-Rmm
+test-fpu-bsv: test-fpu-bsv-mul-D-Rne
+test-fpu-bsv: test-fpu-bsv-mul-D-Rtz
+test-fpu-bsv: test-fpu-bsv-mul-D-Rdn
+test-fpu-bsv: test-fpu-bsv-mul-D-Rup
+test-fpu-bsv: test-fpu-bsv-mul-D-Rmm
+test-fpu-bsv: test-fpu-bsv-sqrt-H-Rne
+test-fpu-bsv: test-fpu-bsv-sqrt-H-Rtz
+test-fpu-bsv: test-fpu-bsv-sqrt-H-Rdn
+test-fpu-bsv: test-fpu-bsv-sqrt-H-Rup
+test-fpu-bsv: test-fpu-bsv-sqrt-H-Rmm
+test-fpu-bsv: test-fpu-bsv-sqrt-S-Rne
+test-fpu-bsv: test-fpu-bsv-sqrt-S-Rtz
+test-fpu-bsv: test-fpu-bsv-sqrt-S-Rdn
+test-fpu-bsv: test-fpu-bsv-sqrt-S-Rup
+test-fpu-bsv: test-fpu-bsv-sqrt-S-Rmm
+test-fpu-bsv: test-fpu-bsv-sqrt-D-Rne
+test-fpu-bsv: test-fpu-bsv-sqrt-D-Rtz
+test-fpu-bsv: test-fpu-bsv-sqrt-D-Rdn
+test-fpu-bsv: test-fpu-bsv-sqrt-D-Rup
+test-fpu-bsv: test-fpu-bsv-sqrt-D-Rmm
+test-fpu-bsv: test-fpu-bsv-sub-H-Rne
+test-fpu-bsv: test-fpu-bsv-sub-H-Rtz
+test-fpu-bsv: test-fpu-bsv-sub-H-Rdn
+test-fpu-bsv: test-fpu-bsv-sub-H-Rup
+test-fpu-bsv: test-fpu-bsv-sub-H-Rmm
+test-fpu-bsv: test-fpu-bsv-sub-S-Rne
+test-fpu-bsv: test-fpu-bsv-sub-S-Rtz
+test-fpu-bsv: test-fpu-bsv-sub-S-Rdn
+test-fpu-bsv: test-fpu-bsv-sub-S-Rup
+test-fpu-bsv: test-fpu-bsv-sub-S-Rmm
+test-fpu-bsv: test-fpu-bsv-sub-D-Rne
+test-fpu-bsv: test-fpu-bsv-sub-D-Rtz
+test-fpu-bsv: test-fpu-bsv-sub-D-Rdn
+test-fpu-bsv: test-fpu-bsv-sub-D-Rup
+test-fpu-bsv: test-fpu-bsv-sub-D-Rmm
+
+
+.PHONY: test-fpu-generate-testfloat
+test-fpu-generate-testfloat:
+	shellcheck tc/bsv/generate-testfloat.sh
+
+
+.PHONY: test-fpu-bsv-manual
+test-fpu-bsv-manual: tc/bsv/RvFpuTestManual.bsv
+	$(test-bsv)
+
+
+.PHONY: test-fpu-bsv-%
+test-fpu-bsv-% target/bsv/RvFpuTest-%.bsv.o: target/bsv/RvFpuTest-%.bsv target/bsv/RvFpuTest-%.bsv.c
+	$(test-bsv)
+
+
+target/bsv/RvFpuTest-%.bsv target/bsv/RvFpuTest-%.bsv.c: submodules/berkeley-testfloat-3/build/Linux-x86_64-GCC/testfloat_gen
+	tc/bsv/generate-testfloat.sh '$*'
+
+
+submodules/berkeley-testfloat-3/build/Linux-x86_64-GCC/testfloat_gen:
+	make -C submodules/berkeley-softfloat-3/build/Linux-x86_64-GCC/ -j
+	make -C submodules/berkeley-testfloat-3/build/Linux-x86_64-GCC/ -j
+
+
+.PHONY: test-sqrt
+test: test-sqrt
+test-sqrt: tc/sv/sqrt.sv
+	$(test-sv)
 
 
 .PHONY: test-load_store32

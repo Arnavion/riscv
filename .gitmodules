@@ -1,0 +1,8 @@
+[submodule "submodules/berkeley-softfloat-3"]
+	path = submodules/berkeley-softfloat-3
+	url = github.com:Arnavion/berkeley-softfloat-3
+	branch = nan-mode
+[submodule "submodules/berkeley-testfloat-3"]
+	path = submodules/berkeley-testfloat-3
+	url = github.com:Arnavion/berkeley-testfloat-3
+	branch = nan-mode
