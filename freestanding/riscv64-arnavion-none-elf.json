@@ -17,6 +17,6 @@
 		"description": "Arnavion's RISC-V Emulator"
 	},
 	"panic-strategy": "abort",
-	"target-pointer-width": "64",
+	"target-pointer-width": 64,
 	"vendor": "arnavion"
 }
