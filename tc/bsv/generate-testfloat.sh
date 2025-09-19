@@ -302,6 +302,45 @@ case "${test_case_parts[0]}" in
         ) >"${out_f}.c"
         ;;
 
+    'fmadd')
+        op_bsv="${test_case_parts[1]}"
+        op_testfloat="${f_bsv_to_testfloat["$op_bsv"]}"
+
+        rm_bsv="${test_case_parts[2]}"
+        rm_testfloat="${rm_bsv_to_testfloat["$rm_bsv"]}"
+
+        op_nan_box_prefix="${nan_box_prefix["$op_bsv"]}"
+
+        op_exponent_mask="${exponent_mask["$op_bsv"]}"
+        op_canonical_nan="${canonical_nan["$op_bsv"]}"
+
+        # shellcheck disable=SC2059 # printf with a template
+        printf "$bsv_template" \
+            "$(
+                printf 'import "BDPI" function Bit#(64) test_case_arg1(UInt#(32) i);\n'
+                printf 'import "BDPI" function Bit#(64) test_case_arg2(UInt#(32) i);\n'
+                printf 'import "BDPI" function Bit#(64) test_case_arg3(UInt#(32) i);'
+            )" \
+            "$(
+                printf 'TestCase {\n'
+                printf '            request: tagged FusedMultiplyAdd { rm: %s, width: %s, arg1: test_case_arg1(i), arg2: test_case_arg2(i), arg3: test_case_arg3(i) },\n' "$rm_bsv" "$op_bsv"
+                printf '            expected_response: RvFpuResponse { result: test_case_expected_result_canonicalized(i), flags: unpack(test_case_expected_flags(i)) }\n'
+                printf '        }'
+            )" \
+            >"$out_f"
+
+        (
+            # shellcheck disable=SC2059 # printf with a template
+            printf "$c_template_header" 'TestCaseThreeArgs'
+            ("$TESTFLOAT_GEN" -level 1 -tininessafter "-${rm_testfloat}" "${op_testfloat}_mulAdd" || :) |
+                head -n 2000 |
+                test_case_three_args "$op_nan_box_prefix"
+            printf '%s' "$c_template_three_args"
+            # shellcheck disable=SC2059 # printf with a template
+            printf "$c_template_footer" "$op_exponent_mask" "$op_canonical_nan"
+        ) >"${out_f}.c"
+        ;;
+
     'sqrt')
         op_bsv="${test_case_parts[1]}"
         op_testfloat="${f_bsv_to_testfloat["$op_bsv"]}"

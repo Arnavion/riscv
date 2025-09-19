@@ -11,8 +11,16 @@ import RvFpu::*;
 module mkTest();
 	let test_cases = vec(
 		TestCase {
-			request: tagged Subtract { rm: Rne, width: D, arg1: { '1, 64'h0000000000000000 }, arg2: { '1, 64'ha57f319ede38f755 } },
-			expected_response: RvFpuResponse { result: { '1, 64'h257f319ede38f755 }, flags: unpack(5'b00000) }
+			request: tagged Multiply { rm: Rne, width: D, arg1: { '1, 64'hc0035f74d9e4a66e }, arg2: { '1, 64'hc1c000800000003f } },
+			expected_response: RvFpuResponse { result: { '1, 64'h41d3600fd58b75df }, flags: unpack(5'b00001) }
+		},
+		TestCase {
+			request: tagged Add { rm: Rne, width: D, arg1: { '1, 64'h41d3600fd58b75df }, arg2: { '1, 64'h402fe04a50d62ff8 } },
+			expected_response: RvFpuResponse { result: { '1, 64'h41d3600fd9877f29 }, flags: unpack(5'b00001) }
+		},
+		TestCase {
+			request: tagged FusedMultiplyAdd { rm: Rne, width: D, arg1: { '1, 64'hc0035f74d9e4a66e }, arg2: { '1, 64'hc1c000800000003f }, arg3: { '1, 64'h402fe04a50d62ff8 } },
+			expected_response: RvFpuResponse { result: { '1, 64'h41d3600fd9877f2a }, flags: unpack(5'b00001) }
 		}
 	);
 
