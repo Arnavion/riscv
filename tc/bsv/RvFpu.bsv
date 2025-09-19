@@ -18,7 +18,7 @@ import Common::*;
 
 `define I_EXPONENT_LEN 13
 `define I_INTEGER_LEN 2
-`define I_FRACTION_LEN 55
+`define I_FRACTION_LEN 58
 `define I_SIGNIFICAND_LEN TAdd#(`I_INTEGER_LEN, `I_FRACTION_LEN)
 
 typedef Bit#(TAdd#(1, TAdd#(`D_EXPONENT_LEN, `D_SIGNIFICAND_LEN))) Packed;
@@ -102,6 +102,38 @@ typedef union tagged {
 		Width width;
 		Packed arg1;
 		Packed arg2;
+		Packed arg3;
+	} FusedMultiplyAdd;
+
+	struct {
+		RoundingMode rm;
+		Width width;
+		Packed arg1;
+		Packed arg2;
+		Packed arg3;
+	} FusedNegativeMultiplyAdd;
+
+	struct {
+		RoundingMode rm;
+		Width width;
+		Packed arg1;
+		Packed arg2;
+		Packed arg3;
+	} FusedNegativeMultiplySubtract;
+
+	struct {
+		RoundingMode rm;
+		Width width;
+		Packed arg1;
+		Packed arg2;
+		Packed arg3;
+	} FusedMultiplySubtract;
+
+	struct {
+		RoundingMode rm;
+		Width width;
+		Packed arg1;
+		Packed arg2;
 	} Multiply;
 
 	struct {
@@ -140,6 +172,7 @@ typedef enum {
 module mkRvFpu(RvFpu);
 	Unpack unpack_arg1 <- mkUnpack;
 	Unpack unpack_arg2 <- mkUnpack;
+	Unpack unpack_arg3 <- mkUnpack;
 	Add adder <- mkAdd;
 	Classify classifier <- mkClassify;
 	Multiply multiplier <- mkMultiply;
@@ -160,7 +193,7 @@ module mkRvFpu(RvFpu);
 	rule add_2(args.first matches tagged Add { rm: .rm });
 		match UnpackResponse { value: .arg1 } = unpack_arg1.response.first;
 		match UnpackResponse { value: .arg2 } = unpack_arg2.response.first;
-		adder.request.put(AddRequest { arg1: arg1, arg2: arg2, rm: rm });
+		adder.request.put(AddRequest { arg1: Unpacked { value: arg1, inexact: False }, arg2: arg2, rm: rm });
 	endrule
 
 	rule add_3(args.first matches tagged Add { rm: .rm, width: .width });
@@ -197,6 +230,34 @@ module mkRvFpu(RvFpu);
 	endrule
 
 	rule convert_end(args.first matches tagged Convert ._);
+		match PackResponse { result: .packed_, flags: .flags } = pack_result.response.first;
+		result.put(RvFpuResponse { result: packed_, flags: flags });
+	endrule
+
+	rule fused_multiply_add_1(args.first matches tagged FusedMultiplyAdd { width: .width, arg1: .arg1, arg2: .arg2, arg3: .arg3 });
+		unpack_arg1.request.put(UnpackRequest { width: width, value: arg1 });
+		unpack_arg2.request.put(UnpackRequest { width: width, value: arg2 });
+		unpack_arg3.request.put(UnpackRequest { width: width, value: arg3 });
+	endrule
+
+	rule fused_multiply_add_2(args.first matches tagged FusedMultiplyAdd ._);
+		match UnpackResponse { value: .arg1 } = unpack_arg1.response.first;
+		match UnpackResponse { value: .arg2 } = unpack_arg2.response.first;
+		multiplier.request.put(MultiplyRequest { arg1: arg1, arg2: arg2 });
+	endrule
+
+	rule fused_multiply_add_3(args.first matches tagged FusedMultiplyAdd { rm: .rm });
+		match MultiplyResponse { result: .product } = multiplier.response.first;
+		match UnpackResponse { value: .arg3 } = unpack_arg3.response.first;
+		adder.request.put(AddRequest { arg1: product, arg2: arg3, rm: rm });
+	endrule
+
+	rule fused_multiply_add_4(args.first matches tagged FusedMultiplyAdd { rm: .rm, width: .width });
+		match AddResponse { result: .result } = adder.response.first;
+		pack_result.request.put(PackRequest { width: width, rm: rm, value: result, was_divide_by_zero: False });
+	endrule
+
+	rule fused_multiply_add_end(args.first matches tagged FusedMultiplyAdd ._);
 		match PackResponse { result: .packed_, flags: .flags } = pack_result.response.first;
 		result.put(RvFpuResponse { result: packed_, flags: flags });
 	endrule
@@ -263,7 +324,7 @@ module mkRvFpu(RvFpu);
 			tagged Infinity { sign: .sign }: return tagged Infinity { sign: !sign };
 			tagged NaN { sign: .sign, quiet: .quiet }: return tagged NaN { sign: !sign, quiet: quiet };
 		endcase;
-		adder.request.put(AddRequest { arg1: arg1, arg2: arg2, rm: rm });
+		adder.request.put(AddRequest { arg1: Unpacked { value: arg1, inexact: False }, arg2: arg2, rm: rm });
 	endrule
 
 	rule sub_3(args.first matches tagged Subtract { rm: .rm, width: .width });
@@ -299,6 +360,15 @@ module mkRvFpu(RvFpu);
 
 				tagged Convert ._: begin
 					unpack_arg1.response.deq;
+					pack_result.response.deq;
+				end
+
+				tagged FusedMultiplyAdd ._: begin
+					unpack_arg1.response.deq;
+					unpack_arg2.response.deq;
+					unpack_arg3.response.deq;
+					multiplier.response.deq;
+					adder.response.deq;
 					pack_result.response.deq;
 				end
 
@@ -932,7 +1002,7 @@ endfunction
 typedef Server#(AddRequest, AddResponse) Add;
 
 typedef struct {
-	UnpackedValue arg1;
+	Unpacked arg1;
 	UnpackedValue arg2;
 	RoundingMode rm;
 } AddRequest deriving(Bits);
@@ -956,8 +1026,8 @@ module mkAdd(Add);
 	interface response = toGetS(args_, result_);
 endmodule
 
-function Unpacked add_(UnpackedValue arg1, UnpackedValue arg2, RoundingMode rm);
-	case (tuple2(arg1, arg2)) matches
+function Unpacked add_(Unpacked arg1, UnpackedValue arg2, RoundingMode rm);
+	case (tuple2(arg1.value, arg2)) matches
 		{
 			tagged Finite { sign: .sign1, exponent: .exponent1_, significand: .significand1 },
 			tagged Finite { sign: .sign2, exponent: .exponent2_, significand: .significand2 }
@@ -973,7 +1043,7 @@ function Unpacked add_(UnpackedValue arg1, UnpackedValue arg2, RoundingMode rm);
 			let arg1_shift_by = preferred_exponent - exponent1;
 			let arg2_shift_by = preferred_exponent - exponent2;
 
-			let inexact = False;
+			let inexact = arg1.inexact;
 
 			Int#(TAdd#(`I_SIGNIFICAND_LEN, 2)) arg1_significand = unpack(pack(extend(significand1)));
 			if (sign1)
@@ -1018,31 +1088,31 @@ function Unpacked add_(UnpackedValue arg1, UnpackedValue arg2, RoundingMode rm);
 		end
 
 		{ tagged Finite ._1, tagged Infinity ._2 }:
-			return Unpacked { value: arg2, inexact: False };
+			return Unpacked { value: arg2, inexact: arg1.inexact };
 
 		{ tagged Finite ._1, tagged NaN ._2 }:
-			return Unpacked { value: arg2, inexact: False };
+			return Unpacked { value: arg2, inexact: arg1.inexact };
 
 		{ tagged Infinity ._1, tagged Finite ._2 }:
-			return Unpacked { value: arg1, inexact: False };
+			return arg1;
 
 		{ tagged Infinity { sign: .sign1 }, tagged Infinity { sign: .sign2 } }:
 			if (sign1 == sign2)
-				return Unpacked { value: arg1, inexact: False };
+				return arg1;
 			else
-				return Unpacked { value: tagged NaN { sign: ?, quiet: False }, inexact: False };
+				return Unpacked { value: tagged NaN { sign: ?, quiet: False }, inexact: arg1.inexact };
 
 		{ tagged Infinity ._1, tagged NaN ._2 }:
-			return Unpacked { value: arg2, inexact: False };
+			return Unpacked { value: arg2, inexact: arg1.inexact };
 
 		{ tagged NaN ._1, tagged Finite ._2 }:
-			return Unpacked { value: arg1, inexact: False };
+			return arg1;
 
 		{ tagged NaN ._1, tagged Infinity ._2 }:
-			return Unpacked { value: arg1, inexact: False };
+			return arg1;
 
 		{ tagged NaN { quiet: .quiet1 }, tagged NaN { quiet: .quiet2 } }:
-			return Unpacked { value: tagged NaN { sign: ?, quiet: quiet1 && quiet2 }, inexact: False };
+			return Unpacked { value: tagged NaN { sign: ?, quiet: quiet1 && quiet2 }, inexact: arg1.inexact };
 	endcase
 endfunction
 
