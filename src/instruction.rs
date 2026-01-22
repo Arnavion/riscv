@@ -2110,8 +2110,7 @@ impl<'a> TryFrom<&'a [u8]> for Imm {
 		impl<const N: usize> AsRef<[u8]> for Buf<N> {
 			fn as_ref(&self) -> &[u8] {
 				unsafe {
-					// TODO(rustup): Use `MaybeUninit::slice_assume_init_ref` when that is stabilized.
-					&*(core::ptr::from_ref(&self.inner[..self.len]) as *const [u8])
+					self.inner[..self.len].assume_init_ref()
 				}
 			}
 		}

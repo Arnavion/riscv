@@ -2,7 +2,6 @@
 
 #![feature(
 	abi_custom,
-	maybe_uninit_write_slice,
 )]
 
 #![no_main]
