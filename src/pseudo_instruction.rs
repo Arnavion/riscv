@@ -1021,6 +1021,7 @@ pub(crate) fn parse(
 				return Err(ParseError::TrailingGarbage { line });
 			}
 
+			// TODO: If RV32I && ZBKB { One(pack rd, rs, x0) }
 			let xlen = if supported_extensions.contains(SupportedExtensions::RV64I) { 64 } else { 32 };
 
 			SmallIterator::Two(
@@ -1044,6 +1045,7 @@ pub(crate) fn parse(
 				if supported_extensions.contains(SupportedExtensions::ZBA) {
 					SmallIterator::One(Instruction::Adduw { dest, src1: src, src2: Register::X0 })
 				}
+				// TODO: else if supported_extensions.contains(SupportedExtensions::ZBKB) { One(packw rd, rs, x0) }
 				else {
 					SmallIterator::Two(
 						Instruction::Slli { dest, src, shamt: 32 },
