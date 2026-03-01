@@ -74,7 +74,7 @@ test: test-lint
 test-lint:
 	cargo test --workspace
 	cargo clippy --workspace --tests --examples
-	cd freestanding && cargo clippy --release --target riscv64-arnavion-none-elf.json -Z build-std=core
+	cd freestanding && cargo clippy --release --target riscv64-arnavion-none-elf.json -Z build-std=core -Z json-target-spec
 	cargo machete
 
 
@@ -185,7 +185,7 @@ test-ram_cache_tree_plru: tc/sv/ram_cache_tree_plru.sv
 
 .PHONY: freestanding
 freestanding:
-	cd freestanding && cargo build --release --target riscv64-arnavion-none-elf.json -Z build-std=core
+	cd freestanding && cargo build --release --target riscv64-arnavion-none-elf.json -Z build-std=core -Z json-target-spec
 
 
 .PHONY: freestanding-inspect
