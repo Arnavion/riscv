@@ -912,6 +912,40 @@ pub(crate) fn parse(
 			SmallIterator::One(Instruction::Addiw { dest, src, imm: 0 })
 		},
 
+		"sgt" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest = dest.try_into()?;
+
+			let src1 = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let src1 = src1.try_into()?;
+
+			let src2 = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let src2 = src2.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Slt { dest, src1: src2, src2: src1 })
+		},
+
+		"sgtu" => {
+			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let dest = dest.try_into()?;
+
+			let src1 = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let src1 = src1.try_into()?;
+
+			let src2 = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
+			let src2 = src2.try_into()?;
+
+			if tokens.next().is_some() {
+				return Err(ParseError::TrailingGarbage { line });
+			}
+
+			SmallIterator::One(Instruction::Sltu { dest, src1: src2, src2: src1 })
+		},
+
 		"sgtz" => {
 			let dest = tokens.next().ok_or(ParseError::TruncatedInstruction { line })?;
 			let dest = dest.try_into()?;
